@@ -1,6 +1,7 @@
 // 无需大模型的规则化“AI”动作：同样产出 ops，走同一套差异审阅流程。
 import { createBlock } from './blocks'
 import { richToPlain, textToRich } from './richtext'
+import { extractSlots } from './slots'
 import type { Block, Doc, DocOp } from './types'
 
 export interface QuickAction {
@@ -90,10 +91,14 @@ export function aiContext(doc: Doc) {
     title: doc.title,
     themeId: doc.themeId,
     blocks: doc.blocks.map((b, index) => {
+      // 原文片段只给文字槽位，AI 按槽位修改
+      if (b.type === 'html') {
+        const slots = extractSlots(b.props.html).flatMap((s) => (s.kind === 'text' ? [{ id: s.id, role: s.role, text: s.text.slice(0, 300), ...(s.tight && { max: s.max }) }] : []))
+        return { index, id: b.id, type: b.type, props: { label: b.props.label, slots } }
+      }
       const p: any = { ...b.props }
       for (const k of Object.keys(p)) {
         if (k === 'content') p[k] = richToPlain(p[k])
-        else if (k === 'html') p[k] = `[原文片段，AI 不可修改] ${String(p[k]).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200)}`
         else if (k === 'image') p[k] = p[k] ? '[图片]' : undefined
         else if (k === 'images') p[k] = `[${p[k].length} 张图片]`
       }

@@ -1,5 +1,6 @@
 import { coerceProps, createBlock, isBlockType, newId } from './blocks'
 import { richToPlain } from './richtext'
+import { extractSlots, fillSlots } from './slots'
 import type { Block, Doc, DocOp } from './types'
 
 /** 校验并修复一条 op；非法时返回错误信息 */
@@ -17,8 +18,20 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
     case 'update': {
       const b = doc.blocks.find((x) => x.id === op.id)
       if (!b) return { error: `找不到模块 ${op.id}` }
-      // 原文片段的 HTML 只能由用户编辑，AI 不得改写
-      if (b.type === 'html') return { error: '原文片段不支持 AI 改写' }
+      // 原文片段：只接受文字槽位，HTML 由槽位在当前内容上重新计算（不信任传入的 props.html）
+      if (b.type === 'html') {
+        const raw = op.slots ?? op.props?.slots
+        if (!raw || typeof raw !== 'object') return { error: '原文片段只能修改文字槽位（slots）' }
+        const known = new Map(extractSlots(b.props.html).flatMap((s) => (s.kind === 'text' ? [[s.id, s] as const] : [])))
+        const slots: Record<string, string> = {}
+        for (const [k, v] of Object.entries(raw)) {
+          const s = known.get(k)
+          if (!s || (typeof v !== 'string' && typeof v !== 'number')) continue
+          slots[k] = s.tight ? [...String(v).replace(/\s*\n+\s*/g, ' ')].slice(0, s.max).join('') : String(v)
+        }
+        if (!Object.keys(slots).length) return { error: `修改 ${op.id} 没有有效的文字槽位` }
+        return { op: { op: 'update', id: op.id, props: { html: fillSlots(b.props.html, slots, { split: false }) }, slots, reason: op.reason } }
+      }
       const props = coerceProps(b.type, op.props, true)
       if (!Object.keys(props).length) return { error: `修改 ${op.id} 没有有效字段` }
       return { op: { op: 'update', id: op.id, props, reason: op.reason } }

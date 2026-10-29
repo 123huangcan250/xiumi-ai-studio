@@ -22,6 +22,20 @@ function designs() {
   }
 }
 
+/** 模拟模型套用模板：用到模板里除装饰外的每个部件，文字全部换成标记文字，照片按顺序分配 */
+function templatePlan(user: string) {
+  const catalog: any[] = JSON.parse(user.split('模板部件：\n')[1]?.split('\n\n用户的额外要求')[0] ?? '[]')
+  let photo = 0
+  const parts = catalog
+    .filter((p) => !p.id.startsWith('b:') && p.kind !== 'decor')
+    .map((p, k) => ({
+      part: p.id,
+      text: Object.fromEntries(p.texts.map((t: any) => [t.id, t.role === 'label' ? null : `AI 文案 ${k}-${t.id}`])),
+      images: Array.from({ length: typeof p.images === 'number' ? p.images : 0 }, () => photo++),
+    }))
+  return { title: 'AI 套用标题', digest: '模拟摘要', parts }
+}
+
 test.beforeAll(async () => {
   // 最小的 OpenAI 兼容服务：按系统提示词返回不同 JSON
   mock = createServer((req, res) => {
@@ -30,7 +44,8 @@ test.beforeAll(async () => {
     req.on('end', () => {
       const sys = JSON.parse(body || '{}').messages?.[0]?.content ?? ''
       calls.push(sys.slice(0, 40))
-      const content = sys.includes('视觉设计师') ? designs() : sys.includes('主编') ? { sections: [] } : { ok: true, model: 'mock' }
+      const user = JSON.parse(body || '{}').messages?.[1]?.content ?? ''
+      const content = sys.includes('模板部件') ? templatePlan(user) : sys.includes('视觉设计师') ? designs() : sys.includes('主编') ? { sections: [] } : { ok: true, model: 'mock' }
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }))
     })
@@ -117,4 +132,36 @@ test('粘贴公众号推文，保留原样式导入并保存为模板', async ({
   await page.getByRole('button', { name: '新建', exact: true }).first().click()
   await expect(page.locator('.toast')).toContainText('已用模板')
   await expect(page.getByTestId('canvas')).toContainText('社团招新季')
+})
+
+test('套用导入的推文模板生成新推文，并按槽位改字', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: '模板', exact: true }).click()
+  await page.getByTestId('apply-template').first().click()
+  await expect(page.getByTestId('pick-template').first()).toHaveClass(/\bon\b/)
+  await page.getByTestId('load-sample').click()
+  await expect(page.locator('.import-step .hint').first()).toContainText('图片 10 张')
+  await expect(page.getByTestId('generate')).toHaveText('AI 套用模板')
+  await page.getByTestId('generate').click()
+
+  const cards = page.locator('[data-testid^="variant-tpl-"]')
+  await expect(cards).toHaveCount(2)
+  await expect(cards.first()).toContainText('AI 套用模板')
+  await expect(cards.first().locator('.mini-inner')).toContainText('AI 文案')
+  expect(calls.some((c) => c.includes('排版编辑'))).toBe(true)
+
+  // 规则填充：沿用模板的底色版块，换成样例文稿的标题，不残留模板旧标题
+  const rule = cards.nth(1)
+  const preview = rule.locator('.mini-inner')
+  await expect(preview).toContainText('2026 秋季校园科技文化节圆满落幕')
+  await expect(preview).not.toContainText('社团招新季')
+  expect(await preview.innerHTML()).toContain('#f3eefa')
+  await rule.getByRole('button', { name: '使用此方案' }).click()
+  await expect(page.getByTestId('save-status')).toHaveText('已保存', { timeout: 10_000 })
+
+  // 选中原文片段，在右侧按槽位改字，保留原样式
+  await page.locator('[data-testid=canvas] [data-block-type=html]').first().click()
+  await page.getByTestId('slot-t0').locator('textarea').fill('新的封面标题')
+  await expect(page.getByTestId('canvas')).toContainText('新的封面标题')
+  expect(await page.getByTestId('canvas').innerHTML()).toContain('#f3eefa')
 })

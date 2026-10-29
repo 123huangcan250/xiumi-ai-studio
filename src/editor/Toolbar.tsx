@@ -204,8 +204,13 @@ export function Toolbar() {
   const canRedo = useStore((s) => s.future.length > 0)
   const { undo, redo, setDocFields } = useStore.getState()
   const [modal, setModal] = useState<'' | 'preview' | 'versions' | 'export' | 'import' | 'ai' | 'article'>('')
+  const [wizardTemplates, setWizardTemplates] = useState<string[] | undefined>()
   useEffect(() => {
-    const open = () => setModal('import')
+    // 从「模板」面板打开时带上预选的模板
+    const open = (e: Event) => {
+      setWizardTemplates((e as CustomEvent<{ templateIds?: string[] }>).detail?.templateIds)
+      setModal('import')
+    }
     const ai = () => setModal('ai')
     window.addEventListener('open-import', open)
     window.addEventListener('open-ai-settings', ai)
@@ -228,7 +233,7 @@ export function Toolbar() {
       <button onClick={() => setModal('preview')} data-testid="open-preview">📱 手机预览</button>
       <button onClick={() => setModal('ai')} data-testid="open-ai-settings">⚙ AI 模型</button>
       <button onClick={() => setModal('article')} data-testid="open-article-import">⤓ 导入推文</button>
-      <button className="accent" onClick={() => setModal('import')} data-testid="open-import">✨ AI 一键排版</button>
+      <button className="accent" onClick={() => (setWizardTemplates(undefined), setModal('import'))} data-testid="open-import">✨ AI 一键排版</button>
       <button className="primary" onClick={() => setModal('export')} data-testid="open-export">导出 / 发布</button>
       {modal === 'preview' && <PhonePreview html={compileDoc(doc).html} title="手机预览" onClose={() => setModal('')} />}
       {modal === 'versions' && <VersionsModal onClose={() => setModal('')} />}
@@ -241,7 +246,7 @@ export function Toolbar() {
       )}
       {modal === 'import' && (
         <Suspense fallback={null}>
-          <ImportWizard onClose={() => setModal('')} />
+          <ImportWizard onClose={() => setModal('')} initialTemplates={wizardTemplates} />
         </Suspense>
       )}
     </header>

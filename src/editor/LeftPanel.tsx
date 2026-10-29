@@ -153,42 +153,52 @@ export function LeftPanel() {
                 const doc = useStore.getState().doc
                 const name = prompt('把当前整篇结构收藏为模板，名称：', doc.title)
                 if (!name) return
-                await api.saveTemplate(name, doc.blocks)
+                await api.saveTemplate(name, doc.blocks, doc)
                 refreshTemplates()
                 notify('已收藏整篇模板')
               }}
             >
               ☆ 收藏当前整篇为模板
             </button>
-            <p className="hint">在画布中选中模块后点击 ☆ 可收藏单个模块。点击模板插入到选中位置之后。</p>
+            <p className="hint">在画布中选中模块后点击 ☆ 可收藏单个模块。点击模板插入到选中位置之后；「套用」保留模板版式，换上新文稿和照片。</p>
             {templates.map((t) => (
-              <div key={t.id} className="list-row">
+              <div key={t.id} className="tpl-item">
                 <button className="grow" onClick={() => insertBlocks(t.blocks)} title="插入到当前文档选中位置之后" data-testid="template-item">
                   <b>{t.name}</b>
                   <small>{t.blocks.length} 个模块 · {t.blocks.slice(0, 4).map((b) => (b.type === 'html' ? b.props.label : blockMeta(b.type).label)).join(' / ')}</small>
                 </button>
-                <button
-                  title="用此模板新建项目"
-                  onClick={async () => {
-                    await saveNow()
-                    const now = Date.now()
-                    load({ ...emptyDoc(), title: t.name, blocks: t.blocks.map(cloneBlock), createdAt: now, updatedAt: now })
-                    await saveNow()
-                    notify(`已用模板「${t.name}」新建项目`)
-                  }}
-                >
-                  新建
-                </button>
-                <button
-                  className="danger"
-                  onClick={async () => {
-                    if (!confirm(`删除模板「${t.name}」？`)) return
-                    await api.deleteTemplate(t.id)
-                    refreshTemplates()
-                  }}
-                >
-                  ✕
-                </button>
+                <div className="tpl-actions">
+                  <button
+                    className="accent"
+                    title="保留此模板的版式，换上新文稿和照片（可由 AI 撰写文案）"
+                    onClick={() => window.dispatchEvent(new CustomEvent('open-import', { detail: { templateIds: [t.id] } }))}
+                    data-testid="apply-template"
+                  >
+                    套用
+                  </button>
+                  <button
+                    title="用此模板新建项目"
+                    onClick={async () => {
+                      await saveNow()
+                      const now = Date.now()
+                      load({ ...emptyDoc(), title: t.name, ...(t.themeId && { themeId: t.themeId, themeOverrides: t.themeOverrides }), blocks: t.blocks.map(cloneBlock), createdAt: now, updatedAt: now })
+                      await saveNow()
+                      notify(`已用模板「${t.name}」新建项目`)
+                    }}
+                  >
+                    新建
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={async () => {
+                      if (!confirm(`删除模板「${t.name}」？`)) return
+                      await api.deleteTemplate(t.id)
+                      refreshTemplates()
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             ))}
             {!templates.length && <p className="empty">还没有收藏的模板</p>}

@@ -96,7 +96,6 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
       }
       const now = Date.now()
       const doc: Doc = { id: newId(), title, author: '', digest: article.digest.slice(0, 120), themeId: 'minimal-magazine', cover, blocks, createdAt: now, updatedAt: now }
-      if (asTemplate) await api.saveTemplate(templateName || title || '导入的推文模板', blocks)
       if (asTheme) {
         const t = themeFromReport(analyzeStyle(article.root), `${(title || '导入').slice(0, 10)} · 风格`)
         await api.saveTheme(t)
@@ -104,6 +103,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
         refreshThemes()
         doc.themeId = t.id
       }
+      if (asTemplate) await api.saveTemplate(templateName || title || '导入的推文模板', blocks, doc)
       await saveNow()
       load(doc)
       await saveNow()

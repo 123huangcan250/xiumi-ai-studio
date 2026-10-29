@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { blockMeta } from '../core/blocks'
 import { sanitizeHtml } from '../core/sanitize'
+import { cleanText, extractSlots, fillSlots, type SlotRole, type TextSlot } from '../core/slots'
 import { richToPlain, textToRich } from '../core/richtext'
 import type { Block, ImageRef } from '../core/types'
 import { api, type Asset } from './api'
@@ -90,8 +91,9 @@ function BufferedArea({ value, onCommit, rows }: { value: string; onCommit: (tex
 }
 
 const parseDoc = (s: string) => new DOMParser().parseFromString(s, 'text/html')
+const ROLE_LABEL: Record<SlotRole, string> = { title: '标题', body: '正文', caption: '小字', label: '标签', number: '序号' }
 
-/** 原文片段：替换其中的图片、编辑源码 */
+/** 原文片段：按槽位改字、替换图片、编辑源码 */
 function HtmlFields({ html, upd }: { html: string; upd: Upd }) {
   const [picking, setPicking] = useState(-1)
   const [assets, setAssets] = useState<Asset[]>([])
@@ -101,7 +103,9 @@ function HtmlFields({ html, upd }: { html: string; upd: Upd }) {
   useEffect(() => {
     if (picking >= 0 && !assets.length) api.assets().then(setAssets).catch(() => {})
   }, [picking, assets.length])
-  const imgs = [...html.matchAll(/<img\b[^>]*\ssrc="([^"]+)"/gi)].map((m) => m[1].replace(/&amp;/g, '&'))
+  const slots = useMemo(() => extractSlots(html, parseDoc), [html])
+  const texts = slots.filter((s): s is TextSlot => s.kind === 'text')
+  const imgs = slots.filter((s) => s.kind === 'image').map((s) => s.src)
   const replace = (i: number, src: string) => {
     const doc = parseDoc(`<section id="r">${html}</section>`)
     const img = doc.querySelectorAll('#r img')[i]
@@ -111,6 +115,26 @@ function HtmlFields({ html, upd }: { html: string; upd: Upd }) {
   }
   return (
     <>
+      {texts.length > 0 && (
+        <div className="field">
+          <span>文字（{texts.length} 处）· 修改后保留原样式</span>
+          {texts.map((s) => (
+            <label key={s.id} className="slot-row" data-testid={`slot-${s.id}`}>
+              <small>{ROLE_LABEL[s.role]}{s.tight ? ' · 图形内' : ''}</small>
+              <BufferedArea
+                rows={s.role === 'body' ? 3 : 1}
+                value={s.text}
+                onCommit={(t) => {
+                  // 清空会让这一行连同样式一起消失，表单里不允许，需要删除时编辑源码
+                  if (!t.trim()) return t
+                  upd({ html: fillSlots(html, { [s.id]: t }, { parse: parseDoc, split: false, bold: false }) }, `slot-${s.id}`)
+                  return cleanText(t)
+                }}
+              />
+            </label>
+          ))}
+        </div>
+      )}
       {imgs.length > 0 && (
         <div className="field">
           <span>片段中的图片（{imgs.length}）· 点击替换</span>

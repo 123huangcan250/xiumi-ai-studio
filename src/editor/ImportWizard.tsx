@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { buildFromDesign, normalizeDesign, outlineBrief } from '../core/aiDesign'
+import { normalizeBlocks } from '../core/blocks'
 import { compileDoc } from '../core/compiler'
 import { buildDoc, RECIPES } from '../core/layouts'
 import { normalizeOutline, parseArticle, type Outline } from '../core/outline'
+import { extractSlots } from '../core/slots'
+import { buildCatalog, buildFromPlan, catalogBrief, normalizePlan, rulePlan, templateTheme } from '../core/templateFill'
 import type { Doc } from '../core/types'
-import { api, assetRef, type AiStatus, type Asset } from './api'
+import { api, assetRef, type AiStatus, type Asset, type Template } from './api'
 import { Modal } from './Modal'
 import { saveNow, useStore } from './store'
 
@@ -24,11 +27,43 @@ interface Variant {
   description: string
   doc: Doc
   ai: boolean
+  /** 内置版式的配方序号（可切换主题） */
+  recipe?: number
+  warnings?: string[]
+}
+
+/** 测量模板里图片的高宽比：新照片按原比例裁切，细长的花边图不会被当成照片位 */
+async function measureRatios(templates: Template[]): Promise<Record<string, number>> {
+  const srcs = new Set<string>()
+  for (const t of templates) for (const b of t.blocks) if (b.type === 'html') for (const s of extractSlots(b.props.html)) if (s.kind === 'image' && s.src) srcs.add(s.src)
+  const out: Record<string, number> = {}
+  await Promise.all(
+    [...srcs].slice(0, 120).map(
+      (src) =>
+        new Promise<void>((resolve) => {
+          const img = new Image()
+          img.referrerPolicy = 'no-referrer'
+          const timer = setTimeout(resolve, 6000)
+          img.onload = () => {
+            // 原图很小的是图标：记为 0，不当作照片位
+            if (img.naturalWidth) out[src] = img.naturalWidth < 300 ? 0 : img.naturalHeight / img.naturalWidth
+            clearTimeout(timer)
+            resolve()
+          }
+          img.onerror = () => {
+            clearTimeout(timer)
+            resolve()
+          }
+          img.src = src
+        }),
+    ),
+  )
+  return out
 }
 
 const HINTS = ['清华风格，庄重典雅', '科技感，冷静理性', '温暖人文，纸质感', '高级杂志感，大留白', '青春活泼，明快配色', '国风雅致']
 
-export function ImportWizard({ onClose, initialText, initialImages }: { onClose: () => void; initialText?: string; initialImages?: Asset[] }) {
+export function ImportWizard({ onClose, initialText, initialImages, initialTemplates }: { onClose: () => void; initialText?: string; initialImages?: Asset[]; initialTemplates?: string[] }) {
   const themes = useStore((s) => s.themes)
   const { load, notify } = useStore.getState()
   const [text, setText] = useState(initialText ?? '')
@@ -40,16 +75,20 @@ export function ImportWizard({ onClose, initialText, initialImages }: { onClose:
   const [outline, setOutline] = useState<Outline | null>(null)
   const [aiDocs, setAiDocs] = useState<Variant[]>([])
   const [themeFor, setThemeFor] = useState<string[]>(RECIPES.map((r) => r.defaultTheme))
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [picked, setPicked] = useState<string[]>(initialTemplates ?? [])
+  const [tplDocs, setTplDocs] = useState<Variant[]>([])
 
   useEffect(() => {
     api.aiStatus().then(setAi).catch(() => setAi(null))
+    api.templates().then(setTemplates).catch(() => {})
   }, [])
   const aiOn = !!ai?.enabled && useAi
 
   const builtin: Variant[] = useMemo(() => {
     if (!outline) return []
     const refs = images.map(assetRef)
-    return RECIPES.map((r, i) => ({ key: r.id, name: r.name, description: r.description, doc: buildDoc(outline, refs, r, themeFor[i]), ai: false }))
+    return RECIPES.map((r, i) => ({ key: r.id, name: r.name, description: r.description, doc: buildDoc(outline, refs, r, themeFor[i]), ai: false, recipe: i }))
   }, [outline, images, themeFor])
 
   const run = async (fn: () => Promise<void>, msg: string) => {
@@ -77,6 +116,34 @@ export function ImportWizard({ onClose, initialText, initialImages }: { onClose:
     )
   }
 
+  /** 套用模板：规则填充一定生成；配置了 AI 时再让模型挑部件、写文案、分配照片 */
+  const fillTemplates = async (o: Outline) => {
+    const chosen = templates.filter((t) => picked.includes(t.id)).map((t) => ({ ...t, blocks: normalizeBlocks(t.blocks) }))
+    if (!chosen.length) return
+    setBusy('分析模板版式…')
+    const ratios = await measureRatios(chosen)
+    const parts = buildCatalog(chosen, { ratios })
+    const refs = images.map(assetRef)
+    const theme = templateTheme(chosen)
+    const names = chosen.map((t) => `「${t.name}」`).join('')
+    const out: Variant[] = []
+    const rule = buildFromPlan(rulePlan(o, parts, refs.length), parts, refs, { ratios, theme, title: o.title })
+    out.push({ key: `tpl-rule-${Date.now()}`, name: '按模板顺序填充', description: `沿用${names}的版式，按章节依次填入文字与照片`, doc: rule.doc, ai: false, warnings: rule.warnings })
+    if (aiOn) {
+      setBusy(`${ai?.name ?? 'AI'} 正在套用模板…`)
+      try {
+        const raw = await api.aiTemplateFill({ text, photos: images.map((a) => a.name), catalog: catalogBrief(parts), hint })
+        const plan = normalizePlan(raw, parts, refs.length)
+        if (!plan.items.length) throw new Error('模型没有返回可用的部件')
+        const r = buildFromPlan(plan, parts, refs, { ratios, theme, title: o.title })
+        out.unshift({ key: `tpl-ai-${Date.now()}`, name: 'AI 套用模板', description: `AI 从${names}中挑选版块、撰写文案并分配照片`, doc: r.doc, ai: true, warnings: r.warnings })
+      } catch (e: any) {
+        notify(`AI 套用模板失败，已保留按顺序填充的结果：${e.message}`, 'error')
+      }
+    }
+    setTplDocs(out)
+  }
+
   const generate = () =>
     run(async () => {
       const rule = parseArticle(text)
@@ -91,6 +158,11 @@ export function ImportWizard({ onClose, initialText, initialImages }: { onClose:
       }
       setOutline(o)
       setAiDocs([])
+      setTplDocs([])
+      if (picked.length) {
+        await fillTemplates(o)
+        return // 套用模板时不自动生成 AI 设计方案，需要时可在结果页再生成
+      }
       if (aiOn) {
         try {
           await designWithAi(o)
@@ -115,11 +187,12 @@ export function ImportWizard({ onClose, initialText, initialImages }: { onClose:
         {v.ai && <span className="ai-tag">AI</span>} {String.fromCharCode(65 + i)} · {v.name}
       </h4>
       <p className="hint concept">{v.description}</p>
-      {!v.ai && (
-        <select value={themeFor[i]} onChange={(e) => setThemeFor((t) => t.map((x, j) => (j === i ? e.target.value : x)))}>
+      {v.recipe !== undefined && (
+        <select value={themeFor[v.recipe]} onChange={(e) => setThemeFor((t) => t.map((x, j) => (j === v.recipe ? e.target.value : x)))}>
           {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       )}
+      {v.warnings?.map((w) => <p key={w} className="warn">{w}</p>)}
       <MiniPreview doc={v.doc} />
       <p className="hint">{v.doc.blocks.length} 个模块 · {compileDoc(v.doc).charCount.toLocaleString()} 字符</p>
       <button className="primary wide" onClick={() => choose(v.doc)} data-testid={`choose-${v.key}`}>使用此方案</button>
@@ -187,6 +260,24 @@ export function ImportWizard({ onClose, initialText, initialImages }: { onClose:
             {images.slice(0, 14).map((a) => <img key={a.id} className="thumb" src={`/media/${a.file}?fit=1:1&w=120`} alt="" />)}
             {images.length > 0 && <button className="link" onClick={() => setImages([])}>清空图片</button>}
           </div>
+          <div className="tpl-box">
+            <h5>套用我的模板（可多选）</h5>
+            {templates.length ? (
+              <>
+                <div className="row gap wrap">
+                  {templates.map((t) => (
+                    <button key={t.id} className={`chip ${picked.includes(t.id) ? 'on' : ''}`} onClick={() => setPicked((p) => (p.includes(t.id) ? p.filter((x) => x !== t.id) : [...p, t.id]))} data-testid="pick-template">
+                      {t.name}
+                      <small>{t.blocks.length} 个模块</small>
+                    </button>
+                  ))}
+                </div>
+                <p className="tpl-note">选中后保留模板的版式和装饰，只替换文字与照片；配置了 AI 时由模型挑选版块并撰写文案。</p>
+              </>
+            ) : (
+              <p className="tpl-note">还没有模板。导入公众号推文时勾选「保存为模板」，或在「模板」里收藏当前整篇，就能在这里套用。</p>
+            )}
+          </div>
           <div className="ai-box">
             <label className="check">
               <input type="checkbox" checked={aiOn} disabled={!ai?.enabled} onChange={(e) => setUseAi(e.target.checked)} data-testid="use-ai" />
@@ -204,7 +295,9 @@ export function ImportWizard({ onClose, initialText, initialImages }: { onClose:
           </div>
           <div className="modal-actions">
             <button onClick={onClose}>取消</button>
-            <button className="primary" disabled={!text.trim() || !!busy} onClick={generate} data-testid="generate">{busy || (aiOn ? 'AI 设计三套方案' : '生成三套排版')}</button>
+            <button className="primary" disabled={!text.trim() || !!busy} onClick={generate} data-testid="generate">
+              {busy || (picked.length ? (aiOn ? 'AI 套用模板' : '套用模板生成') : aiOn ? 'AI 设计三套方案' : '生成三套排版')}
+            </button>
           </div>
         </div>
       ) : (
@@ -213,22 +306,31 @@ export function ImportWizard({ onClose, initialText, initialImages }: { onClose:
             识别到 {outline.sections.length} 个章节、{outline.sections.reduce((n, s) => n + s.timeline.length, 0)} 个时间节点、{outline.sections.reduce((n, s) => n + s.quotes.length, 0)} 条引语、{images.length} 张图片。
             <button className="link" onClick={() => setOutline(null)}>← 返回修改</button>
           </p>
-          {(aiDocs.length > 0 || busy) && aiOn && (
+          {picked.length > 0 && (
+            <>
+              <h4 className="variants-title">
+                模板套用
+                <button disabled={!!busy} onClick={() => run(() => fillTemplates(outline), '套用中…')} data-testid="refill">{busy || '重新套用'}</button>
+              </h4>
+              {tplDocs.length > 0 ? <div className="variant-grid">{tplDocs.map(card)}</div> : <p className="empty">{busy || '没有生成结果'}</p>}
+            </>
+          )}
+          {aiOn && (
             <>
               <h4 className="variants-title">
                 AI 设计方案 · {ai?.name}
                 <span className="row gap">
                   <input className="hint-input" value={hint} placeholder="风格要求" onChange={(e) => setHint(e.target.value)} />
-                  <button disabled={!!busy} onClick={() => run(() => designWithAi(outline), 'AI 设计中…')} data-testid="redesign">{busy || '重新设计'}</button>
+                  <button disabled={!!busy} onClick={() => run(() => designWithAi(outline), 'AI 设计中…')} data-testid="redesign">{busy || (aiDocs.length ? '重新设计' : '生成 AI 设计方案')}</button>
                 </span>
               </h4>
-              {aiDocs.length > 0 ? <div className="variant-grid">{aiDocs.map(card)}</div> : <p className="empty">{busy}</p>}
+              {aiDocs.length > 0 ? <div className="variant-grid">{aiDocs.map(card)}</div> : <p className="empty">{busy || '套用模板时不会自动生成 AI 设计方案，需要时点击右侧按钮'}</p>}
             </>
           )}
           <h4 className="variants-title">内置版式</h4>
           <div className="variant-grid">{builtin.map(card)}</div>
           <div className="modal-actions">
-            <button onClick={() => choose((aiDocs[0] ?? builtin[0]).doc, [...aiDocs, ...builtin])}>全部保存为项目，并打开第一套</button>
+            <button onClick={() => choose((tplDocs[0] ?? aiDocs[0] ?? builtin[0]).doc, [...tplDocs, ...aiDocs, ...builtin])}>全部保存为项目，并打开第一套</button>
           </div>
         </div>
       )}

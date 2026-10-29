@@ -158,7 +158,7 @@ function BlockView({ block, theme, gap }: { block: Block; theme: Theme; gap: num
             onClick={async () => {
               const name = prompt('模板名称', block.type === 'html' ? block.props.label : blockMeta(block.type).label)
               if (!name) return
-              await api.saveTemplate(name, [block])
+              await api.saveTemplate(name, [block], useStore.getState().doc)
               notify('已收藏到「模板」')
               window.dispatchEvent(new Event('templates-changed'))
             }}

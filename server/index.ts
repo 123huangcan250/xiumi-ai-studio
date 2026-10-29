@@ -4,7 +4,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import multer from 'multer'
 import { nanoid } from 'nanoid'
 import { cropAsset, deleteAsset, listAssets, saveAsset, variantPath } from './assets'
-import { aiStatus, chatJson, DESIGN_SYSTEM, EDIT_SYSTEM, OUTLINE_SYSTEM } from './ai'
+import { aiStatus, chatJson, DESIGN_SYSTEM, EDIT_SYSTEM, OUTLINE_SYSTEM, TEMPLATE_SYSTEM } from './ai'
 import { publicAiSettings, resolveDraftProfile, saveAiSettings } from './settings'
 import { importFile } from './importer'
 import { collection, DIRS, ROOT, safeId } from './store'
@@ -20,7 +20,7 @@ type Doc = { id: string; title: string; updatedAt: number; [k: string]: any }
 type Version = { id: string; projectId: string; label: string; createdAt: number; doc: Doc }
 
 const projects = collection<Doc>(DIRS.projects)
-const templates = collection<{ id: string; name: string; blocks: unknown[]; createdAt: number }>(DIRS.templates)
+const templates = collection<{ id: string; name: string; blocks: unknown[]; themeId?: string; themeOverrides?: unknown; createdAt: number }>(DIRS.templates)
 const themes = collection<{ id: string; name: string }>(DIRS.themes)
 const versionsOf = (pid: string) => collection<Version>(join(DIRS.versions, safeId(pid)))
 
@@ -112,7 +112,16 @@ app.get('/api/projects/:id/versions/:vid', h(async (req, res) => {
 // ---------- 模板收藏与自定义主题 ----------
 app.get('/api/templates', h(async (_req, res) => res.json((await templates.list()).sort((a, b) => b.createdAt - a.createdAt))))
 app.post('/api/templates', h(async (req, res) => {
-  const t = { id: nanoid(10).replace(/[^\w-]/g, '_'), name: String(req.body.name ?? '未命名模板'), blocks: req.body.blocks ?? [], createdAt: Date.now() }
+  const { themeId, themeOverrides } = req.body
+  const t = {
+    id: nanoid(10).replace(/[^\w-]/g, '_'),
+    name: String(req.body.name ?? '未命名模板'),
+    blocks: req.body.blocks ?? [],
+    // 记录模板所用主题，套用时新推文沿用同一主题
+    ...(typeof themeId === 'string' && { themeId }),
+    ...(themeOverrides && typeof themeOverrides === 'object' && { themeOverrides }),
+    createdAt: Date.now(),
+  }
   await templates.put(t)
   res.json(t)
 }))
@@ -159,6 +168,20 @@ ${JSON.stringify(req.body.brief)}
 
 用户的风格要求：${hint || '无，自行判断最适合该内容的风格'}`
   res.json(await chatJson(DESIGN_SYSTEM, user, { maxTokens: 6000, temperature: 0.8, profileId: pid(req) }))
+}))
+app.post('/api/ai/template-fill', h(async (req, res) => {
+  const text = String(req.body.text ?? '').slice(0, 30000)
+  const photos: string[] = Array.isArray(req.body.photos) ? req.body.photos.slice(0, 60).map(String) : []
+  const user = `新推文的文稿或要点：
+${text}
+
+照片（编号：文件名）：${photos.map((n, i) => `${i}：${n}`).join('；') || '无'}
+
+模板部件：
+${JSON.stringify(req.body.catalog ?? []).slice(0, 60000)}
+
+用户的额外要求：${String(req.body.hint ?? '').slice(0, 500) || '无'}`
+  res.json(await chatJson(TEMPLATE_SYSTEM, user, { maxTokens: 8000, temperature: 0.5, profileId: pid(req) }))
 }))
 app.post('/api/ai/edit', h(async (req, res) => {
   const { context, instruction } = req.body

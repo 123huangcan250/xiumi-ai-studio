@@ -48,6 +48,8 @@ export interface Template {
   id: string
   name: string
   blocks: Block[]
+  themeId?: string
+  themeOverrides?: Doc['themeOverrides']
   createdAt: number
 }
 
@@ -91,7 +93,8 @@ export const api = {
   version: (pid: string, vid: string) => req<{ doc: Doc }>('GET', `/api/projects/${pid}/versions/${vid}`),
 
   templates: () => req<Template[]>('GET', '/api/templates'),
-  saveTemplate: (name: string, blocks: Block[]) => req<Template>('POST', '/api/templates', { name, blocks }),
+  saveTemplate: (name: string, blocks: Block[], theme?: Pick<Doc, 'themeId' | 'themeOverrides'>) =>
+    req<Template>('POST', '/api/templates', { name, blocks, themeId: theme?.themeId, themeOverrides: theme?.themeOverrides }),
   deleteTemplate: (id: string) => req('DELETE', `/api/templates/${id}`),
   themes: () => req<Theme[]>('GET', '/api/themes'),
   saveTheme: (t: Theme) => req('POST', '/api/themes', t),
@@ -103,6 +106,7 @@ export const api = {
   testAi: (p: AiProfile) => req<{ ok: boolean; reply: unknown; ms: number }>('POST', '/api/settings/ai/test', p),
   aiOutline: (text: string, imageNames: string[], profileId?: string) => req<any>('POST', '/api/ai/outline', { text, imageNames, profileId }),
   aiDesign: (brief: unknown, hint: string, profileId?: string) => req<{ designs: any[] }>('POST', '/api/ai/design', { brief, hint, profileId }),
+  aiTemplateFill: (body: { text: string; photos: string[]; catalog: unknown; hint: string; profileId?: string }) => req<any>('POST', '/api/ai/template-fill', body),
   aiEdit: (context: unknown, instruction: string, profileId?: string) => req<{ summary: string; ops: any[] }>('POST', '/api/ai/edit', { context, instruction, profileId }),
   fetchReference: (url: string) => req<{ html: string }>('POST', '/api/reference/fetch', { url }),
   fetchArticle: (url: string) => req<{ html: string }>('POST', '/api/article/fetch', { url }),
