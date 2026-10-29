@@ -104,7 +104,7 @@ export const api = {
   aiSettings: () => req<AiSettings>('GET', '/api/settings/ai'),
   saveAiSettings: (s: { activeId: string; profiles: AiProfile[] }) => req<AiSettings>('PUT', '/api/settings/ai', s),
   testAi: (p: AiProfile) => req<{ ok: boolean; reply: unknown; ms: number }>('POST', '/api/settings/ai/test', p),
-  aiOutline: (text: string, imageNames: string[], profileId?: string) => req<any>('POST', '/api/ai/outline', { text, imageNames, profileId }),
+  aiOutline: (text: string, imageNames: string[], imageNotes: string[] = [], profileId?: string) => req<any>('POST', '/api/ai/outline', { text, imageNames, imageNotes, profileId }),
   aiDesign: (brief: unknown, hint: string, profileId?: string) => req<{ designs: any[] }>('POST', '/api/ai/design', { brief, hint, profileId }),
   aiTemplateFill: (body: { text: string; photos: string[]; catalog: unknown; hint: string; profileId?: string }) => req<any>('POST', '/api/ai/template-fill', body),
   aiEdit: (context: unknown, instruction: string, profileId?: string) => req<{ summary: string; ops: any[] }>('POST', '/api/ai/edit', { context, instruction, profileId }),

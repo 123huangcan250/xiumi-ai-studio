@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
-import { cleanText, extractSlots, fillSlots, isPhotoSlot, skeleton, type ImageSlot, type TextSlot } from '../../src/core/slots'
+import { cleanText, extractFrames, extractSlots, fillSlots, isPhotoSlot, skeleton, type ImageSlot, type TextSlot } from '../../src/core/slots'
 
 const parse = (s: string) => new JSDOM(s).window.document
 const texts = (html: string) => extractSlots(html, parse).filter((s): s is TextSlot => s.kind === 'text')
@@ -96,6 +96,18 @@ describe('slot filling', () => {
     const html = fillSlots('<svg viewBox="0 0 300 40"><text font-size="18"><tspan>活动</tspan><tspan>回顾</tspan></text></svg>', { t0: '**精彩**\n瞬间' }, { parse })
     expect(html).toContain('精彩 瞬间')
     expect(html).not.toMatch(/<strong|<br/)
+  })
+})
+
+describe('photo frames', () => {
+  const FRAMED = `<section style="padding: 10px"><section style="border: 2px solid green"><img src="https://mmbiz.qpic.cn/p/640?wx_fmt=jpeg" style="width: 100%"><img src="https://mmbiz.qpic.cn/arrow/0?wx_fmt=png" style="width: 20px"></section><p>图注</p></section>`
+  it('extracts the frame around a photo with its ornaments but without captions', () => {
+    expect(extractFrames(FRAMED, { parse })).toEqual(['<section style="border: 2px solid green"><img src="https://mmbiz.qpic.cn/p/640?wx_fmt=jpeg" style="width: 100%"><img src="https://mmbiz.qpic.cn/arrow/0?wx_fmt=png" style="width: 20px"></section>'])
+  })
+  it('removes the whole frame when an image slot is emptied', () => {
+    const html = fillSlots(FRAMED, { i0: '' }, { parse })
+    expect(html).not.toContain('border: 2px solid green')
+    expect(html).toContain('图注')
   })
 })
 

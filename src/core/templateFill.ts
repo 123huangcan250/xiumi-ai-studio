@@ -3,7 +3,7 @@
 import { blockMeta, coerceProps, createBlock, newId } from './blocks'
 import type { Outline } from './outline'
 import { richToPlain } from './richtext'
-import { extractSlots, fillSlots, isPhotoSlot, skeleton, type ImageSlot, type Parse, type SlotRole, type SlotValues, type TextSlot } from './slots'
+import { extractFrames, extractSlots, fillSlots, isPhotoSlot, skeleton, type ImageSlot, type Parse, type SlotRole, type SlotValues, type TextSlot } from './slots'
 import { analyzeStyle, themeFromReport } from './styleExtract'
 import { THEMES } from './themes'
 import type { Block, BlockType, Doc, ImageRef, ThemeTokens } from './types'
@@ -19,7 +19,7 @@ export interface TemplateLike {
 export type PartKind = 'cover' | 'heading' | 'body' | 'image' | 'mixed' | 'ending' | 'decor'
 
 export interface Part {
-  /** 模板部件 p0、p1…；内置模块 b:类型 */
+  /** 模板部件 p0、p1…；从模板照片位提取的图片框 f0、f1…；内置模块 b:类型 */
   id: string
   from: string
   block: Block
@@ -35,7 +35,7 @@ export interface PlanItem {
   part: string
   /** 槽位 id → 新文字；null 表示保留模板原文，"" 表示删除这一行 */
   text: Record<string, string | null>
-  /** 照片编号 */
+  /** 照片编号（从 0 开始；模型输出从 1 开始，校验时换算） */
   images: number[]
 }
 export interface FillPlan {
@@ -126,6 +126,19 @@ export function buildCatalog(templates: TemplateLike[], opts: { parse?: Parse; r
       parts.push({ id: `p${parts.length}`, from: t.name, block: b, kind, texts, photos, flexible: b.type === 'gallery' })
     })
   }
+  // 图片框：模板里每种相框样式一份，可重复使用来放多出的照片
+  let frames = 0
+  for (const t of templates) {
+    for (const b of t.blocks) {
+      if (b.type !== 'html') continue
+      for (const f of extractFrames(b.props.html, opts)) {
+        const sig = `image|${skeleton(f, opts.parse)}`
+        if (seen.has(sig)) continue
+        seen.add(sig)
+        parts.push({ id: `f${frames++}`, from: t.name, block: createBlock('html', { html: f, label: '图片框' }), kind: 'image', texts: [], photos: 1 })
+      }
+    }
+  }
   for (const type of BUILTIN_PARTS) {
     const b = createBlock(type)
     parts.push({ id: `b:${type}`, from: '内置模块', block: b, kind: BUILTIN_KIND[type], texts: builtinTexts(b), photos: BUILTIN_PHOTOS[type] ?? (type === 'gallery' ? 3 : 0), flexible: type === 'gallery' })
@@ -147,7 +160,7 @@ export function catalogBrief(parts: Part[]) {
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 
-/** 校验模型返回的方案：未知部件和槽位丢弃，SVG 内文字按字数截断，每张照片只用一次 */
+/** 校验模型返回的方案：未知部件和槽位丢弃，SVG 内文字按字数截断，照片编号从 1 换算为 0 起，每张照片只用一次 */
 export function normalizePlan(raw: any, parts: Part[], photoCount: number): FillPlan {
   const byId = new Map(parts.map((p) => [p.id, p]))
   const used = new Set<number>()
@@ -168,7 +181,7 @@ export function normalizePlan(raw: any, parts: Part[], photoCount: number): Fill
     }
     const images: number[] = []
     for (const x of Array.isArray(it?.images) ? it.images : []) {
-      const i = Number(x)
+      const i = Number(x) - 1
       if (Number.isInteger(i) && i >= 0 && i < photoCount && !used.has(i)) {
         used.add(i)
         images.push(i)
@@ -202,8 +215,11 @@ function fillBuiltin(p: Part, text: Record<string, string | null>, refs: ImageRe
     if (!refs.length) return null
     raw.images = refs
     raw.columns = refs.length === 1 ? 1 : refs.length === 2 || refs.length === 4 ? 2 : 3
-  } else if (refs[0] && BUILTIN_PHOTOS[p.block.type]) raw.image = refs[0]
-  const props = { ...p.block.props, ...coerceProps(p.block.type, raw, true) }
+  } else if (p.block.type === 'image' && !refs.length) return null
+  else if (refs[0] && BUILTIN_PHOTOS[p.block.type]) raw.image = refs[0]
+  const props: Record<string, unknown> = { ...p.block.props, ...coerceProps(p.block.type, raw, true) }
+  // 模板里的旧照片不带进新推文（结尾的二维码除外）
+  if (!refs.length && BUILTIN_PHOTOS[p.block.type]) delete props.image
   return { id: newId(), type: p.block.type, props } as Block
 }
 
@@ -214,51 +230,77 @@ export interface BuildOptions {
   theme?: { themeId?: string; themeOverrides?: Partial<ThemeTokens> }
 }
 
-/** 按方案生成文档；照片不够时用未分配的照片补位，仍不够则保留模板原图并提示 */
+/**
+ * 按方案生成文档。照片全部放下、模板旧照片不进入新推文：
+ * 部件的照片位多于分配的照片时，先用未分配的照片补上，仍不够就移除空照片位；
+ * 最后还有没用上的照片时，用模板的图片框（同款相框）逐一放下，模板没有相框时用相册。
+ */
 export function buildFromPlan(plan: FillPlan, parts: Part[], photos: ImageRef[], opts: BuildOptions = {}): { doc: Doc; warnings: string[] } {
   const byId = new Map(parts.map((p) => [p.id, p]))
   const planned = new Set(plan.items.flatMap((i) => i.images))
   const spare = photos.map((_, i) => i).filter((i) => !planned.has(i))
   const used = new Set<number>()
-  let kept = 0
+  let removed = 0
   const blocks: Block[] = []
   let endingAt = -1
-  for (const it of plan.items) {
-    const p = byId.get(it.part)
-    if (!p) continue
-    const ids = [...it.images]
+
+  const render = (p: Part, text: Record<string, string | null>, ids: number[]): Block | null => {
     if (p.block.type === 'html') {
       const slots = extractSlots(p.block.props.html, opts.parse)
       const photoSlots = slots.filter((s): s is ImageSlot => s.kind === 'image' && isPhotoSlot(s, opts.ratios))
-      const values: SlotValues = { ...it.text }
+      const values: SlotValues = { ...text }
       photoSlots.forEach((s, k) => {
         const i = ids[k] ?? (p.kind === 'ending' ? undefined : spare.shift())
-        if (i === undefined) {
-          if (p.kind !== 'ending') kept++
-          return
+        if (i !== undefined) {
+          values[s.id] = photos[i]
+          used.add(i)
+        } else if (p.kind !== 'ending') {
+          values[s.id] = '' // 结尾的二维码等保留，其余空照片位移除
+          removed++
         }
-        values[s.id] = photos[i]
-        used.add(i)
       })
-      const label = p.block.props.label
-      blocks.push({ id: newId(), type: 'html', props: { html: fillSlots(p.block.props.html, values, { parse: opts.parse, ratios: opts.ratios }), label } })
-    } else {
-      const need = p.flexible ? ids.length : p.photos
-      while (ids.length < need && spare.length && p.kind !== 'ending') ids.push(spare.shift()!)
-      const b = fillBuiltin(p, it.text, ids.slice(0, p.flexible ? 9 : Math.max(need, 0)).map((i) => photos[i]))
-      if (!b) continue
-      ids.slice(0, p.flexible ? 9 : need).forEach((i) => used.add(i))
-      blocks.push(b)
+      return { id: newId(), type: 'html', props: { html: fillSlots(p.block.props.html, values, { parse: opts.parse, ratios: opts.ratios }), label: p.block.props.label } }
     }
+    const list = [...ids]
+    const need = p.flexible ? Math.max(list.length, 1) : p.photos
+    while (list.length < need && spare.length && p.kind !== 'ending') list.push(spare.shift()!)
+    const take = list.slice(0, p.flexible ? 9 : need)
+    const b = fillBuiltin(p, text, take.map((i) => photos[i]))
+    if (b) take.forEach((i) => used.add(i))
+    return b
+  }
+
+  for (const it of plan.items) {
+    const p = byId.get(it.part)
+    if (!p) continue
+    const b = render(p, it.text, it.images)
+    if (!b) continue
+    blocks.push(b)
     if (p.kind === 'ending') endingAt = blocks.length - 1
   }
-  // 没用上的照片：在结尾之前补一个相册
-  const rest = photos.filter((_, i) => !used.has(i))
-  if (rest.length) {
-    const g = createBlock('gallery', { images: rest, columns: rest.length === 1 ? 1 : rest.length === 2 || rest.length === 4 ? 2 : 3, caption: '' })
-    blocks.splice(endingAt >= 0 ? endingAt : blocks.length, 0, g)
+
+  // 还没用上的照片：放进模板的图片框 / 图片版块（图注清空），没有时用相册
+  const rest = photos.map((_, i) => i).filter((i) => !used.has(i))
+  const frames = parts.filter((p) => p.kind === 'image' && p.block.type === 'html' && p.photos > 0)
+  const extra: Block[] = []
+  let k = 0
+  while (rest.length) {
+    const fits = frames.filter((p) => p.photos <= rest.length)
+    if (!fits.length) {
+      const ids = rest.splice(0)
+      extra.push(createBlock('gallery', { images: ids.map((i) => photos[i]), columns: ids.length === 1 ? 1 : ids.length === 2 || ids.length === 4 ? 2 : 3, caption: '' }))
+      ids.forEach((i) => used.add(i))
+      break
+    }
+    const best = Math.max(...fits.map((p) => p.photos))
+    const pick = fits.filter((p) => p.photos === best)
+    const p = pick[k++ % pick.length]
+    const b = render(p, Object.fromEntries(p.texts.map((t) => [t.id, t.role === 'label' ? null : ''])), rest.splice(0, p.photos))
+    if (b) extra.push(b)
   }
-  const warnings = kept ? [`${kept} 处图片位置的照片不够，沿用了模板原图，请选中后替换`] : []
+  blocks.splice(endingAt >= 0 ? endingAt : blocks.length, 0, ...extra)
+
+  const warnings = removed ? [`照片比模板的照片位少，已移除 ${removed} 个空照片位`] : []
   const firstPhoto = plan.items.flatMap((i) => i.images)[0]
   const now = Date.now()
   return {

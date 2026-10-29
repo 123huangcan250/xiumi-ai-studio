@@ -154,11 +154,13 @@ const pid = (req: Request) => (typeof req.body?.profileId === 'string' ? req.bod
 app.post('/api/ai/outline', h(async (req, res) => {
   const text = String(req.body.text ?? '').slice(0, 30000)
   const imageNames: string[] = req.body.imageNames ?? []
+  const imageNotes: string[] = Array.isArray(req.body.imageNotes) ? req.body.imageNotes.map(String) : []
+  const images = imageNames.map((n, i) => (imageNotes[i]?.trim() ? `${n}（${imageNotes[i].trim().slice(0, 100)}）` : n))
   const user = `文稿如下：
 
 ${text}
 
-可用图片文件名（用于 imageRefs，可留空）：${imageNames.join('、') || '无'}`
+可用图片（括号内是用户对照片的描述，按描述把照片归到对应章节；imageRefs 只填文件名，可留空）：${images.join('、') || '无'}`
   res.json(await chatJson(OUTLINE_SYSTEM, user, { maxTokens: 8000, profileId: pid(req) }))
 }))
 app.post('/api/ai/design', h(async (req, res) => {
@@ -175,7 +177,8 @@ app.post('/api/ai/template-fill', h(async (req, res) => {
   const user = `新推文的文稿或要点：
 ${text}
 
-照片（编号：文件名）：${photos.map((n, i) => `${i}：${n}`).join('；') || '无'}
+照片（编号：文件名｜用户描述）：
+${photos.map((n, i) => `${i + 1}：${n}`).join('\n') || '无'}
 
 模板部件：
 ${JSON.stringify(req.body.catalog ?? []).slice(0, 60000)}

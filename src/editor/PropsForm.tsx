@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { blockMeta } from '../core/blocks'
 import { sanitizeHtml } from '../core/sanitize'
+import { setPhoto } from '../core/photos'
 import { cleanText, extractSlots, fillSlots, type SlotRole, type TextSlot } from '../core/slots'
 import { richToPlain, textToRich } from '../core/richtext'
 import type { Block, ImageRef } from '../core/types'
 import { api, type Asset } from './api'
+import { shownRatio } from './Canvas'
 import { useStore } from './store'
 
 type Upd = (props: Record<string, any>, field: string) => void
@@ -94,7 +96,7 @@ const parseDoc = (s: string) => new DOMParser().parseFromString(s, 'text/html')
 const ROLE_LABEL: Record<SlotRole, string> = { title: '标题', body: '正文', caption: '小字', label: '标签', number: '序号' }
 
 /** 原文片段：按槽位改字、替换图片、编辑源码 */
-function HtmlFields({ html, upd }: { html: string; upd: Upd }) {
+function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd: Upd }) {
   const [picking, setPicking] = useState(-1)
   const [assets, setAssets] = useState<Asset[]>([])
   const [source, setSource] = useState(html)
@@ -107,10 +109,10 @@ function HtmlFields({ html, upd }: { html: string; upd: Upd }) {
   const texts = slots.filter((s): s is TextSlot => s.kind === 'text')
   const imgs = slots.filter((s) => s.kind === 'image').map((s) => s.src)
   const replace = (i: number, src: string) => {
-    const doc = parseDoc(`<section id="r">${html}</section>`)
-    const img = doc.querySelectorAll('#r img')[i]
-    if (img) img.setAttribute('src', src)
-    upd({ html: sanitizeHtml(doc.getElementById('r')!.innerHTML, parseDoc) }, 'html')
+    // 按原相框比例裁切新照片（比例取自画布上的显示尺寸）
+    const shown = shownRatio(document.querySelectorAll(`[data-block-id="${blockId}"] .block-html img`)[i] ?? null)
+    const b = setPhoto({ id: blockId, type: 'html', props: { html, label: '' } }, i, { src }, { ratio: shown, parse: parseDoc })
+    if (b.type === 'html') upd({ html: b.props.html }, 'html')
     setPicking(-1)
   }
   return (
@@ -160,7 +162,7 @@ function HtmlFields({ html, upd }: { html: string; upd: Upd }) {
           )}
         </div>
       )}
-      <p className="hint">双击画布中的片段可直接修改文字。原文片段保留导入时的样式，不随主题变化。</p>
+      <p className="hint">双击画布中的片段可直接修改文字。在画布上把照片拖到另一张照片上可以交换位置，从左侧素材拖到照片上可以直接替换。原文片段保留导入时的样式，不随主题变化。</p>
       <button className="wide" onClick={() => setSrcOpen(!srcOpen)}>{srcOpen ? '收起源码' : '编辑 HTML 源码'}</button>
       {srcOpen && (
         <>
@@ -291,7 +293,7 @@ export function PropsForm({ block }: { block: Block }) {
       body = variant('divider')
       break
     case 'html':
-      body = <>{t('名称', 'label')}<HtmlFields html={p.html} upd={upd} /></>
+      body = <>{t('名称', 'label')}<HtmlFields blockId={block.id} html={p.html} upd={upd} /></>
       break
     case 'ending':
       body = <>{t('结尾语', 'text')}{t('引导语', 'note')}{t('署名（可多行）', 'author', true)}{img('二维码 / 图片')}</>

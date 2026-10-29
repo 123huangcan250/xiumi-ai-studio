@@ -25,7 +25,7 @@ export interface ImageSlot {
 }
 export type Slot = TextSlot | ImageSlot
 export type Parse = (s: string) => Document
-/** 字符串：新文字（"" 表示删除这一行）；ImageRef：新图片；null / undefined：保持原样 */
+/** 字符串：新文字（"" 表示删除这一行；图片槽位写 "" 表示连同相框移除）；ImageRef：新图片；null / undefined：保持原样 */
 export type SlotValues = Record<string, string | ImageRef | null | undefined>
 
 export interface FillOptions {
@@ -259,6 +259,34 @@ function writeText(node: Node, value: string, role: SlotRole, doc: Document, spl
   } else setLine(el, lines.join('\n'), doc, bold)
 }
 
+/**
+ * 照片的“图片框”：从照片向外，只包住这一张照片和它的装饰（相框、底纹、角标图标）的最外层容器。
+ * 遇到文字、其他照片或图形文字时停止。
+ */
+function frameOf(img: Element, root: Element): Element {
+  let el = img
+  for (let p = el.parentElement; p && p !== root; p = p.parentElement) {
+    const photos = Array.from(p.querySelectorAll('img')).filter((x) => !isDecorImg(x))
+    if (hasText(p) || photos.length > 1 || p.querySelector('text, foreignObject')) break
+    el = p
+  }
+  return el
+}
+
+/**
+ * 每个照片位的图片框 HTML：照片比模板多时，把多出的照片放进同款相框。
+ * 只取有装饰的框（外层容器，或照片自带边框、圆角、阴影）；光秃的照片交给相册排列。
+ */
+export function extractFrames(html: string, opts: { parse?: Parse; ratios?: Record<string, number> } = {}): string[] {
+  const root = rootOf(html, opts.parse ?? defaultParse)
+  return scan(root).flatMap(({ slot, node }) => {
+    if (slot.kind !== 'image' || !isPhotoSlot(slot, opts.ratios)) return []
+    const f = frameOf(node as Element, root)
+    const decorated = f !== node || /border|radius|shadow|padding/i.test(f.getAttribute('style') ?? '')
+    return decorated ? [f.outerHTML] : []
+  })
+}
+
 const SAFE_SRC = /^(\/media\/[\w.-]+(\?[\w=&:%-]*)?|https:\/\/[^\s"'<>]+)$/
 
 /** 按槽位替换文字和图片，返回新的 HTML（结构与样式不变） */
@@ -270,6 +298,11 @@ export function fillSlots(html: string, values: SlotValues, opts: FillOptions = 
     const v = values[slot.id]
     if (v === undefined || v === null) continue
     if (slot.kind === 'image') {
+      // 照片比照片位少：移除这个照片位和它的相框，不保留模板里的旧照片
+      if (v === '') {
+        frameOf(node as Element, root).remove()
+        continue
+      }
       if (typeof v !== 'object' || !SAFE_SRC.test(v.src)) continue
       const img = node as Element
       const r = ratioOf(img, slot.src, ratios)

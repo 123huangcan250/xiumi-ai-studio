@@ -2,8 +2,9 @@ import { DndContext, DragOverlay, PointerSensor, closestCenter, pointerWithin, u
 import { useEffect, useState } from 'react'
 import { blockMeta, createBlock } from './core/blocks'
 import type { BlockType } from './core/types'
+import { replacePhoto } from './core/photos'
 import { api, assetRef, type Asset } from './editor/api'
-import { Canvas } from './editor/Canvas'
+import { Canvas, photoTarget, shownRatio } from './editor/Canvas'
 import { LeftPanel } from './editor/LeftPanel'
 import { RightPanel } from './editor/RightPanel'
 import { emptyDoc, loadCustomThemes, saveNow, useStore } from './editor/store'
@@ -98,6 +99,19 @@ export default function App() {
       s.insertBlock(active.slice(4) as BlockType, insertAt)
     } else if (active.startsWith('asset:')) {
       const asset = e.active.data.current?.asset as Asset
+      // 松手位置正好在某张照片上：只替换这张照片（原文片段里的照片按原相框裁切）
+      const start = e.activatorEvent as PointerEvent | null
+      if (start && 'clientX' in start) {
+        const hit = document.elementsFromPoint(start.clientX + e.delta.x, start.clientY + e.delta.y).map(photoTarget).find(Boolean)
+        if (hit) {
+          const next = replacePhoto(s.doc, hit.pos, assetRef(asset), { ratio: shownRatio(hit.img) })
+          if (next !== s.doc) {
+            s.commit(next)
+            s.select(hit.pos.blockId)
+            return
+          }
+        }
+      }
       const target = blocks[overIndex]
       const ref = assetRef(asset)
       if (target && IMAGE_TARGETS.has(target.type)) {

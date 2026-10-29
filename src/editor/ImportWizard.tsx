@@ -78,6 +78,9 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
   const [templates, setTemplates] = useState<Template[]>([])
   const [picked, setPicked] = useState<string[]>(initialTemplates ?? [])
   const [tplDocs, setTplDocs] = useState<Variant[]>([])
+  /** 用户对照片的描述（按素材 id），发给 AI 帮助把照片放到对应段落 */
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const noteOf = (a: Asset) => (notes[a.id] ?? '').trim()
 
   useEffect(() => {
     api.aiStatus().then(setAi).catch(() => setAi(null))
@@ -132,7 +135,8 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
     if (aiOn) {
       setBusy(`${ai?.name ?? 'AI'} 正在套用模板…`)
       try {
-        const raw = await api.aiTemplateFill({ text, photos: images.map((a) => a.name), catalog: catalogBrief(parts), hint })
+        const photos = images.map((a) => (noteOf(a) ? `${a.name}｜${noteOf(a)}` : a.name))
+        const raw = await api.aiTemplateFill({ text, photos, catalog: catalogBrief(parts), hint })
         const plan = normalizePlan(raw, parts, refs.length)
         if (!plan.items.length) throw new Error('模型没有返回可用的部件')
         const r = buildFromPlan(plan, parts, refs, { ratios, theme, title: o.title })
@@ -151,7 +155,7 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
       if (aiOn) {
         setBusy(`${ai?.name ?? 'AI'} 正在理解文稿结构…`)
         try {
-          o = normalizeOutline(await api.aiOutline(text, images.map((a) => a.name)), rule)
+          o = normalizeOutline(await api.aiOutline(text, images.map((a) => a.name), images.map(noteOf)), rule)
         } catch (e: any) {
           notify(`结构理解失败，已改用规则解析：${e.message}`, 'error')
         }
@@ -200,9 +204,11 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
   )
 
   return (
-    <Modal title="AI 一键排版" onClose={onClose} width={outline ? 1180 : 760}>
+    <Modal title="AI 一键排版" onClose={onClose} width={outline ? 1180 : 1080}>
       {!outline ? (
         <div className="import-step">
+          <div className="import-layout">
+          <div className="import-main">
           <div className="row gap wrap">
             <label className="upload">
               <input
@@ -257,7 +263,6 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
           <textarea className="import-text" rows={12} value={text} placeholder={'粘贴活动推文正文（第一行为标题；短行会被识别为小标题；“09:00 签到”这类行会被识别为时间轴；|分隔的行会被识别为表格）'} onChange={(e) => setText(e.target.value)} data-testid="import-text" />
           <div className="row gap wrap">
             <span className="hint">正文 {text.replace(/\s/g, '').length} 字 · 图片 {images.length} 张</span>
-            {images.slice(0, 14).map((a) => <img key={a.id} className="thumb" src={`/media/${a.file}?fit=1:1&w=120`} alt="" />)}
             {images.length > 0 && <button className="link" onClick={() => setImages([])}>清空图片</button>}
           </div>
           <div className="tpl-box">
@@ -292,6 +297,28 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
                 </div>
               </>
             )}
+          </div>
+          </div>
+          <aside className="photo-notes" data-testid="photo-notes">
+            <h5>照片（{images.length}）</h5>
+            {images.length ? (
+              <>
+                <p className="tpl-note">可以给照片写一句说明（在做什么、画面里是谁），AI 会把照片放到对应的段落旁。</p>
+                <ol className="photo-list">
+                  {images.map((a, i) => (
+                    <li key={a.id}>
+                      <span className="photo-no">{i + 1}</span>
+                      <img src={`/media/${a.file}?fit=1:1&w=160`} alt={a.name} title={a.name} />
+                      <textarea rows={2} value={notes[a.id] ?? ''} placeholder="这张照片在做什么？例如：开幕式全体合影" onChange={(e) => setNotes((n) => ({ ...n, [a.id]: e.target.value }))} data-testid={`photo-note-${i + 1}`} />
+                      <button className="link" title="不使用这张照片" onClick={() => setImages((x) => x.filter((y) => y.id !== a.id))}>✕</button>
+                    </li>
+                  ))}
+                </ol>
+              </>
+            ) : (
+              <p className="empty">还没有照片，点击「添加照片」上传</p>
+            )}
+          </aside>
           </div>
           <div className="modal-actions">
             <button onClick={onClose}>取消</button>

@@ -8,6 +8,7 @@ const MOCK_PORT = 5298
 const PRIMARY = ['#7a1f2b', '#1d4e5f', '#3f3a8c']
 let mock: Server
 const calls: string[] = []
+let templateRequest = ''
 
 function designs() {
   return {
@@ -25,9 +26,9 @@ function designs() {
 /** 模拟模型套用模板：用到模板里除装饰外的每个部件，文字全部换成标记文字，照片按顺序分配 */
 function templatePlan(user: string) {
   const catalog: any[] = JSON.parse(user.split('模板部件：\n')[1]?.split('\n\n用户的额外要求')[0] ?? '[]')
-  let photo = 0
+  let photo = 1 // 照片编号从 1 开始
   const parts = catalog
-    .filter((p) => !p.id.startsWith('b:') && p.kind !== 'decor')
+    .filter((p) => p.id.startsWith('p') && p.kind !== 'decor')
     .map((p, k) => ({
       part: p.id,
       text: Object.fromEntries(p.texts.map((t: any) => [t.id, t.role === 'label' ? null : `AI 文案 ${k}-${t.id}`])),
@@ -45,6 +46,7 @@ test.beforeAll(async () => {
       const sys = JSON.parse(body || '{}').messages?.[0]?.content ?? ''
       calls.push(sys.slice(0, 40))
       const user = JSON.parse(body || '{}').messages?.[1]?.content ?? ''
+      if (sys.includes('模板部件')) templateRequest = user
       const content = sys.includes('模板部件') ? templatePlan(user) : sys.includes('视觉设计师') ? designs() : sys.includes('主编') ? { sections: [] } : { ok: true, model: 'mock' }
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }))
@@ -141,6 +143,9 @@ test('套用导入的推文模板生成新推文，并按槽位改字', async ({
   await expect(page.getByTestId('pick-template').first()).toHaveClass(/\bon\b/)
   await page.getByTestId('load-sample').click()
   await expect(page.locator('.import-step .hint').first()).toContainText('图片 10 张')
+  // 右侧照片清单：编号 + 描述，描述随请求发给模型
+  await expect(page.getByTestId('photo-notes').locator('li')).toHaveCount(10)
+  await page.getByTestId('photo-note-3').fill('开幕式全体合影')
   await expect(page.getByTestId('generate')).toHaveText('AI 套用模板')
   await page.getByTestId('generate').click()
 
@@ -149,6 +154,11 @@ test('套用导入的推文模板生成新推文，并按槽位改字', async ({
   await expect(cards.first()).toContainText('AI 套用模板')
   await expect(cards.first().locator('.mini-inner')).toContainText('AI 文案')
   expect(calls.some((c) => c.includes('排版编辑'))).toBe(true)
+  expect(templateRequest).toMatch(/3：photo-03\.jpg｜开幕式全体合影/)
+  // 结果较多时弹窗不超出窗口，内容区可滚动
+  const modal = (await page.locator('.modal').boundingBox())!
+  expect(modal.y + modal.height).toBeLessThanOrEqual(900)
+  expect(await page.locator('.modal-body').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
 
   // 规则填充：沿用模板的底色版块，换成样例文稿的标题，不残留模板旧标题
   const rule = cards.nth(1)
@@ -164,4 +174,13 @@ test('套用导入的推文模板生成新推文，并按槽位改字', async ({
   await page.getByTestId('slot-t0').locator('textarea').fill('新的封面标题')
   await expect(page.getByTestId('canvas')).toContainText('新的封面标题')
   expect(await page.getByTestId('canvas').innerHTML()).toContain('#f3eefa')
+
+  // 把一张照片拖到另一张照片上，两张交换位置
+  const photos = page.locator('[data-testid=canvas] img[data-photo]')
+  const base = async (i: number) => (await photos.nth(i).getAttribute('src'))!.split('?')[0]
+  const [a, b] = [await base(0), await base(1)]
+  expect(a).not.toBe(b)
+  await photos.nth(0).dragTo(photos.nth(1))
+  await expect(page.locator('.toast')).toContainText('已交换两张照片')
+  expect([await base(0), await base(1)]).toEqual([b, a])
 })

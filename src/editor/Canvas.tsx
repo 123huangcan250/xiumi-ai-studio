@@ -4,6 +4,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { lazy, memo, Suspense, useEffect, useMemo, useRef } from 'react'
 import { blockMeta } from '../core/blocks'
 import { blockGap, compileBlock, rootStyle } from '../core/compiler'
+import { blockPhotos, swapPhotos, type PhotoPos } from '../core/photos'
 import { sanitizeHtml } from '../core/sanitize'
 import { resolveTheme } from '../core/themes'
 import type { Block, Theme } from '../core/types'
@@ -68,8 +69,35 @@ const RICH_TYPES = new Set(['paragraph', 'card', 'imageText'])
 
 const BlockHtml = memo(function BlockHtml({ block, theme }: { block: Block; theme: Theme }) {
   const html = useMemo(() => compileBlock(block, theme), [block, theme])
-  return <div className="block-html" dangerouslySetInnerHTML={{ __html: html }} />
+  const photos = useMemo(() => blockPhotos(block), [block])
+  const ref = useRef<HTMLDivElement>(null)
+  // 标记可移动的照片：拖到另一张照片上互换位置；装饰图、二维码不参与
+  useEffect(() => {
+    ref.current?.querySelectorAll('img').forEach((img, i) => {
+      if (photos[i]) {
+        img.dataset.photo = String(i)
+        img.draggable = true
+        img.title = '拖到另一张照片上可交换位置'
+      } else img.draggable = false
+    })
+  }, [html, photos])
+  return <div ref={ref} className="block-html" dangerouslySetInnerHTML={{ __html: html }} />
 })
+
+const PHOTO_MIME = 'application/x-xiumi-photo'
+
+/** 事件目标所在的可移动照片 */
+export function photoTarget(el: EventTarget | Element | null): { img: HTMLImageElement; pos: PhotoPos } | null {
+  const img = (el as Element | null)?.closest?.('img[data-photo]') as HTMLImageElement | null
+  const block = img?.closest('[data-block-id]') as HTMLElement | null
+  return img && block ? { img, pos: { blockId: block.dataset.blockId!, index: Number(img.dataset.photo) } } : null
+}
+
+/** 照片在画布上显示的高宽比，即相框比例 */
+export const shownRatio = (img: Element | null) => {
+  const r = img?.getBoundingClientRect()
+  return r && r.width ? r.height / r.width : undefined
+}
 
 /** 模块渲染失败时的占位：可删除或撤销，不影响其余模块 */
 function BrokenBlock({ block, error }: { block: Block; error: Error }) {
@@ -176,13 +204,68 @@ function BlockView({ block, theme, gap }: { block: Block; theme: Theme; gap: num
   )
 }
 
+/** 照片拖放：拖到另一张照片上互换位置，靠近画布上下边缘时自动滚动 */
+function usePhotoDrag(scroller: React.RefObject<HTMLDivElement | null>) {
+  const over = useRef<HTMLImageElement | null>(null)
+  const mark = (img: HTMLImageElement | null) => {
+    if (over.current === img) return
+    over.current?.classList.remove('photo-drop')
+    img?.classList.add('photo-drop')
+    over.current = img
+  }
+  return {
+    onDragStart: (e: React.DragEvent) => {
+      const t = photoTarget(e.target)
+      if (!t) return
+      e.dataTransfer.setData(PHOTO_MIME, JSON.stringify(t.pos))
+      e.dataTransfer.effectAllowed = 'move'
+      t.img.classList.add('photo-dragging')
+    },
+    onDragOver: (e: React.DragEvent) => {
+      if (!e.dataTransfer.types.includes(PHOTO_MIME)) return
+      const box = scroller.current?.getBoundingClientRect()
+      if (box && scroller.current) {
+        if (e.clientY < box.top + 70) scroller.current.scrollTop -= 18
+        else if (e.clientY > box.bottom - 70) scroller.current.scrollTop += 18
+      }
+      const t = photoTarget(e.target)
+      mark(t?.img ?? null)
+      if (t) {
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+      }
+    },
+    onDrop: (e: React.DragEvent) => {
+      const raw = e.dataTransfer.getData(PHOTO_MIME)
+      const t = photoTarget(e.target)
+      mark(null)
+      if (!raw || !t) return
+      e.preventDefault()
+      const from = JSON.parse(raw) as PhotoPos
+      const fromImg = document.querySelector(`[data-block-id="${from.blockId}"] img[data-photo="${from.index}"]`)
+      const s = useStore.getState()
+      const next = swapPhotos(s.doc, from, t.pos, { ratioA: shownRatio(fromImg), ratioB: shownRatio(t.img) })
+      if (next !== s.doc) {
+        s.commit(next)
+        s.notify('已交换两张照片的位置（Ctrl+Z 可撤销）')
+      }
+    },
+    onDragEnd: (e: React.DragEvent) => {
+      mark(null)
+      ;(e.target as Element).classList?.remove('photo-dragging')
+    },
+  }
+}
+
 export function Canvas() {
   const doc = useStore((s) => s.doc)
   const theme = useMemo(() => resolveTheme(doc), [doc.themeId, doc.themeOverrides]) // eslint-disable-line react-hooks/exhaustive-deps
   const select = useStore((s) => s.select)
   const { setNodeRef, isOver } = useDroppable({ id: 'canvas-end' })
+  const scroller = useRef<HTMLDivElement>(null)
+  const photoDrag = usePhotoDrag(scroller)
   return (
-    <div className="canvas-scroll" onClick={() => select(null)}>
+    <div className="canvas-scroll" ref={scroller} onClick={() => select(null)} {...photoDrag}>
       <div className="phone">
         <div className="phone-head">
           <div className="wx-title">{doc.title || '未命名推文'}</div>

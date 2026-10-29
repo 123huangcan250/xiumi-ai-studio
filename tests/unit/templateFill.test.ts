@@ -6,9 +6,10 @@ import { createBlock } from '../../src/core/blocks'
 import { compileDoc } from '../../src/core/compiler'
 import { parseArticle } from '../../src/core/outline'
 import { buildCatalog, buildFromPlan, catalogBrief, normalizePlan, renumber, rulePlan, templateTheme, type TemplateLike } from '../../src/core/templateFill'
-import type { ImageRef } from '../../src/core/types'
+import type { Block, ImageRef } from '../../src/core/types'
 
 const parse = (s: string) => new JSDOM(s).window.document
+const htmlOf = (b: Block) => (b.type === 'html' ? b.props.html : '')
 const html = (h: string) => createBlock('html', { html: h, label: '片段' })
 const OLD = 'https://mmbiz.qpic.cn/old/640?wx_fmt=jpeg'
 
@@ -36,6 +37,8 @@ describe('template catalog', () => {
     const own = parts.filter((p) => !p.id.startsWith('b:'))
     expect(own.map((p) => p.kind)).toEqual(['cover', 'heading', 'body', 'image', 'image', 'decor', 'ending'])
     expect(own.find((p) => p.kind === 'image' && p.photos === 2)).toBeTruthy()
+    // 没有装饰的光秃照片不提取为图片框
+    expect(own.some((p) => p.id.startsWith('f'))).toBe(false)
     expect(parts.some((p) => p.id === 'b:timeline')).toBe(true)
   })
   it('briefs slots for the model without full html', () => {
@@ -87,7 +90,7 @@ describe('AI plan', () => {
   it('drops unknown parts, truncates tight slots and dedupes photos', () => {
     const svgPart = buildCatalog([{ id: 's', name: 's', blocks: [html('<svg viewBox="0 0 10 2"><text>回顾</text></svg>')] }], { parse })
     const plan = normalizePlan(
-      { title: '新标题', parts: [{ part: 'nope' }, { part: 'p1', text: { t0: 3, t1: '新章节', bogus: 'x' }, images: [0, 0, 99] }, { part: 'p0', images: [0, 1] }] },
+      { title: '新标题', parts: [{ part: 'nope' }, { part: 'p1', text: { t0: 3, t1: '新章节', bogus: 'x' }, images: [1, 1, 99, 0] }, { part: 'p0', images: [1, 2] }] },
       parts,
       10,
     )
@@ -97,13 +100,34 @@ describe('AI plan', () => {
     ])
     expect(normalizePlan({ parts: [{ part: 'p0', text: { t0: '精彩回顾瞬间' } }] }, svgPart, 0).items[0].text.t0).toBe('精彩')
   })
-  it('fills missing photo slots from unassigned photos and appends the rest', () => {
-    const plan = normalizePlan({ title: 'T', parts: [{ part: 'p4', text: {}, images: [3] }, { part: 'b:paragraph', text: { content: '正文' } }] }, parts, 4)
-    const { doc } = buildFromPlan(plan, parts, photos.slice(0, 4), { parse })
+  it('fills missing photo slots from unassigned photos and puts the rest into template frames', () => {
+    const plan = normalizePlan({ title: 'T', parts: [{ part: 'p4', text: {}, images: [4] }, { part: 'b:paragraph', text: { content: '正文' } }] }, parts, 4)
+    const { doc, warnings } = buildFromPlan(plan, parts, photos.slice(0, 4), { parse })
     const out = compileDoc(doc).html
     expect(out.indexOf('photo-04')).toBeLessThan(out.indexOf('photo-01'))
-    for (const p of photos.slice(0, 4)) expect(out).toContain(p.src)
-    expect(doc.blocks.at(-1)!.type).toBe('gallery')
+    for (const p of photos.slice(0, 4)) expect(out.split(p.src).length - 1).toBe(1)
+    // 多出的两张照片复用模板的双图版块，而不是另起相册
+    expect(doc.blocks.map((b) => b.type)).toEqual(['html', 'paragraph', 'html'])
+    expect(htmlOf(doc.blocks.at(-1)!)).toContain('display: flex')
+    expect(out).not.toContain(OLD)
+    expect(warnings).toEqual([])
+  })
+  it('removes empty photo slots instead of keeping old photos', () => {
+    const plan = normalizePlan({ title: 'T', parts: [{ part: 'p4', images: [1] }, { part: 'p3', text: { t0: '新图注' } }] }, parts, 1)
+    const { doc, warnings } = buildFromPlan(plan, parts, photos.slice(0, 1), { parse })
+    const out = compileDoc(doc).html
+    expect(out).not.toContain(OLD)
+    expect(out.split('<img').length - 1).toBe(1)
+    expect(out).toContain('新图注')
+    expect(warnings[0]).toContain('移除 2 个')
+  })
+  it('reuses a single-photo frame for many extra photos', () => {
+    const one = buildCatalog([{ id: 'o', name: 'o', blocks: [html(`<section><section style="border: 2px solid #3a7d44; padding: 4px"><img src="${OLD}" style="width: 100%"></section><p>旧图注</p></section>`)] }], { parse })
+    expect(htmlOf(one.find((p) => p.id === 'f0')!.block)).toMatch(/^<section style="border: 2px solid #3a7d44; padding: 4px"><img/)
+    const { doc } = buildFromPlan({ title: 'T', digest: '', items: [] }, one, photos.slice(0, 3), { parse })
+    const out = compileDoc(doc).html
+    expect(out.match(/#3a7d44/g)).toHaveLength(3)
+    expect(out).not.toContain('旧图注')
   })
   it('renumbers in the original style', () => {
     expect(renumber('01', 3)).toBe('03')
