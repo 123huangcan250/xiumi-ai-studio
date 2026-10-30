@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
-import { cleanText, extractFrames, extractSlots, fillSlots, isPhotoSlot, skeleton, type ImageSlot, type TextSlot } from '../../src/core/slots'
+import { cleanText, extractFrames, extractSlots, fillSlots, isPhotoSlot, removeBackgroundPhotos, removeImage, skeleton, type ImageSlot, type TextSlot } from '../../src/core/slots'
 
 const parse = (s: string) => new JSDOM(s).window.document
 const texts = (html: string) => extractSlots(html, parse).filter((s): s is TextSlot => s.kind === 'text')
@@ -108,6 +108,32 @@ describe('photo frames', () => {
     const html = fillSlots(FRAMED, { i0: '' }, { parse })
     expect(html).not.toContain('border: 2px solid green')
     expect(html).toContain('图注')
+  })
+})
+
+describe('deleting images', () => {
+  // 仿秀米 SVG 轮播：照片是 foreignObject 里 svg 的 JPG 背景图，外面套着虚线框；旁边是正文和一张普通照片
+  const slide = (n: number) => `<g transform="translate(${n * 1080} 0)"><foreignObject width="100%" height="100%"><svg style="background-image: url(&quot;https://mmbiz.qpic.cn/sz_mmbiz_jpg/old${n}/640?wx_fmt=jpeg&quot;); background-size: 100%" viewBox="0 0 1080 1440"></svg></foreignObject></g>`
+  const CAROUSEL = `<section><p>正文段落。</p><section style="display: flex"><section style="background-color: rgb(236, 246, 228); padding: 10px"><section style="border-style: dashed"><svg viewBox="0 0 1080 1440">${slide(0)}${slide(1)}</svg></section></section></section><section style="background-image: url(https://mmbiz.qpic.cn/paper/0?wx_fmt=jpeg)"><p>纸纹底色上的文字</p></section><img src="https://mmbiz.qpic.cn/sz_mmbiz_png/deco/0?wx_fmt=png" style="width: 100%"></section>`
+
+  it('removes background-image photos with their whole carousel frame', () => {
+    const r = removeBackgroundPhotos(CAROUSEL, parse)
+    expect(r.removed).toBe(1)
+    expect(r.html).not.toMatch(/old0|old1|border-style: dashed|display: flex/)
+    expect(r.html).toContain('正文段落。')
+    expect(r.html).toContain('纸纹底色上的文字') // 带文字的背景（纹理）保留
+    expect(r.html).toContain('wx_fmt=png')
+    expect(removeBackgroundPhotos('<p>无背景图</p>', parse)).toEqual({ html: '<p>无背景图</p>', removed: 0 })
+  })
+  it('deletes a photo with its frame, or just the image for decorations', () => {
+    const FRAMED = `<section><section style="border: 2px solid green"><img src="https://mmbiz.qpic.cn/p/640?wx_fmt=jpeg" style="width: 100%"></section><p>图注</p><img src="https://mmbiz.qpic.cn/deco/0?wx_fmt=gif"></section>`
+    const a = removeImage(FRAMED, 0, parse)
+    expect(a).not.toContain('border: 2px solid green')
+    expect(a).toContain('图注')
+    const b = removeImage(FRAMED, 1, parse)
+    expect(b).not.toContain('wx_fmt=gif')
+    expect(b).toContain('border: 2px solid green')
+    expect(removeImage(FRAMED, 9, parse)).toBe(FRAMED)
   })
 })
 

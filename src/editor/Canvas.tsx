@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { lazy, memo, Suspense, useEffect, useMemo, useRef } from 'react'
+import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { blockMeta } from '../core/blocks'
 import { blockGap, compileBlock, rootStyle } from '../core/compiler'
 import { blockPhotos, swapPhotos, type PhotoPos } from '../core/photos'
@@ -27,10 +27,37 @@ const RichEditor = lazy(() => import('./RichEditor').then((m) => ({ default: m.R
 
 const parseDoc = (s: string) => new DOMParser().parseFromString(s, 'text/html')
 
-/** 原文片段就地编辑：contentEditable，完成时重新清洗后写回 */
+const textless = (el: Element) => !(el.textContent ?? '').replace(/\s/g, '')
+
+/**
+ * 点中的图片区域：图片、SVG 图形或背景图所在、且不含文字的最外层容器（相框、轮播一起选中）。
+ * 秀米的 SVG 轮播不响应点击，点击会落在外框上，同样能选中。
+ */
+function mediaFrame(target: Element, editor: Element): Element | null {
+  // 点在 SVG 内部（轮播里接收滑动的透明矩形等）：按最外层的 SVG 图形算
+  for (let s = target.closest('svg'); s && editor.contains(s); s = s.parentElement?.closest('svg') ?? null) target = s
+  if (target === editor || !textless(target)) return null
+  if (!(target.matches('img, svg') || target.querySelector('img, svg') || /background-image/i.test(target.getAttribute('style') ?? ''))) return null
+  let top = target
+  for (let p = target.parentElement; p && p !== editor && textless(p); p = p.parentElement) top = p
+  return top
+}
+
+/** 原文片段就地编辑：contentEditable，完成时重新清洗后写回；点击图片可选中后删除 */
 function HtmlEditor({ block, onDone }: { block: Block<'html'>; onDone: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const updateProps = useStore((s) => s.updateProps)
+  const [picked, setPicked] = useState<Element | null>(null)
+  const pick = (el: Element | null) => {
+    picked?.classList.remove('media-picked')
+    el?.classList.add('media-picked')
+    setPicked(el)
+  }
+  const removePicked = () => {
+    picked?.remove()
+    setPicked(null)
+    commit()
+  }
   useEffect(() => {
     if (!ref.current) return
     ref.current.innerHTML = block.props.html
@@ -44,7 +71,12 @@ function HtmlEditor({ block, onDone }: { block: Block<'html'>; onDone: () => voi
   return (
     <div onClick={(e) => e.stopPropagation()}>
       <div className="rich-toolbar">
-        <span className="hint" style={{ margin: '0 6px' }}>直接修改文字（保留原样式）；图片在右侧面板替换</span>
+        <span className="hint" style={{ margin: '0 6px' }}>直接修改文字（保留原样式）；点击图片可选中，按 Delete 删除</span>
+        {picked && (
+          <button type="button" className="danger" onMouseDown={(e) => (e.preventDefault(), removePicked())} data-testid="delete-picked">
+            删除所选图片
+          </button>
+        )}
         <span className="sep" />
         <button type="button" className="done" onMouseDown={(e) => (e.preventDefault(), commit(), onDone())}>完成</button>
       </div>
@@ -54,7 +86,14 @@ function HtmlEditor({ block, onDone }: { block: Block<'html'>; onDone: () => voi
         contentEditable
         suppressContentEditableWarning
         onBlur={commit}
+        onClick={(e) => pick(ref.current ? mediaFrame(e.target as Element, ref.current) : null)}
         onKeyDown={(e) => {
+          if (picked && (e.key === 'Delete' || e.key === 'Backspace')) {
+            e.preventDefault()
+            removePicked()
+            return
+          }
+          if (picked) pick(null)
           if (e.key === 'Escape') {
             commit()
             onDone()

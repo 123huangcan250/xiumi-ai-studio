@@ -315,6 +315,49 @@ export function fillSlots(html: string, values: SlotValues, opts: FillOptions = 
   return root.innerHTML
 }
 
+/** 删除第 index 张图：照片连同相框一起删，装饰图只删图片本身 */
+export function removeImage(html: string, index: number, parse: Parse = defaultParse): string {
+  const root = rootOf(html, parse)
+  const hit = scan(root).filter((h) => h.slot.kind === 'image')[index]
+  if (!hit) return html
+  const img = hit.node as Element
+  ;((hit.slot as ImageSlot).decor ? img : frameOf(img, root)).remove()
+  return root.innerHTML
+}
+
+const BG_URL = /background-image:\s*url\((['"]?)(.*?)\1\)/i
+/** 以背景图嵌入的照片（秀米的 SVG 轮播、拼图等）：JPG 背景且内部没有文字；PNG/GIF 背景多为纹理花边，不算 */
+function isBackgroundPhoto(el: Element) {
+  const url = (el.getAttribute('style') ?? '').match(BG_URL)?.[2] ?? ''
+  return /wx_fmt=jpe?g|mmbiz_jpg|\.jpe?g(\?|$)/i.test(url) && !hasText(el)
+}
+
+/** 背景图照片的外框：向外扩到含文字或含普通照片的容器为止（整个轮播一起算） */
+function backgroundFrameOf(el: Element, root: Element): Element {
+  let top = el
+  for (let p = el.parentElement; p && p !== root; p = p.parentElement) {
+    if (hasText(p) || Array.from(p.querySelectorAll('img')).some((x) => !isDecorImg(x))) break
+    top = p
+  }
+  return top
+}
+
+/**
+ * 移除以背景图嵌入的旧照片（连同只装这些照片的外框）。这类照片无法替换，
+ * 在编辑器里常显示为“未经允许不可引用”，套用模板时不应带进新推文。
+ */
+export function removeBackgroundPhotos(html: string, parse: Parse = defaultParse): { html: string; removed: number } {
+  if (!/background-image/i.test(html)) return { html, removed: 0 }
+  const root = rootOf(html, parse)
+  let removed = 0
+  for (const el of Array.from(root.querySelectorAll('[style*="background-image"]'))) {
+    if (!el.isConnected || !isBackgroundPhoto(el)) continue
+    backgroundFrameOf(el, root).remove()
+    removed++
+  }
+  return { html: removed ? root.innerHTML : html, removed }
+}
+
 /** 结构指纹：去掉文字和图片地址后的 HTML，用于合并样式相同的模板部件 */
 export function skeleton(html: string, parse: Parse = defaultParse): string {
   const root = rootOf(html, parse)

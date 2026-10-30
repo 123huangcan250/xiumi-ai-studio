@@ -121,6 +121,15 @@ describe('AI plan', () => {
     expect(out).toContain('新图注')
     expect(warnings[0]).toContain('移除 2 个')
   })
+  it('drops old background-image photos such as Xiumi carousels', () => {
+    const carousel = html(`<section><p style="font-size: 15px">旧正文。</p><section style="border-style: dashed"><svg viewBox="0 0 10 10"><foreignObject width="100%" height="100%"><svg style="background-image: url(&quot;https://mmbiz.qpic.cn/sz_mmbiz_jpg/old/640?wx_fmt=jpeg&quot;)"></svg></foreignObject></svg></section></section>`)
+    const parts = buildCatalog([{ id: 'c', name: 'c', blocks: [carousel] }], { parse })
+    const { doc, warnings } = buildFromPlan({ title: 'T', digest: '', items: [{ part: 'p0', text: { t0: '新正文。' }, images: [] }] }, parts, [], { parse })
+    const out = compileDoc(doc).html
+    expect(out).toContain('新正文。')
+    expect(out).not.toMatch(/sz_mmbiz_jpg|border-style: dashed/)
+    expect(warnings).toEqual(['模板里有 1 处以背景图嵌入的旧照片（如秀米轮播），无法替换，已移除'])
+  })
   it('reuses a single-photo frame for many extra photos', () => {
     const one = buildCatalog([{ id: 'o', name: 'o', blocks: [html(`<section><section style="border: 2px solid #3a7d44; padding: 4px"><img src="${OLD}" style="width: 100%"></section><p>旧图注</p></section>`)] }], { parse })
     expect(htmlOf(one.find((p) => p.id === 'f0')!.block)).toMatch(/^<section style="border: 2px solid #3a7d44; padding: 4px"><img/)

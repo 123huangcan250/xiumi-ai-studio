@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { blockMeta } from '../core/blocks'
 import { sanitizeHtml } from '../core/sanitize'
 import { setPhoto } from '../core/photos'
-import { cleanText, extractSlots, fillSlots, type SlotRole, type TextSlot } from '../core/slots'
+import { cleanText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, type SlotRole, type TextSlot } from '../core/slots'
 import { richToPlain, textToRich } from '../core/richtext'
 import type { Block, ImageRef } from '../core/types'
 import { api, type Asset } from './api'
@@ -108,6 +108,7 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
   const slots = useMemo(() => extractSlots(html, parseDoc), [html])
   const texts = slots.filter((s): s is TextSlot => s.kind === 'text')
   const imgs = slots.filter((s) => s.kind === 'image').map((s) => s.src)
+  const bgPhotos = useMemo(() => removeBackgroundPhotos(html, parseDoc).removed, [html])
   const replace = (i: number, src: string) => {
     // 按原相框比例裁切新照片（比例取自画布上的显示尺寸）
     const shown = shownRatio(document.querySelectorAll(`[data-block-id="${blockId}"] .block-html img`)[i] ?? null)
@@ -144,6 +145,19 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
             {imgs.map((src, i) => (
               <div key={i} className={`g-item ${picking === i ? 'picking' : ''}`} onClick={() => setPicking(picking === i ? -1 : i)}>
                 <img src={src.startsWith('/media/') ? `${src.split('?')[0]}?fit=1:1&w=160` : src} alt="" />
+                <div>
+                  <button
+                    title="删除这张图（照片连同相框）"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setPicking(-1)
+                      upd({ html: removeImage(html, i, parseDoc) }, 'html')
+                    }}
+                    data-testid={`remove-image-${i}`}
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -160,6 +174,14 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
               {!assets.length && <p className="empty">素材库为空，请先在左侧「素材」上传</p>}
             </div>
           )}
+        </div>
+      )}
+      {bgPhotos > 0 && (
+        <div className="warn">
+          这个片段里有 {bgPhotos} 处以背景图嵌入的旧照片（如秀米轮播），无法替换，在编辑器里可能显示为“未经允许不可引用”。
+          <button className="link" onClick={() => upd({ html: removeBackgroundPhotos(html, parseDoc).html }, 'html')} data-testid="remove-bg-photos">
+            移除这些旧照片
+          </button>
         </div>
       )}
       <p className="hint">双击画布中的片段可直接修改文字。在画布上把照片拖到另一张照片上可以交换位置，从左侧素材拖到照片上可以直接替换。原文片段保留导入时的样式，不随主题变化。</p>

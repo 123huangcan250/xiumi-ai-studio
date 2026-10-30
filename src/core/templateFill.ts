@@ -3,7 +3,7 @@
 import { blockMeta, coerceProps, createBlock, newId } from './blocks'
 import type { Outline } from './outline'
 import { richToPlain } from './richtext'
-import { extractFrames, extractSlots, fillSlots, isPhotoSlot, skeleton, type ImageSlot, type Parse, type SlotRole, type SlotValues, type TextSlot } from './slots'
+import { extractFrames, extractSlots, fillSlots, isPhotoSlot, removeBackgroundPhotos, skeleton, type ImageSlot, type Parse, type SlotRole, type SlotValues, type TextSlot } from './slots'
 import { analyzeStyle, themeFromReport } from './styleExtract'
 import { THEMES } from './themes'
 import type { Block, BlockType, Doc, ImageRef, ThemeTokens } from './types'
@@ -241,6 +241,7 @@ export function buildFromPlan(plan: FillPlan, parts: Part[], photos: ImageRef[],
   const spare = photos.map((_, i) => i).filter((i) => !planned.has(i))
   const used = new Set<number>()
   let removed = 0
+  let oldPhotos = 0
   const blocks: Block[] = []
   let endingAt = -1
 
@@ -259,7 +260,10 @@ export function buildFromPlan(plan: FillPlan, parts: Part[], photos: ImageRef[],
           removed++
         }
       })
-      return { id: newId(), type: 'html', props: { html: fillSlots(p.block.props.html, values, { parse: opts.parse, ratios: opts.ratios }), label: p.block.props.label } }
+      // 以背景图嵌入的旧照片（秀米轮播等）无法替换，直接移除
+      const filled = removeBackgroundPhotos(fillSlots(p.block.props.html, values, { parse: opts.parse, ratios: opts.ratios }), opts.parse)
+      oldPhotos += filled.removed
+      return { id: newId(), type: 'html', props: { html: filled.html, label: p.block.props.label } }
     }
     const list = [...ids]
     const need = p.flexible ? Math.max(list.length, 1) : p.photos
@@ -300,7 +304,10 @@ export function buildFromPlan(plan: FillPlan, parts: Part[], photos: ImageRef[],
   }
   blocks.splice(endingAt >= 0 ? endingAt : blocks.length, 0, ...extra)
 
-  const warnings = removed ? [`照片比模板的照片位少，已移除 ${removed} 个空照片位`] : []
+  const warnings = [
+    ...(removed ? [`照片比模板的照片位少，已移除 ${removed} 个空照片位`] : []),
+    ...(oldPhotos ? [`模板里有 ${oldPhotos} 处以背景图嵌入的旧照片（如秀米轮播），无法替换，已移除`] : []),
+  ]
   const firstPhoto = plan.items.flatMap((i) => i.images)[0]
   const now = Date.now()
   return {

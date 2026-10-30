@@ -128,6 +128,16 @@ test('粘贴公众号推文，保留原样式导入并保存为模板', async ({
   await expect(page.getByTestId('canvas')).toContainText('EDITED 招新')
   await expect(page.getByTestId('save-status')).toHaveText('已保存', { timeout: 10_000 })
 
+  // 就地编辑时点击图片即选中（相框一起），可直接删除
+  const imgs = page.locator('[data-testid=canvas] img')
+  const before = await imgs.count()
+  await blocks.filter({ has: page.locator('img') }).first().dblclick()
+  await page.locator('.html-editor img').first().dispatchEvent('click')
+  await expect(page.locator('.html-editor .media-picked')).toHaveCount(1)
+  await page.getByTestId('delete-picked').click()
+  await page.getByRole('button', { name: '完成' }).click()
+  await expect(imgs).toHaveCount(before - 1)
+
   // 模板列表中出现导入的模板，可用其新建项目
   await page.getByRole('button', { name: '模板', exact: true }).click()
   await expect(page.getByTestId('template-item').first()).toContainText('测试推文：社团招新季')
