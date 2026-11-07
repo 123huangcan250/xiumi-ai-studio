@@ -3,7 +3,7 @@
 import { blockMeta, coerceProps, createBlock, newId } from './blocks'
 import type { Outline } from './outline'
 import { richToPlain } from './richtext'
-import { extractFrames, extractSlots, fillSlots, isPhotoSlot, removeBackgroundPhotos, skeleton, type ImageSlot, type Parse, type SlotRole, type SlotValues, type TextSlot } from './slots'
+import { backgroundPhotos, extractFrames, extractSlots, fillSlots, isPhotoSlot, removeBackgroundPhotos, skeleton, type ImageSlot, type Parse, type SlotRole, type SlotValues, type TextSlot } from './slots'
 import { analyzeStyle, themeFromReport } from './styleExtract'
 import { THEMES } from './themes'
 import type { Block, BlockType, Doc, ImageRef, ThemeTokens } from './types'
@@ -96,6 +96,16 @@ function htmlKind(texts: TextSlot[], photos: number, k: number, n: number): Part
   if (photos) return 'image'
   if (has('body')) return 'body'
   return 'heading'
+}
+
+/** 单独一个模块属于哪类部件（组件库分类用） */
+export function guessKind(block: Block, parse?: Parse): PartKind {
+  if (block.type !== 'html') return BUILTIN_KIND[block.type]
+  const slots = extractSlots(block.props.html, parse)
+  const texts = slots.filter((s): s is TextSlot => s.kind === 'text')
+  const photos = slots.filter((s): s is ImageSlot => s.kind === 'image' && isPhotoSlot(s)).length + backgroundPhotos(block.props.html, parse).length
+  if (texts.length && texts.length <= 6 && texts.some((t) => CREDIT_RE.test(t.text) || /关注|扫码|二维码/.test(t.text))) return 'ending'
+  return htmlKind(texts, photos, 0, 1)
 }
 
 /** 把模板拆成部件；样式相同、只是文字图片不同的模块合并为一个 */

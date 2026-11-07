@@ -14,7 +14,7 @@
 | [ueberdosis/tiptap](https://github.com/ueberdosis/tiptap) | MIT | 2026-10-28 / 38.9k | TS + ProseMirror | **直接依赖**：段落/卡片等富文本字段的编辑内核，存储为 ProseMirror JSON。 |
 | [vima-tech/moka](https://github.com/vima-tech/moka) | **无许可证** | 2026-04-24 / 52 | React19 + Vite + Tauri | 未授权即“保留所有权利”：**不复制任何代码、模板或素材**，仅了解其公开功能描述。 |
 
-另外：秀米的模板、素材均为其专有内容，本项目所有模块与主题为原创实现，不抓取、不仿制秀米素材。
+另外：秀米的模板、素材均为其专有内容，本项目所有模块与主题为原创实现，不抓取、不仿制秀米素材。用户可以把自己有权使用的内容导入到本机组件库，这些内容只存在 `data/`，不属于仓库，也不提供分发（见 `05-xiumi-compat-probe.md`）。
 
 ## 2. 微信兼容性要点（来源与可信度）
 

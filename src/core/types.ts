@@ -49,7 +49,16 @@ export interface BlockPropsMap {
   divider: { variant: 'auto' | 'line' | 'dots' | 'ornament' | 'space' }
   ending: { text: string; author: string; note: string; image?: ImageRef }
   /** 原文片段：导入的公众号版块，保留原内联样式（已清洗） */
-  html: { html: string; label: string }
+  html: { html: string; label: string; source?: ContentSource }
+}
+
+/** 导入内容的来源，收藏为组件时带入，便于追溯 */
+export type SourceKind = 'original' | 'wechat' | 'xiumi' | 'other'
+export interface ContentSource {
+  kind: SourceKind
+  title: string
+  url: string
+  account: string
 }
 
 export type Block<T extends BlockType = BlockType> = {

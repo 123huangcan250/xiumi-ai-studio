@@ -32,7 +32,8 @@ export async function saveAsset(buf: Buffer, name: string): Promise<Asset> {
   const id = nanoid(12).replace(/[^\w-]/g, '_')
   const img = sharp(buf, { animated: false }).rotate()
   const meta = await img.metadata()
-  const keepPng = meta.format === 'png' && meta.hasAlpha
+  // 透明的 PNG、GIF、WebP 存成 PNG（GIF 只保留第一帧），其余统一为 JPG
+  const keepPng = ['png', 'gif', 'webp'].includes(meta.format ?? '') && !!meta.hasAlpha
   const ext = keepPng ? '.png' : '.jpg'
   const file = `${id}${ext}`
   const pipeline = img.resize({ width: MAX_EDGE, height: MAX_EDGE, fit: 'inside', withoutEnlargement: true })

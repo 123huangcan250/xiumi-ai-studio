@@ -468,11 +468,17 @@ const R: Renderers = {
   },
 }
 
+/** 换成本地素材的背景图，导出时和 <img> 一样映射成微信图片或内嵌图片 */
+const MEDIA_BG = /url\((&quot;|["']?)(\/media\/[^"')]*?)\1\)/gi
+
 /** 原文片段：存储时已清洗，输出前再做一次字符串级防护 */
 function renderHtml(b: Extract<Block, { type: 'html' }>, ctx: Ctx): string {
   const map = ctx.opts.mapImage
   const html = guardHtml(b.props.html)
-  return map ? html.replace(/(<img\b[^>]*\ssrc=")([^"]+)(")/gi, (_m, a, u, z) => a + esc(map(u.replace(/&amp;/g, '&'))) + z) : html
+  if (!map) return html
+  return html
+    .replace(/(<img\b[^>]*\ssrc=")([^"]+)(")/gi, (_m, a, u, z) => a + esc(map(u.replace(/&amp;/g, '&'))) + z)
+    .replace(MEDIA_BG, (_m, q, u) => `url(${q}${esc(map(u.replace(/&amp;/g, '&')))}${q})`)
 }
 
 export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = {}): string {
@@ -532,7 +538,8 @@ export function lintWechatHtml(html: string): string[] {
   if (/\sid=/i.test(html)) w.push('包含 id 属性')
   if (/position\s*:\s*(absolute|fixed)/i.test(html)) w.push('使用了绝对/固定定位，部分情况下会被微信过滤')
   if (/var\(/i.test(html)) w.push('使用了 CSS 变量')
-  if (/src="(http:\/\/(localhost|127\.0\.0\.1)|\/media\/)/i.test(html)) w.push('含本地图片地址，粘贴到微信后无法显示，请使用“内嵌图片”或“上传到微信”')
+  if (/src="(http:\/\/(localhost|127\.0\.0\.1)|\/media\/)|url\((&quot;|["']?)\/media\//i.test(html)) w.push('含本地图片地址，粘贴到微信后无法显示，请使用“内嵌图片”或“上传到微信”')
+  if (/(src="|url\((&quot;|["']?))https?:\/\/[\w.-]*(xiumi\.us|xiumius\.cn)\//i.test(html)) w.push('含未转存的秀米图片，粘贴到公众号后可能无法显示，请先替换')
   if (/<a\s[^>]*href="(?!https?:\/\/mp\.weixin\.qq\.com)/i.test(html)) w.push('含非公众号外链，可能被微信过滤')
   if (html.length >= 20000) w.push(`HTML 长度 ${html.length} 字符，超过草稿箱接口 20,000 字符上限（复制粘贴不受此限）`)
   return w

@@ -1,8 +1,8 @@
 // 导入公众号推文：从文章页或粘贴的富文本中提取正文，
 // 生成“保留原样式”的原文片段模块，或转成 Markdown 交给排版引擎重新设计。
 import { createBlock } from './blocks'
-import { sanitizeTree } from './sanitize'
-import type { Block } from './types'
+import { isXiumiImage, sanitizeTree } from './sanitize'
+import type { Block, ContentSource, SourceKind } from './types'
 
 export interface ImportedArticle {
   title: string
@@ -12,20 +12,39 @@ export interface ImportedArticle {
   cover: string
   /** 已清洗的正文根节点 */
   root: Element
+  source: ContentSource
 }
 
 const meta = (doc: Document, sel: string) => doc.querySelector(sel)?.getAttribute('content')?.trim() ?? ''
 const text = (el: Element | null) => (el?.textContent ?? '').replace(/\s+/g, ' ').trim()
 
-/** doc 可以是完整文章页，也可以是只包含正文的片段 */
-export function extractArticle(doc: Document): ImportedArticle {
+/**
+ * 判断内容来源（只是预填，用户可以在导入界面修改）：
+ * 文章页算公众号；还有秀米图床的图片说明是从秀米复制的（已发布的文章图片都在微信图床）；
+ * 其余看微信图床的图片和秀米留下的标记，用秀米排版后发布的文章两者都有，算公众号。
+ */
+export function detectSource(doc: Document, url = ''): SourceKind {
+  if (/^https?:\/\/mp\.weixin\.qq\.com\//i.test(url) || doc.querySelector('#js_content')) return 'wechat'
+  const imgs = Array.from(doc.querySelectorAll('img')).map((i) => i.getAttribute('data-src') || i.getAttribute('src') || '')
+  const bg = Array.from(doc.querySelectorAll('[style*="url("]')).some((e) => /xiumi\.us|xiumius\.cn/i.test(e.getAttribute('style') ?? ''))
+  if (bg || imgs.some((u) => isXiumiImage(u.replace(/^\/\//, 'https://')))) return 'xiumi'
+  if (imgs.some((u) => /qpic\.cn|qlogo\.cn/i.test(u))) return 'wechat'
+  return Array.from(doc.querySelectorAll('[powered-by]')).some((e) => /xiumi/i.test(e.getAttribute('powered-by') ?? '')) ? 'xiumi' : 'other'
+}
+
+/** doc 可以是完整文章页，也可以是只包含正文的片段；url 是抓取时的链接，粘贴时没有 */
+export function extractArticle(doc: Document, url = ''): ImportedArticle {
+  const kind = detectSource(doc, url)
   const content = doc.querySelector('#js_content') ?? doc.querySelector('.rich_media_content') ?? doc.body
   const root = content.cloneNode(true) as Element
   sanitizeTree(root)
   const scriptTitle = doc.documentElement.innerHTML.match(/var\s+msg_title\s*=\s*['"]([^'"]+)['"]/)?.[1]
+  const title = meta(doc, 'meta[property="og:title"]') || text(doc.querySelector('#activity-name')) || scriptTitle || text(doc.querySelector('h1')) || ''
+  const account = text(doc.querySelector('#js_name')) || meta(doc, 'meta[property="og:article:author"]')
   return {
-    title: meta(doc, 'meta[property="og:title"]') || text(doc.querySelector('#activity-name')) || scriptTitle || text(doc.querySelector('h1')) || '',
-    account: text(doc.querySelector('#js_name')) || meta(doc, 'meta[property="og:article:author"]'),
+    title,
+    account,
+    source: { kind, title, url, account },
     author: meta(doc, 'meta[name="author"]'),
     digest: meta(doc, 'meta[name="description"]') || meta(doc, 'meta[property="og:description"]'),
     cover: (meta(doc, 'meta[property="og:image"]') || '').replace(/^http:\/\//, 'https://'),

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { buildFromDesign, normalizeDesign, outlineBrief } from '../core/aiDesign'
 import { normalizeBlocks } from '../core/blocks'
+import { displayHtml } from '../core/images'
 import { compileDoc } from '../core/compiler'
 import { buildDoc, RECIPES } from '../core/layouts'
 import { normalizeOutline, parseArticle, type Outline } from '../core/outline'
@@ -16,7 +17,7 @@ function MiniPreview({ doc }: { doc: Doc }) {
   const html = useMemo(() => compileDoc(doc).html, [doc])
   return (
     <div className="mini-preview">
-      <div className="mini-inner" dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="mini-inner" dangerouslySetInnerHTML={{ __html: displayHtml(html) }} />
     </div>
   )
 }

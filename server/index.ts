@@ -4,6 +4,8 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import multer from 'multer'
 import { nanoid } from 'nanoid'
 import { cropAsset, deleteAsset, listAssets, saveAsset, variantPath } from './assets'
+import { listComponents, removeComponent, saveComponent, updateComponent } from './components'
+import { IMAGE_HOST, safeFetch, WECHAT_IMAGE_HOST } from './net'
 import { aiStatus, chatJson, DESIGN_SYSTEM, EDIT_SYSTEM, OUTLINE_SYSTEM, TEMPLATE_SYSTEM } from './ai'
 import { publicAiSettings, resolveDraftProfile, saveAiSettings } from './settings'
 import { importFile } from './importer'
@@ -30,6 +32,7 @@ app.use(express.json({ limit: '20mb' }))
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024, files: 50 } })
 
 const h = (fn: (req: Request, res: Response) => Promise<unknown>) => (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next)
+const MAX_IMPORT_IMAGE = 30 * 1024 * 1024
 const fixName = (n: string) => Buffer.from(n, 'latin1').toString('utf8') // multer 按 latin1 解码中文文件名
 
 // ---------- 素材 ----------
@@ -129,6 +132,14 @@ app.delete('/api/templates/:id', h(async (req, res) => {
   await templates.remove(String(req.params.id))
   res.json({ ok: true })
 }))
+// ---------- 组件库（只存本机，不提供分享或导出） ----------
+app.get('/api/components', h(async (_req, res) => res.json(await listComponents())))
+app.post('/api/components', h(async (req, res) => res.json(await saveComponent(req.body))))
+app.put('/api/components/:id', h(async (req, res) => res.json(await updateComponent(String(req.params.id), req.body))))
+app.delete('/api/components/:id', h(async (req, res) => {
+  await removeComponent(String(req.params.id))
+  res.json({ ok: true })
+}))
 app.get('/api/themes', h(async (_req, res) => res.json(await themes.list())))
 app.post('/api/themes', h(async (req, res) => {
   await themes.put({ ...req.body, id: safeId(String(req.body.id)) })
@@ -197,19 +208,24 @@ ${JSON.stringify(context)}
 
 // ---------- 文章抓取（导入公众号推文 / 参考风格） ----------
 async function fetchPage(raw: string) {
-  const url = new URL(raw)
-  if (!/^https?:$/.test(url.protocol)) throw Object.assign(new Error('仅支持 http(s) 链接'), { status: 400 })
-  if (/^(localhost|127\.|10\.|0\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|\[)/.test(url.hostname)) throw Object.assign(new Error('不允许访问内网地址'), { status: 400 })
-  const r = await fetch(url, {
+  const r = await safeFetch(raw, {
     headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36', 'accept-language': 'zh-CN,zh;q=0.9' },
-    redirect: 'follow',
+    maxRedirects: 5,
   })
   if (!r.ok) throw Object.assign(new Error(`抓取失败 HTTP ${r.status}`), { status: 502 })
   return r.text()
 }
 app.post('/api/article/fetch', h(async (req, res) => res.json({ html: (await fetchPage(String(req.body.url))).slice(0, 5_000_000) })))
 app.post('/api/reference/fetch', h(async (req, res) => res.json({ html: (await fetchPage(String(req.body.url))).slice(0, 5_000_000) })))
-/** 把公众号文章中的图片下载到素材库（仅限微信图片域名） */
+/** 编辑器显示微信背景图用：只读转发，只放行微信图床，不保存 */
+app.get('/api/wx-image', h(async (req, res) => {
+  const r = await safeFetch(String(req.query.u ?? ''), { headers: { 'user-agent': 'Mozilla/5.0' }, allowHost: (host) => WECHAT_IMAGE_HOST.test(host) }).catch(() => null)
+  if (!r?.ok) return res.status(502).end()
+  res.setHeader('Content-Type', r.headers.get('content-type') ?? 'image/jpeg')
+  res.setHeader('Cache-Control', 'public, max-age=86400')
+  res.send(Buffer.from(await r.arrayBuffer()))
+}))
+/** 把导入内容里的图片下载到素材库（仅限微信和秀米图床，重定向目标同样检查） */
 app.post('/api/assets/fetch', h(async (req, res) => {
   const urls: string[] = (req.body.urls ?? []).slice(0, 80)
   const out: Record<string, unknown> = {}
@@ -217,12 +233,12 @@ app.post('/api/assets/fetch', h(async (req, res) => {
   const worker = async () => {
     for (let u = queue.shift(); u; u = queue.shift()) {
       try {
-        const host = new URL(u).hostname
-        if (!/(^|\.)(qpic\.cn|qlogo\.cn)$/.test(host)) continue
-        const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0' }, referrerPolicy: 'no-referrer' })
+        const r = await safeFetch(u, { headers: { 'user-agent': 'Mozilla/5.0' }, allowHost: (host) => IMAGE_HOST.test(host) })
         if (!r.ok) continue
+        const buf = Buffer.from(await r.arrayBuffer())
+        if (buf.length > MAX_IMPORT_IMAGE) continue
         const name = `wx-${new URL(u).pathname.split('/').filter(Boolean).slice(-2, -1)[0]?.slice(-10) ?? 'img'}.jpg`
-        out[u] = await saveAsset(Buffer.from(await r.arrayBuffer()), name)
+        out[u] = await saveAsset(buf, name)
       } catch {
         /* 单张失败不影响其他图片 */
       }

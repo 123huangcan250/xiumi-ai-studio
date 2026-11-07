@@ -22,12 +22,39 @@ const ATTRS = new Set(['style', 'src', 'href', 'alt', 'colspan', 'rowspan', 'wid
 const SVG_ATTR_BAD = /^on|^(href|xlink:href)$/i
 
 const isWxImage = (u: string) => /^https?:\/\/[^/]*(qpic\.cn|qlogo\.cn)\//i.test(u)
+/** 秀米图床：官方说明外站请求会被拦截，导入时要转存到本地，所以清洗阶段先保留地址 */
+export const isXiumiImage = (u: string) => /^https?:\/\/([\w-]+\.)*(xiumi\.us|xiumius\.cn)\//i.test(u)
+const isKnownImage = (u: string) => isWxImage(u) || isXiumiImage(u)
+const isLocalMedia = (u: string) => /^\/media\/[\w.-]+(\?[\w=&:%.-]*)?$/.test(u)
 const normalizeImg = (u: string) => u.replace(/^http:\/\//i, 'https://').replace(/^\/\//, 'https://')
 
-/** 过滤样式声明：去掉隐藏、固定定位、脚本表达式与非微信图片的 url() */
+/** 按分号拆分样式声明，括号和引号内的分号不算（data URI 里有分号） */
+export function splitDecls(style: string): string[] {
+  const out: string[] = []
+  let cur = ''
+  let depth = 0
+  let quote = ''
+  for (const ch of style) {
+    if (quote) {
+      if (ch === quote) quote = ''
+    } else if (ch === '"' || ch === "'") quote = ch
+    else if (ch === '(') depth++
+    else if (ch === ')') depth = Math.max(0, depth - 1)
+    else if (ch === ';' && depth === 0) {
+      out.push(cur)
+      cur = ''
+      continue
+    }
+    cur += ch
+  }
+  if (cur.trim()) out.push(cur)
+  return out
+}
+
+/** 过滤样式声明：去掉隐藏、固定定位、脚本表达式；url() 只保留微信、秀米、本地素材和内嵌图片 */
 export function cleanStyle(style: string, lazyBg?: string): string {
   const out: string[] = []
-  for (const decl of style.split(';')) {
+  for (const decl of splitDecls(style)) {
     const i = decl.indexOf(':')
     if (i < 0) continue
     const k = decl.slice(0, i).trim().toLowerCase()
@@ -39,12 +66,12 @@ export function cleanStyle(style: string, lazyBg?: string): string {
     if (k.startsWith('--')) continue
     if (/url\(/i.test(v)) {
       const urls = [...v.matchAll(/url\((['"]?)(.*?)\1\)/gi)].map((m) => m[2])
-      if (!urls.every((u) => isWxImage(normalizeImg(u)) || /^data:image\/(png|jpe?g|gif|webp|svg\+xml)/i.test(u))) continue
-      v = v.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, _q, u) => `url("${isWxImage(normalizeImg(u)) ? normalizeImg(u) : u}")`)
+      if (!urls.every((u) => isKnownImage(normalizeImg(u)) || isLocalMedia(u) || /^data:image\/(png|jpe?g|gif|webp|svg\+xml)/i.test(u))) continue
+      v = v.replace(/url\((['"]?)(.*?)\1\)/gi, (_m, _q, u) => `url("${isKnownImage(normalizeImg(u)) ? normalizeImg(u) : u}")`)
     }
     out.push(`${k}: ${v}`)
   }
-  if (lazyBg && isWxImage(normalizeImg(lazyBg)) && !out.some((d) => d.startsWith('background-image'))) out.push(`background-image: url("${normalizeImg(lazyBg)}")`)
+  if (lazyBg && isKnownImage(normalizeImg(lazyBg)) && !out.some((d) => d.startsWith('background-image'))) out.push(`background-image: url("${normalizeImg(lazyBg)}")`)
   return out.join('; ')
 }
 
@@ -77,7 +104,7 @@ export function sanitizeTree(root: Element) {
           continue
         }
         for (const a of Array.from(child.attributes)) {
-          if (SVG_ATTR_BAD.test(a.name) && !(a.name.endsWith('href') && isWxImage(normalizeImg(a.value)))) child.removeAttribute(a.name)
+          if (SVG_ATTR_BAD.test(a.name) && !(a.name.endsWith('href') && isKnownImage(normalizeImg(a.value)))) child.removeAttribute(a.name)
           else if (a.name === 'class' || a.name === 'id') child.removeAttribute(a.name)
           else if (a.name === 'style') child.setAttribute('style', cleanStyle(a.value))
         }
@@ -105,13 +132,14 @@ export function sanitizeTree(root: Element) {
       }
       const lazyBg = node.getAttribute('data-lazy-bgimg') ?? undefined
       if (node.tagName.toLowerCase() === 'img') {
-        const src = node.getAttribute('data-src') || node.getAttribute('src') || ''
-        const ok = isWxImage(normalizeImg(src)) || /^data:image\/(png|jpe?g|gif|webp)/i.test(src) || /^\/media\//.test(src) || /^https:\/\//.test(src)
-        if (!ok || /^data:image\/svg/i.test(src)) {
+        const raw = node.getAttribute('data-src') || node.getAttribute('src') || ''
+        const src = normalizeImg(raw)
+        const ok = /^data:image\/(png|jpe?g|gif|webp)/i.test(src) || /^\/media\//.test(src) || /^https:\/\//.test(src)
+        if (!ok) {
           node.remove()
           continue
         }
-        node.setAttribute('src', isWxImage(normalizeImg(src)) ? normalizeImg(src) : src)
+        node.setAttribute('src', src)
         const w = node.getAttribute('width')
         if (w && /^\d+$/.test(w) && !/width/.test(node.getAttribute('style') ?? '')) node.setAttribute('style', `${node.getAttribute('style') ?? ''};width:${w}px`)
       }

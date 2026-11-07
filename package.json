@@ -15,7 +15,8 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
-    "sample": "tsx scripts/make-sample.ts"
+    "sample": "tsx scripts/make-sample.ts",
+    "probe": "tsx scripts/make-xiumi-probe.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

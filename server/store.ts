@@ -9,6 +9,7 @@ export const DIRS = {
   projects: join(DATA, 'projects'),
   versions: join(DATA, 'versions'),
   templates: join(DATA, 'templates'),
+  components: join(DATA, 'components'),
   themes: join(DATA, 'themes'),
   assets: join(DATA, 'assets'),
   cache: join(DATA, 'cache'),

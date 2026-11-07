@@ -326,10 +326,45 @@ export function removeImage(html: string, index: number, parse: Parse = defaultP
 }
 
 const BG_URL = /background-image:\s*url\((['"]?)(.*?)\1\)/i
-/** 以背景图嵌入的照片（秀米的 SVG 轮播、拼图等）：JPG 背景且内部没有文字；PNG/GIF 背景多为纹理花边，不算 */
+const bgUrlOf = (el: Element) => (el.getAttribute('style') ?? '').match(BG_URL)?.[2] ?? ''
+/** 以背景图嵌入的照片（秀米的 SVG 轮播、拼图等）：JPG 或已换成本地素材，且内部没有文字；PNG/GIF 背景多为纹理花边，不算 */
 function isBackgroundPhoto(el: Element) {
-  const url = (el.getAttribute('style') ?? '').match(BG_URL)?.[2] ?? ''
-  return /wx_fmt=jpe?g|mmbiz_jpg|\.jpe?g(\?|$)/i.test(url) && !hasText(el)
+  return /wx_fmt=jpe?g|mmbiz_jpg|\.jpe?g(\?|$)|^\/media\//i.test(bgUrlOf(el)) && !hasText(el)
+}
+
+export interface BackgroundPhoto {
+  src: string
+  /** 同一张图被用了几次：轮播为了循环会重复同一张 */
+  count: number
+}
+
+/** 片段里以背景图嵌入的照片，同一张图只列一次 */
+export function backgroundPhotos(html: string, parse: Parse = defaultParse): BackgroundPhoto[] {
+  if (!/background-image/i.test(html)) return []
+  const seen = new Map<string, BackgroundPhoto>()
+  for (const el of Array.from(rootOf(html, parse).querySelectorAll('[style*="background-image"]'))) {
+    if (!isBackgroundPhoto(el)) continue
+    const src = bgUrlOf(el)
+    const hit = seen.get(src)
+    if (hit) hit.count++
+    else seen.set(src, { src, count: 1 })
+  }
+  return [...seen.values()]
+}
+
+/** 替换一张背景图（用到这张图的位置全部替换），按 SVG 的 viewBox 或传入的比例裁切，避免留白或错位 */
+export function setBackgroundPhoto(html: string, src: string, ref: { src: string }, opts: { parse?: Parse; ratio?: number } = {}): string {
+  if (!SAFE_SRC.test(ref.src)) return html
+  const root = rootOf(html, opts.parse ?? defaultParse)
+  for (const el of Array.from(root.querySelectorAll('[style*="background-image"]'))) {
+    if (bgUrlOf(el) !== src || !isBackgroundPhoto(el)) continue
+    const box = el.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number)
+    const ratio = box?.length === 4 && box[2] > 0 ? box[3] / box[2] : opts.ratio
+    const base = ref.src.split('?')[0]
+    const url = ratio && base.startsWith('/media/') ? variantUrl(base, fitOf(ratio)) : ref.src
+    el.setAttribute('style', (el.getAttribute('style') ?? '').replace(BG_URL, `background-image: url("${url}")`))
+  }
+  return root.innerHTML
 }
 
 /** 背景图照片的外框：向外扩到含文字或含普通照片的容器为止（整个轮播一起算） */
@@ -361,6 +396,9 @@ export function removeBackgroundPhotos(html: string, parse: Parse = defaultParse
 /** 结构指纹：去掉文字和图片地址后的 HTML，用于合并样式相同的模板部件 */
 export function skeleton(html: string, parse: Parse = defaultParse): string {
   const root = rootOf(html, parse)
+  for (const el of Array.from(root.querySelectorAll('[style*="background-image"]'))) {
+    if (isBackgroundPhoto(el)) el.setAttribute('style', (el.getAttribute('style') ?? '').replace(BG_URL, 'background-image: url()'))
+  }
   for (const t of textNodes(root)) t.textContent = ''
   root.querySelectorAll('img').forEach((img) => img.setAttribute('src', ''))
   return root.innerHTML

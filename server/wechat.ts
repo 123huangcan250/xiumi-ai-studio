@@ -98,6 +98,7 @@ export function validateDraft(a: DraftInput): string[] {
   if (a.content.length >= 20000) errs.push(`正文 HTML ${a.content.length} 字符，超过草稿箱接口 20,000 字符上限；请精简模块或改用“复制到公众号”`)
   if (Buffer.byteLength(a.content, 'utf8') >= 1024 * 1024) errs.push('正文超过 1MB')
   if (/src="(?!https:\/\/mmbiz\.qpic\.cn)/.test(a.content)) errs.push('正文中存在未上传到微信的图片')
+  if (/url\((?:&quot;|["']?)(?:\/media\/|https?:\/\/(?![\w.-]*qpic\.cn))/.test(a.content)) errs.push('正文中存在未上传到微信的背景图')
   if (!a.thumb_media_id) errs.push('缺少封面')
   return errs
 }

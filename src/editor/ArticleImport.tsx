@@ -1,10 +1,13 @@
 // 导入公众号推文：链接抓取或粘贴富文本 → 保留原样式（原文片段）或重新排版 → 可保存为模板/主题
 import { useMemo, useRef, useState } from 'react'
-import { newId } from '../core/blocks'
+import { createBlock, newId } from '../core/blocks'
 import { compileDoc } from '../core/compiler'
+import { makeDraft, SOURCE_LABEL } from '../core/components'
+import { componentPieces } from '../core/fragments'
+import { displayHtml, rehostUrls, rewriteImages } from '../core/images'
 import { analyzeStyle, themeFromReport } from '../core/styleExtract'
 import { registerTheme } from '../core/themes'
-import type { Doc } from '../core/types'
+import type { Block, Doc, SourceKind } from '../core/types'
 import { articleToHtmlBlocks, articleToMarkdown, extractArticle, type ImportedArticle } from '../core/wxImport'
 import { api, assetRef, type Asset } from './api'
 import { ImportWizard } from './ImportWizard'
@@ -24,6 +27,8 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
   const [asTemplate, setAsTemplate] = useState(true)
   const [templateName, setTemplateName] = useState('')
   const [asTheme, setAsTheme] = useState(false)
+  const [asComponents, setAsComponents] = useState(false)
+  const [sourceKind, setSourceKind] = useState<SourceKind>('other')
   const [busy, setBusy] = useState('')
   const [wizard, setWizard] = useState<{ text: string; images: Asset[] } | null>(null)
   const pasteRef = useRef<HTMLDivElement>(null)
@@ -39,6 +44,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
     if (!a.root.textContent?.trim() && !a.root.querySelector('img')) throw new Error('没有识别到正文内容')
     setArticle(a)
     setTitle(a.title)
+    setSourceKind(a.source.kind)
     setTemplateName(a.title.slice(0, 20) || '导入的推文模板')
   }
 
@@ -60,7 +66,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
       if (!doc.querySelector('#js_content') && /环境异常|请在微信客户端打开|verify/i.test(html)) {
         throw new Error('公众号返回了验证页面，无法直接抓取。请在浏览器打开文章，全选复制正文后用「粘贴富文本」导入。')
       }
-      accept(extractArticle(doc))
+      accept(extractArticle(doc, url.trim()))
     }, '抓取中…')
 
   const onPaste = (e: React.ClipboardEvent) => {
@@ -87,6 +93,22 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
         setWizard({ text: md, images: images.map((u) => map[u]).filter(Boolean) })
         return
       }
+      // 记录来源；秀米图床的图片外站显示不出来，先转存到素材库
+      const source = { ...article.source, kind: sourceKind, title: title || article.source.title }
+      let kept: Block[] = blocks.map((b) => (b.type === 'html' ? { ...b, props: { ...b.props, source } } : b))
+      const urls = [...new Set(kept.flatMap((b) => (b.type === 'html' ? rehostUrls(b.props.html, parse) : [])))]
+      let rehostFailed = 0
+      if (urls.length) {
+        setBusy(`转存 ${urls.length} 张图片…`)
+        const map: Record<string, string> = {}
+        for (let i = 0; i < urls.length; i += 60) {
+          const got = await api.fetchAssets(urls.slice(i, i + 60)).catch(() => ({}) as Record<string, Asset>)
+          for (const [u, a] of Object.entries(got)) map[u] = `/media/${a.file}`
+        }
+        rehostFailed = urls.length - Object.keys(map).length
+        kept = kept.map((b) => (b.type === 'html' ? { ...b, props: { ...b.props, html: rewriteImages(b.props.html, map, parse) } } : b))
+        window.dispatchEvent(new Event('assets-changed'))
+      }
       // 保留原样式：封面下载到素材库（草稿箱需要本地封面）
       let cover: Doc['cover']
       if (article.cover) {
@@ -95,7 +117,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
         if (r[article.cover]) cover = assetRef(r[article.cover])
       }
       const now = Date.now()
-      const doc: Doc = { id: newId(), title, author: '', digest: article.digest.slice(0, 120), themeId: 'minimal-magazine', cover, blocks, createdAt: now, updatedAt: now }
+      const doc: Doc = { id: newId(), title, author: '', digest: article.digest.slice(0, 120), themeId: 'minimal-magazine', cover, blocks: kept, createdAt: now, updatedAt: now }
       if (asTheme) {
         const t = themeFromReport(analyzeStyle(article.root), `${(title || '导入').slice(0, 10)} · 风格`)
         await api.saveTheme(t)
@@ -103,12 +125,28 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
         refreshThemes()
         doc.themeId = t.id
       }
-      if (asTemplate) await api.saveTemplate(templateName || title || '导入的推文模板', blocks, doc)
+      if (asTemplate) await api.saveTemplate(templateName || title || '导入的推文模板', kept, doc)
+      let added = 0
+      let repeated = 0
+      if (asComponents) {
+        setBusy('加入组件库…')
+        for (const b of kept) {
+          if (b.type !== 'html') continue
+          for (const piece of componentPieces(b.props.html, b.props.label, parse)) {
+            const block = createBlock('html', { html: piece.html, label: piece.label, source })
+            const r = await api.saveComponent(makeDraft({ name: piece.label, block, source, via: 'import', attested: authorized }, parse))
+            if (r.duplicate) repeated++
+            else added++
+          }
+        }
+        window.dispatchEvent(new Event('components-changed'))
+      }
       await saveNow()
       load(doc)
       await saveNow()
       window.dispatchEvent(new Event('templates-changed'))
-      notify(`已导入 ${blocks.length} 个原文片段${asTemplate ? '，并保存为模板' : ''}`)
+      const parts = [`已导入 ${kept.length} 个原文片段`, asTemplate && '并保存为模板', asComponents && `新增 ${added} 个组件${repeated ? `（${repeated} 个结构重复未收录）` : ''}`, rehostFailed && `${rehostFailed} 张图片转存失败，请在右侧替换`]
+      notify(parts.filter(Boolean).join('，'), rehostFailed ? 'error' : 'ok')
       onClose()
     }, '导入中…')
 
@@ -120,7 +158,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
         <>
           <nav className="seg" style={{ marginBottom: 12 }}>
             <button className={tab === 'url' ? 'on' : ''} onClick={() => setTab('url')}>文章链接</button>
-            <button className={tab === 'paste' ? 'on' : ''} onClick={() => setTab('paste')}>粘贴富文本</button>
+            <button className={tab === 'paste' ? 'on' : ''} onClick={() => setTab('paste')}>粘贴富文本（公众号 / 秀米）</button>
           </nav>
           {tab === 'url' ? (
             <div className="row gap">
@@ -136,7 +174,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
               onPaste={onPaste}
               data-testid="article-paste"
             >
-              在浏览器中打开文章，全选正文（Ctrl+A）并复制，然后点击这里按 Ctrl+V 粘贴。
+              在浏览器中打开文章，全选正文（Ctrl+A）并复制；或在秀米里点对勾后复制。然后点击这里按 Ctrl+V 粘贴。
             </div>
           )}
           <p className="hint">导入的内容仅供你本人编辑使用。请确保你对文章拥有使用权或已获授权；原文中的视频、音频、小程序卡片等组件无法导入，会以提示文字代替。</p>
@@ -145,7 +183,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
         <div className="article-import">
           <div className="article-preview">
             <div className="mini-preview tall">
-              <div className="mini-inner" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+              <div className="mini-inner" dangerouslySetInnerHTML={{ __html: displayHtml(previewHtml) }} />
             </div>
           </div>
           <div className="article-options">
@@ -167,6 +205,15 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
                 <label className="check"><input type="checkbox" checked={asTemplate} onChange={(e) => setAsTemplate(e.target.checked)} />同时保存为模板</label>
                 {asTemplate && <input value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="模板名称" />}
                 <label className="check"><input type="checkbox" checked={asTheme} onChange={(e) => setAsTheme(e.target.checked)} />提取配色与字号，另存为主题（之后可用于 AI 排版）</label>
+                <label className="check"><input type="checkbox" checked={asComponents} onChange={(e) => setAsComponents(e.target.checked)} data-testid="article-components" />同时拆分加入组件库（只存本机，不会分享给他人）</label>
+                <label className="field">
+                  <span>内容来源</span>
+                  <div className="seg">
+                    {(['wechat', 'xiumi', 'original', 'other'] as SourceKind[]).map((k) => (
+                      <button key={k} className={sourceKind === k ? 'on' : ''} onClick={() => setSourceKind(k)} data-testid={`source-${k}`}>{SOURCE_LABEL[k]}</button>
+                    ))}
+                  </div>
+                </label>
               </>
             ) : (
               <p className="hint">提取标题、段落、图片、引语与表格，图片下载到素材库，然后进入「AI 一键排版」生成新的设计方案。</p>

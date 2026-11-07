@@ -33,12 +33,18 @@ interface State {
   proposal: Proposal | null
   themes: Theme[]
   toast: { text: string; kind: 'ok' | 'error' } | null
+  /** 正在点选子结构的模块 */
+  pickingId: string | null
+  /** 插入组件时统一到本文配色 */
+  matchColors: boolean
 
   /** 所有文档修改的唯一入口：记录历史 */
   commit: (next: Doc, coalesceKey?: string) => void
   load: (doc: Doc) => void
   select: (id: string | null) => void
   setEditing: (id: string | null) => void
+  setPicking: (id: string | null) => void
+  setMatchColors: (on: boolean) => void
   updateProps: (id: string, props: Record<string, any>, coalesceKey?: string) => void
   insertBlock: (typeOrBlock: BlockType | Block, index?: number) => string
   insertBlocks: (blocks: Block[], index?: number) => void
@@ -99,6 +105,8 @@ export const useStore = create<State>((set, get) => ({
   proposal: null,
   themes: allThemes(),
   toast: null,
+  pickingId: null,
+  matchColors: false,
 
   commit(next, coalesceKey) {
     const { doc, past, lastCoalesce } = get()
@@ -116,14 +124,16 @@ export const useStore = create<State>((set, get) => ({
     // 加载时修复历史数据（例如旧版本保存的、字段类型不对的 AI 修改）
     const doc = normalizeDoc(raw)
     const repaired = JSON.stringify(doc.blocks) !== JSON.stringify(raw.blocks)
-    set({ doc, past: [], future: [], selectedId: null, editingId: null, proposal: null, saveStatus: repaired ? 'dirty' : 'saved', lastCoalesce: null })
+    set({ doc, past: [], future: [], selectedId: null, editingId: null, pickingId: null, proposal: null, saveStatus: repaired ? 'dirty' : 'saved', lastCoalesce: null })
     if (repaired) {
       saveNow()
       get().notify('已自动修复文档中格式异常的模块')
     }
   },
-  select: (id) => set((s) => ({ selectedId: id, editingId: s.editingId === id ? s.editingId : null })),
-  setEditing: (id) => set({ editingId: id, selectedId: id ?? get().selectedId }),
+  select: (id) => set((s) => ({ selectedId: id, editingId: s.editingId === id ? s.editingId : null, pickingId: s.pickingId === id ? s.pickingId : null })),
+  setEditing: (id) => set({ editingId: id, selectedId: id ?? get().selectedId, pickingId: null }),
+  setPicking: (id) => set({ pickingId: id, editingId: null, selectedId: id ?? get().selectedId }),
+  setMatchColors: (on) => set({ matchColors: on }),
   updateProps(id, props, coalesceKey) {
     const { doc, commit } = get()
     commit({ ...doc, blocks: doc.blocks.map((b) => (b.id === id ? ({ ...b, props: { ...b.props, ...props } } as Block) : b)) }, coalesceKey)

@@ -1,11 +1,13 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { compileDoc, variantUrl } from '../core/compiler'
 import { docToMarkdown } from '../core/exporters'
+import { displayHtml } from '../core/images'
+import { xiumiReport } from '../core/xiumiExport'
 import { AiSettingsModal } from './AiSettingsModal'
 import { api, type VersionSummary } from './api'
 import { Modal } from './Modal'
 import { normalizeDoc, saveNow, useStore } from './store'
-import { compileForWechat, copyRichText, download, standaloneHtml, type ImageMode } from './wechatOutput'
+import { compileForWechat, copyRichText, download, standaloneHtml, xiumiPackage, xiumiUploaded, type ImageMode } from './wechatOutput'
 
 const ArticleImportModal = lazy(() => import('./ArticleImport').then((m) => ({ default: m.ArticleImportModal })))
 const ImportWizard = lazy(() => import('./ImportWizard').then((m) => ({ default: m.ImportWizard })))
@@ -15,7 +17,7 @@ export function PhonePreview({ html, title, onClose }: { html: string; title: st
   return (
     <Modal title={title} onClose={onClose} width={460}>
       <div className="phone-preview">
-        <iframe title="手机预览" srcDoc={standaloneHtml(doc, html)} data-testid="preview-frame" />
+        <iframe title="手机预览" srcDoc={standaloneHtml(doc, displayHtml(html))} data-testid="preview-frame" />
       </div>
       <p className="hint">375px 宽度模拟公众号文章页。</p>
     </Modal>
@@ -81,6 +83,16 @@ function ExportModal({ onClose }: { onClose: () => void }) {
   }, [])
   const base = compileDoc(doc)
   const safeName = (doc.title || 'article').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
+  const xiumi = xiumiReport(base.html)
+  const runXiumi = async (fn: () => Promise<void>) => {
+    try {
+      await fn()
+    } catch (e: any) {
+      notify(e.message, 'error')
+    } finally {
+      setBusy('')
+    }
+  }
 
   const copy = async () => {
     setBusy('准备中…')
@@ -124,9 +136,53 @@ function ExportModal({ onClose }: { onClose: () => void }) {
         <button className="wide" disabled={!wx?.configured} onClick={() => setDraftOpen(true)}>推送到草稿箱…</button>
       </section>
 
+      <section className="export-section" data-testid="xiumi-section">
+        <h4>导入秀米</h4>
+        <p className="hint">秀米不接受内嵌图片，但能显示微信图床的图片。{xiumi.localImages ? `这篇有 ${xiumi.localImages} 张本地图片需要处理。` : '这篇没有本地图片，可以直接导入。'}</p>
+        {xiumi.backgrounds > 0 && <p className="hint">有 {xiumi.backgrounds} 处背景图（如轮播）：导入后能显示，但在秀米里不能单独选中编辑。</p>}
+        {xiumi.dataImages > 0 && <p className="warn">⚠ 有 {xiumi.dataImages} 处导入时自带的内嵌图片，秀米会换成占位图。</p>}
+        {xiumi.localBackgrounds > 0 && !wx?.configured && <p className="warn">⚠ 有 {xiumi.localBackgrounds} 处背景图用了本地素材。不配置微信接口的话，它们在秀米里无法替换。</p>}
+        <div className="row gap">
+          {xiumi.localImages > 0 && (
+            <button
+              className="primary"
+              disabled={!!busy || !wx?.configured}
+              title={wx?.configured ? '' : '需在 .env 配置公众号 AppID/AppSecret'}
+              data-testid="xiumi-upload"
+              onClick={() =>
+                runXiumi(async () => {
+                  setBusy('上传图片…')
+                  download(`${safeName}-导入秀米.txt`, await xiumiUploaded(doc, setBusy))
+                  notify('已下载，在秀米“导入 HTML 代码”里使用')
+                })
+              }
+            >
+              上传图片到微信并下载
+            </button>
+          )}
+          <button
+            disabled={!!busy}
+            data-testid="xiumi-package"
+            onClick={() =>
+              runXiumi(async () => {
+                setBusy('打包…')
+                const r = await xiumiPackage(doc, setBusy)
+                download(r.images ? `${safeName}-导入秀米.zip` : `${safeName}-导入秀米.txt`, r.blob)
+                notify(r.images ? `已下载，解压后按「说明.txt」操作，导入后需手动替换 ${r.images} 张图片` : '已下载，在秀米“导入 HTML 代码”里使用')
+              })
+            }
+          >
+            {xiumi.localImages ? '下载 HTML 和图片包（手动替换）' : '下载 HTML'}
+          </button>
+        </div>
+        <p className="hint">
+          {wx?.configured ? '“上传”会把本地图片发送到微信服务器，只存图片，不创建草稿，也不群发。' : '未配置微信接口时，只能导入后在秀米里手动替换图片。配置方法见上方“推送到草稿箱”。'}
+        </p>
+      </section>
+
       <section className="export-section">
         <h4>下载文件</h4>
-        <p className="hint">当前 HTML 长度 {base.charCount.toLocaleString()} 字符{base.charCount >= 20000 ? '（超过草稿箱接口 2 万字符上限，可用复制方式发布）' : ''}</p>
+        <p className="hint">当前 HTML 长度 {base.charCount.toLocaleString()} 字符{base.charCount >= 20000 ? '（超过草稿箱接口 2 万字符上限，可用复制方式发布）' : ''}。“图片内嵌”的文件不适合导入秀米。</p>
         <div className="row gap">
           <button onClick={() => download(`${safeName}.md`, docToMarkdown({ ...doc, blocks: doc.blocks }).replace(/\]\(\/media\//g, `](${location.origin}/media/`), 'text/markdown')}>Markdown</button>
           <button onClick={() => download(`${safeName}.json`, JSON.stringify(doc, null, 2), 'application/json')}>编辑器 JSON</button>

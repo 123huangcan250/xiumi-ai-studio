@@ -18,7 +18,7 @@ MIT License (wechat-draft-publisher) — Copyright (c) andrewlaredo. Permission 
 ## 未使用
 
 - [vima-tech/moka](https://github.com/vima-tech/moka)：仓库没有许可证（默认保留所有权利），未复制其任何代码、模板或素材。
-- 秀米：专有模板与素材，未使用。
+- 秀米：专有模板与素材，仓库未包含。用户自行导入本机组件库的内容只存在 `data/`，不进入仓库，也不提供分发。
 
 ## npm 依赖
 

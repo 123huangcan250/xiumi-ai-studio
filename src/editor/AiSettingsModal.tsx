@@ -14,6 +14,8 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   const [editing, setEditing] = useState<number>(-1)
   const [testing, setTesting] = useState('')
   const [busy, setBusy] = useState(false)
+  // 设置读取完成前不能新增：否则读取结果会覆盖刚选的预设
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     api
@@ -22,6 +24,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
         setProfiles(s.profiles)
         setActiveId(s.activeId)
         if (!s.profiles.length) setEditing(-2)
+        setLoaded(true)
       })
       .catch((e) => notify(e.message, 'error'))
   }, [notify])
@@ -79,7 +82,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           ))}
-          <select value="" onChange={(e) => e.target.value && addFromPreset(e.target.value)} data-testid="ai-add-preset">
+          <select value="" disabled={!loaded} onChange={(e) => e.target.value && addFromPreset(e.target.value)} data-testid="ai-add-preset">
             <option value="">＋ 添加模型…</option>
             {AI_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
           </select>

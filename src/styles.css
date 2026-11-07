@@ -291,3 +291,43 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .render-error small { color: var(--faint); }
 .crash { max-width: 520px; margin: 15vh auto; background: #fff; border-radius: 12px; padding: 28px; box-shadow: 0 10px 40px rgba(0,0,0,.08); }
 .crash h2 { margin: 0 0 8px; }
+
+/* 组件库 */
+.comp-views { margin-bottom: 8px; }
+.comp-views button { flex: 1; }
+.comp-search { width: 100%; margin-bottom: 8px; }
+.comp-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.comp-chips button { padding: 2px 7px; font-size: 12px; }
+.comp-chips button.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
+.comp-hues { display: flex; gap: 6px; margin-bottom: 6px; }
+.comp-hues button { width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 2px solid transparent; }
+.comp-hues button.on { outline: 2px solid var(--brand); outline-offset: 1px; }
+.comp-match { margin: 6px 0; font-size: 12px; }
+.comp-card { border: 1px solid var(--line); border-radius: var(--radius); margin: 10px 0; overflow: hidden; background: var(--panel); }
+.comp-card > div:first-child { cursor: grab; }
+.comp-preview { height: 150px; overflow: hidden; background: #fff; border-bottom: 1px solid var(--line); position: relative; }
+.comp-inner { width: 375px; zoom: .58; pointer-events: none; }
+.comp-info { padding: 6px 8px 2px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.comp-info b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; }
+.comp-info small { color: var(--faint); line-height: 1.4; }
+.comp-info .comp-warn { color: #b25b00; }
+.comp-card .tpl-actions { padding: 2px 8px 8px; }
+.comp-edit { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.comp-edit input { width: 100%; }
+.comp-edit .tpl-actions { padding: 0; }
+.comp-done { color: var(--faint); font-size: 12px; align-self: center; }
+.split-list { display: flex; flex-direction: column; gap: 3px; max-height: 210px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px; }
+.split-list button { display: flex; flex-direction: column; gap: 1px; text-align: left; border: 0; background: none; padding: 4px 8px; border-radius: 4px; min-width: 0; flex: none; }
+.split-list button b { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.split-list button small { color: var(--faint); }
+.split-list button.on { background: var(--brand-soft); }
+.picking, .picking * { cursor: pointer; pointer-events: auto !important; }
+.fragment-hover { outline: 2px dashed var(--accent); outline-offset: -1px; }
+.fragment-picked { outline: 3px solid var(--brand) !important; outline-offset: -1px; }
+.pick-toolbar { position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+.pick-toolbar .primary { color: #fff; }
+.pick-toolbar button:disabled { opacity: .45; }
+.color-swatches { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.color-swatches label { width: 24px; height: 24px; border-radius: 4px; border: 1px solid var(--line); cursor: pointer; overflow: hidden; display: block; }
+.color-swatches input { opacity: 0; width: 100%; height: 100%; padding: 0; border: 0; cursor: pointer; }
+.g-count { position: absolute; right: 2px; bottom: 2px; background: rgba(0, 0, 0, .6); color: #fff; font-size: 11px; padding: 0 4px; border-radius: 3px; }

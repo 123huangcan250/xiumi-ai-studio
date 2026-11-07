@@ -1,6 +1,8 @@
 // 输出到微信：图片处理（内嵌 / 上传微信 / 原链接）+ 富文本剪贴板。
 // 剪贴板写入方式参考 doocs/md（WTFPL）：ClipboardItem 优先，execCommand 兜底；首尾加零高度段落。
 import { compileDoc, css, type CompileResult } from '../core/compiler'
+import { fitRatio } from '../core/photos'
+import { makeZip, replaceLocalImages } from '../core/xiumiExport'
 import type { Doc } from '../core/types'
 import { api } from './api'
 
@@ -104,4 +106,53 @@ export function download(name: string, content: string | Blob, type = 'text/plai
   a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+}
+
+/** 占位图：秀米会把内嵌图片换成自己的占位图，这里只要保住图片的位置和比例；体积要小，大图会被秀米连位置一起删掉 */
+function placeholder(n: number, ratio = 0.66): string {
+  const canvas = document.createElement('canvas')
+  canvas.width = 480
+  canvas.height = Math.round(480 * ratio)
+  const g = canvas.getContext('2d')!
+  g.fillStyle = '#e5e5e5'
+  g.fillRect(0, 0, canvas.width, canvas.height)
+  g.fillStyle = '#888888'
+  g.font = '32px sans-serif'
+  g.textAlign = 'center'
+  g.fillText(`图 ${String(n).padStart(2, '0')}`, canvas.width / 2, canvas.height / 2)
+  return canvas.toDataURL('image/jpeg', 0.5)
+}
+
+const XIUMI_NOTES = (n: number) => `导入秀米的步骤
+
+1. 打开秀米的“导入 HTML 代码”，上传或粘贴「导入秀米.txt」。
+2. 秀米会提示部分图片已用占位图替代，这是正常的，秀米不接受内嵌图片。
+3. 在秀米里从上到下逐个替换占位图，依次使用「图片」文件夹里的 01 到 ${String(n).padStart(2, '0')}。
+   同一张图可能在文章里出现多次。
+
+以背景图方式使用的本地图片，在秀米里选不中，无法这样替换。
+这种情况请配置微信接口，改用“上传图片并下载”。
+`
+
+/** 导出给秀米（不需要公众号接口）：本地图片换成占位图，另附按出现顺序编号的图片包 */
+export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void): Promise<{ blob: Blob; name: string; images: number }> {
+  const { html, urls } = replaceLocalImages(compileDoc(doc).html, (url, i) => placeholder(i + 1, fitRatio(url)))
+  if (!urls.length) return { blob: new Blob([html], { type: 'text/plain;charset=utf-8' }), name: '导入秀米.txt', images: 0 }
+  const enc = new TextEncoder()
+  const files = [{ name: '导入秀米.txt', data: enc.encode(html) }, { name: '说明.txt', data: enc.encode(XIUMI_NOTES(urls.length)) }]
+  for (const [i, url] of urls.entries()) {
+    onProgress?.(`打包图片 ${i + 1}/${urls.length}`)
+    const r = await fetch(url)
+    if (!r.ok) throw new Error(`第 ${i + 1} 张图片读取失败，素材可能已被删除`)
+    const ext = url.split('?')[0].endsWith('.png') ? 'png' : 'jpg'
+    files.push({ name: `图片/${String(i + 1).padStart(2, '0')}.${ext}`, data: new Uint8Array(await r.arrayBuffer()) })
+  }
+  return { blob: new Blob([makeZip(files)], { type: 'application/zip' }), name: '导入秀米.zip', images: urls.length }
+}
+
+/** 导出给秀米（已配置公众号接口）：本地图片先传到微信图床，全部变成秀米能接受的地址 */
+export async function xiumiUploaded(doc: Doc, onProgress?: (msg: string) => void): Promise<string> {
+  const { html } = await compileForWechat(doc, 'wechat', onProgress)
+  if (/(?:src="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
+  return html
 }

@@ -3,10 +3,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { BLOCK_TYPES, blockMeta, cloneBlock, createBlock } from '../core/blocks'
 import type { BlockType } from '../core/types'
 import { api, assetRef, type Asset, type ProjectSummary, type Template } from './api'
+import { ComponentLibrary } from './ComponentLibrary'
 import { CropModal } from './CropModal'
 import { emptyDoc, saveNow, selectedBlock, useStore } from './store'
 
-type Tab = 'blocks' | 'assets' | 'templates' | 'projects'
+type Tab = 'blocks' | 'components' | 'assets' | 'templates' | 'projects'
 
 function LibItem({ type }: { type: BlockType }) {
   const m = blockMeta(type)
@@ -101,9 +102,9 @@ export function LeftPanel() {
   return (
     <aside className="panel left">
       <nav className="tabs">
-        {(['blocks', 'assets', 'templates', 'projects'] as Tab[]).map((t) => (
-          <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-            {{ blocks: '模块', assets: '素材', templates: '模板', projects: '项目' }[t]}
+        {(['blocks', 'components', 'assets', 'templates', 'projects'] as Tab[]).map((t) => (
+          <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)} data-testid={`tab-${t}`}>
+            {{ blocks: '模块', components: '组件', assets: '素材', templates: '模板', projects: '项目' }[t]}
           </button>
         ))}
       </nav>
@@ -119,6 +120,8 @@ export function LeftPanel() {
               </div>
             </section>
           ))}
+
+        {tab === 'components' && <ComponentLibrary templates={templates} />}
 
         {tab === 'assets' && (
           <>

@@ -141,6 +141,11 @@ export function coerceProps<T extends BlockType>(type: T, raw: unknown, partial 
       else if (!partial) delete out.image
       continue
     }
+    if (k === 'source' && type === 'html') {
+      const s = v && typeof v === 'object' ? (v as Record<string, unknown>) : null
+      if (s) out.source = { kind: ['original', 'wechat', 'xiumi', 'other'].includes(s.kind as string) ? s.kind : 'other', title: str(s.title), url: str(s.url), account: str(s.account) }
+      continue
+    }
     if (!(k in defaults)) continue
     const en = ENUMS[`${type}.${k}`]
     if (en) out[k] = en.includes(v as string) ? v : d

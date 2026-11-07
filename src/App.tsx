@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { blockMeta, createBlock } from './core/blocks'
 import type { BlockType } from './core/types'
 import { replacePhoto } from './core/photos'
+import { CollectHost } from './editor/CollectModal'
+import { insertComponent } from './editor/componentActions'
 import { api, assetRef, type Asset } from './editor/api'
 import { Canvas, photoTarget, shownRatio } from './editor/Canvas'
 import { LeftPanel } from './editor/LeftPanel'
@@ -79,7 +81,7 @@ export default function App() {
 
   const onDragStart = (e: DragStartEvent) => {
     const id = String(e.active.id)
-    setDragLabel(id.startsWith('lib:') ? blockMeta(id.slice(4) as BlockType).label : id.startsWith('asset:') ? '图片' : null)
+    setDragLabel(id.startsWith('lib:') ? blockMeta(id.slice(4) as BlockType).label : id.startsWith('asset:') ? '图片' : id.startsWith('comp:') ? String(e.active.data.current?.label ?? '组件') : null)
   }
 
   const onDragEnd = (e: DragEndEvent) => {
@@ -97,6 +99,9 @@ export default function App() {
     const insertAt = over === 'canvas-end' ? overIndex : overIndex + (lowerHalf ? 1 : 0)
     if (active.startsWith('lib:')) {
       s.insertBlock(active.slice(4) as BlockType, insertAt)
+    } else if (active.startsWith('comp:')) {
+      const data = e.active.data.current
+      if (data?.block) insertComponent(data.block, { index: insertAt, missing: data.missing })
     } else if (active.startsWith('asset:')) {
       const asset = e.active.data.current?.asset as Asset
       // 松手位置正好在某张照片上：只替换这张照片（原文片段里的照片按原相框裁切）
@@ -134,6 +139,7 @@ export default function App() {
           <RightPanel />
         </main>
         {toast && <div className={`toast ${toast.kind}`} role="status">{toast.text}</div>}
+        <CollectHost />
       </div>
       <DragOverlay dropAnimation={null}>{dragLabel && <div className="drag-overlay">{dragLabel}</div>}</DragOverlay>
     </DndContext>

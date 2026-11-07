@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { blockMeta } from '../core/blocks'
+import { displayUrl } from '../core/images'
 import { sanitizeHtml } from '../core/sanitize'
 import { setPhoto } from '../core/photos'
-import { cleanText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, type SlotRole, type TextSlot } from '../core/slots'
+import { collectColors, docMainColors, fixedDecorCount, harmonize, recolorHtml } from '../core/recolor'
+import { backgroundPhotos, cleanText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, setBackgroundPhoto, type SlotRole, type TextSlot } from '../core/slots'
+import { resolveTheme } from '../core/themes'
 import { richToPlain, textToRich } from '../core/richtext'
 import type { Block, ImageRef } from '../core/types'
 import { api, type Asset } from './api'
@@ -95,20 +98,50 @@ function BufferedArea({ value, onCommit, rows }: { value: string; onCommit: (tex
 const parseDoc = (s: string) => new DOMParser().parseFromString(s, 'text/html')
 const ROLE_LABEL: Record<SlotRole, string> = { title: '标题', body: '正文', caption: '小字', label: '标签', number: '序号' }
 
+/** 片段的配色：逐个改色，或统一到本文的主色；图片装饰改不了色，如实提示 */
+function ColorFields({ blockId, html, upd }: { blockId: string; html: string; upd: Upd }) {
+  const colors = useMemo(() => collectColors(html, parseDoc).filter((c) => c.chroma).slice(0, 8), [html])
+  const fixed = useMemo(() => fixedDecorCount(html, parseDoc), [html])
+  if (!colors.length) return null
+  const match = () => {
+    const s = useStore.getState()
+    const others = s.doc.blocks.filter((b) => b.id !== blockId)
+    const map = harmonize(collectColors(html, parseDoc), docMainColors(others, resolveTheme(s.doc), parseDoc))
+    if (!Object.keys(map).length) return s.notify('配色已经一致，或本文没有可匹配的主色')
+    upd({ html: recolorHtml(html, map, parseDoc) }, 'match-colors')
+    s.notify('已匹配本文配色（Ctrl+Z 可撤销）')
+  }
+  return (
+    <div className="field">
+      <span>配色 · 点击色块修改</span>
+      <div className="color-swatches" data-testid="color-swatches">
+        {colors.map((c, i) => (
+          <label key={i} style={{ background: c.hex }} title={c.hex}>
+            <input type="color" value={c.hex} onChange={(e) => upd({ html: recolorHtml(html, { [c.hex]: e.target.value.toLowerCase() }, parseDoc) }, `color-${i}`)} />
+          </label>
+        ))}
+      </div>
+      <button className="wide" onClick={match} data-testid="match-colors">匹配本文配色</button>
+      {fixed > 0 && <p className="hint">有 {fixed} 处图片装饰（PNG、GIF、纹理）颜色不会改变，混排时请留意。</p>}
+    </div>
+  )
+}
+
 /** 原文片段：按槽位改字、替换图片、编辑源码 */
 function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd: Upd }) {
   const [picking, setPicking] = useState(-1)
+  const [bgPicking, setBgPicking] = useState('')
   const [assets, setAssets] = useState<Asset[]>([])
   const [source, setSource] = useState(html)
   const [srcOpen, setSrcOpen] = useState(false)
   useEffect(() => setSource(html), [html])
   useEffect(() => {
-    if (picking >= 0 && !assets.length) api.assets().then(setAssets).catch(() => {})
-  }, [picking, assets.length])
+    if ((picking >= 0 || bgPicking) && !assets.length) api.assets().then(setAssets).catch(() => {})
+  }, [picking, bgPicking, assets.length])
   const slots = useMemo(() => extractSlots(html, parseDoc), [html])
   const texts = slots.filter((s): s is TextSlot => s.kind === 'text')
   const imgs = slots.filter((s) => s.kind === 'image').map((s) => s.src)
-  const bgPhotos = useMemo(() => removeBackgroundPhotos(html, parseDoc).removed, [html])
+  const bgPhotos = useMemo(() => backgroundPhotos(html, parseDoc), [html])
   const replace = (i: number, src: string) => {
     // 按原相框比例裁切新照片（比例取自画布上的显示尺寸）
     const shown = shownRatio(document.querySelectorAll(`[data-block-id="${blockId}"] .block-html img`)[i] ?? null)
@@ -176,14 +209,47 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
           )}
         </div>
       )}
-      {bgPhotos > 0 && (
-        <div className="warn">
-          这个片段里有 {bgPhotos} 处以背景图嵌入的旧照片（如秀米轮播），无法替换，在编辑器里可能显示为“未经允许不可引用”。
-          <button className="link" onClick={() => upd({ html: removeBackgroundPhotos(html, parseDoc).html }, 'html')} data-testid="remove-bg-photos">
-            移除这些旧照片
-          </button>
+      {bgPhotos.length > 0 && (
+        <div className="field">
+          <span>背景图照片（{bgPhotos.length}）· 点击替换，轮播里重复用到的位置一起换</span>
+          <div className="gallery-edit">
+            {bgPhotos.map((b, i) => (
+              <div key={b.src} className={`g-item ${bgPicking === b.src ? 'picking' : ''}`} onClick={() => setBgPicking(bgPicking === b.src ? '' : b.src)} data-testid={`bg-photo-${i}`}>
+                <img src={b.src.startsWith('/media/') ? `${b.src.split('?')[0]}?fit=1:1&w=160` : displayUrl(b.src)} alt="" />
+                {b.count > 1 && <small className="g-count">×{b.count}</small>}
+              </div>
+            ))}
+          </div>
+          {bgPicking && (
+            <div className="picker">
+              <p className="hint">选择素材替换这张背景图（按原位置比例裁切）</p>
+              <div className="asset-grid">
+                {assets.map((a) => (
+                  <div
+                    key={a.id}
+                    className="asset"
+                    onClick={() => {
+                      upd({ html: setBackgroundPhoto(html, bgPicking, { src: `/media/${a.file}` }, { parse: parseDoc }) }, 'html')
+                      setBgPicking('')
+                    }}
+                    data-testid="bg-asset"
+                  >
+                    <img src={`/media/${a.file}?fit=1:1&w=160`} alt={a.name} />
+                  </div>
+                ))}
+              </div>
+              {!assets.length && <p className="empty">素材库为空，请先在左侧「素材」上传</p>}
+            </div>
+          )}
+          <p className="hint">
+            背景图换成本地素材后，粘贴到公众号是否保留尚未实测；未实测前请用“上传到微信图床”模式导出。
+            <button className="link" onClick={() => upd({ html: removeBackgroundPhotos(html, parseDoc).html }, 'html')} data-testid="remove-bg-photos">
+              全部移除
+            </button>
+          </p>
         </div>
       )}
+      <ColorFields blockId={blockId} html={html} upd={upd} />
       <p className="hint">双击画布中的片段可直接修改文字。在画布上把照片拖到另一张照片上可以交换位置，从左侧素材拖到照片上可以直接替换。原文片段保留导入时的样式，不随主题变化。</p>
       <button className="wide" onClick={() => setSrcOpen(!srcOpen)}>{srcOpen ? '收起源码' : '编辑 HTML 源码'}</button>
       {srcOpen && (

@@ -1,3 +1,4 @@
+import type { ComponentDraft, LibraryComponent } from '../core/components'
 import type { Block, Doc, ImageRef, Theme } from '../core/types'
 
 export interface Asset {
@@ -96,6 +97,10 @@ export const api = {
   saveTemplate: (name: string, blocks: Block[], theme?: Pick<Doc, 'themeId' | 'themeOverrides'>) =>
     req<Template>('POST', '/api/templates', { name, blocks, themeId: theme?.themeId, themeOverrides: theme?.themeOverrides }),
   deleteTemplate: (id: string) => req('DELETE', `/api/templates/${id}`),
+  components: () => req<LibraryComponent[]>('GET', '/api/components'),
+  saveComponent: (draft: ComponentDraft) => req<{ component: LibraryComponent; duplicate: boolean }>('POST', '/api/components', draft),
+  updateComponent: (id: string, patch: { name?: string; tags?: string[]; kind?: string }) => req<LibraryComponent>('PUT', `/api/components/${id}`, patch),
+  deleteComponent: (id: string) => req('DELETE', `/api/components/${id}`),
   themes: () => req<Theme[]>('GET', '/api/themes'),
   saveTheme: (t: Theme) => req('POST', '/api/themes', t),
   deleteTheme: (id: string) => req('DELETE', `/api/themes/${id}`),

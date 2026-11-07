@@ -4,11 +4,14 @@ import { CSS } from '@dnd-kit/utilities'
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { blockMeta } from '../core/blocks'
 import { blockGap, compileBlock, rootStyle } from '../core/compiler'
+import { expandPick, fragmentHtml, pickElement } from '../core/fragments'
+import { displayHtml, storedHtml } from '../core/images'
 import { blockPhotos, swapPhotos, type PhotoPos } from '../core/photos'
 import { sanitizeHtml } from '../core/sanitize'
 import { resolveTheme } from '../core/themes'
 import type { Block, Theme } from '../core/types'
 import { api } from './api'
+import { openCollect } from './componentActions'
 import { ErrorBoundary } from './ErrorBoundary'
 import { useStore } from './store'
 
@@ -60,12 +63,12 @@ function HtmlEditor({ block, onDone }: { block: Block<'html'>; onDone: () => voi
   }
   useEffect(() => {
     if (!ref.current) return
-    ref.current.innerHTML = block.props.html
+    ref.current.innerHTML = displayHtml(block.props.html)
     ref.current.focus()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const commit = () => {
     if (!ref.current) return
-    const html = sanitizeHtml(ref.current.innerHTML, parseDoc)
+    const html = sanitizeHtml(storedHtml(ref.current.innerHTML), parseDoc)
     if (html !== block.props.html) updateProps(block.id, { html })
   }
   return (
@@ -104,10 +107,72 @@ function HtmlEditor({ block, onDone }: { block: Block<'html'>; onDone: () => voi
   )
 }
 
+/** 在原文片段里点选一个版块收藏为组件：点击选中，可向外扩大；图片和动效不响应编辑 */
+function FragmentPicker({ block, theme, onDone }: { block: Block<'html'>; theme: Theme; onDone: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [picked, setPicked] = useState<Element | null>(null)
+  const inner = useRef<Element[]>([])
+  const hovered = useRef<Element | null>(null)
+  const html = useMemo(() => displayHtml(compileBlock(block, theme)), [block, theme])
+  const mark = (el: Element | null) => {
+    picked?.classList.remove('fragment-picked')
+    el?.classList.add('fragment-picked')
+    setPicked(el)
+  }
+  const hover = (el: Element | null) => {
+    if (hovered.current === el) return
+    hovered.current?.classList.remove('fragment-hover')
+    el?.classList.add('fragment-hover')
+    hovered.current = el
+  }
+  const expand = () => {
+    const up = picked && ref.current ? expandPick(picked, ref.current) : null
+    if (!up || !picked) return
+    inner.current.push(picked)
+    mark(up)
+  }
+  const shrink = () => {
+    const el = inner.current.pop()
+    if (el) mark(el)
+  }
+  const collect = () => {
+    if (!picked || !ref.current) return
+    picked.classList.remove('fragment-picked', 'fragment-hover')
+    const fragment = sanitizeHtml(storedHtml(fragmentHtml(picked, ref.current)), parseDoc)
+    onDone()
+    openCollect({ block, fragment, via: 'fragment' })
+  }
+  return (
+    <div onClick={(e) => e.stopPropagation()}>
+      <div className="rich-toolbar pick-toolbar">
+        <span className="hint" style={{ margin: '0 6px' }}>{picked ? '已选中，可向外扩大范围' : '点击要收藏的版块'}</span>
+        <span className="sep" />
+        <button type="button" disabled={!picked} onClick={expand} data-testid="pick-expand">向外一层</button>
+        <button type="button" disabled={!inner.current.length} onClick={shrink} data-testid="pick-shrink">向内一层</button>
+        <button type="button" className="primary" disabled={!picked} onClick={collect} data-testid="pick-collect">收藏所选</button>
+        <button type="button" className="done" onClick={onDone} data-testid="pick-cancel">取消</button>
+      </div>
+      <div
+        ref={ref}
+        className="block-html picking"
+        dangerouslySetInnerHTML={{ __html: html }}
+        onMouseOver={(e) => hover(ref.current ? pickElement(e.target as Element, ref.current) : null)}
+        onMouseLeave={() => hover(null)}
+        onClick={(e) => {
+          e.preventDefault()
+          inner.current = []
+          mark(ref.current ? pickElement(e.target as Element, ref.current) : null)
+        }}
+        data-testid="fragment-picker"
+      />
+    </div>
+  )
+}
+
 const RICH_TYPES = new Set(['paragraph', 'card', 'imageText'])
 
 const BlockHtml = memo(function BlockHtml({ block, theme }: { block: Block; theme: Theme }) {
-  const html = useMemo(() => compileBlock(block, theme), [block, theme])
+  const html = useMemo(() => displayHtml(compileBlock(block, theme)), [block, theme])
   const photos = useMemo(() => blockPhotos(block), [block])
   const ref = useRef<HTMLDivElement>(null)
   // 标记可移动的照片：拖到另一张照片上互换位置；装饰图、二维码不参与
@@ -156,7 +221,8 @@ function BrokenBlock({ block, error }: { block: Block; error: Error }) {
 function BlockView({ block, theme, gap }: { block: Block; theme: Theme; gap: number }) {
   const selected = useStore((s) => s.selectedId === block.id)
   const editing = useStore((s) => s.editingId === block.id)
-  const { select, setEditing, updateProps, removeBlock, duplicateBlock, moveBlock, notify } = useStore.getState()
+  const picking = useStore((s) => s.pickingId === block.id)
+  const { select, setEditing, setPicking, updateProps, removeBlock, duplicateBlock, moveBlock, notify } = useStore.getState()
   const index = useStore((s) => s.doc.blocks.findIndex((b) => b.id === block.id))
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } = useSortable({ id: block.id })
   const style: React.CSSProperties = {
@@ -170,7 +236,8 @@ function BlockView({ block, theme, gap }: { block: Block; theme: Theme; gap: num
   const startEdit = () => canEdit && setEditing(block.id)
 
   let body = <BlockHtml block={block} theme={theme} />
-  if (editing && block.type === 'html') body = <HtmlEditor block={block} onDone={() => setEditing(null)} />
+  if (picking && block.type === 'html') body = <FragmentPicker block={block} theme={theme} onDone={() => setPicking(null)} />
+  else if (editing && block.type === 'html') body = <HtmlEditor block={block} onDone={() => setEditing(null)} />
   else if (editing && canRich) {
     const p: any = block.props
     const editor = (
@@ -212,7 +279,7 @@ function BlockView({ block, theme, gap }: { block: Block; theme: Theme; gap: num
       role="group"
       tabIndex={-1}
     >
-      {selected && !editing && (
+      {selected && !editing && !picking && (
         <div className="block-toolbar" onClick={(e) => e.stopPropagation()}>
           <span className="block-label">{block.type === 'html' ? block.props.label || '原文片段' : blockMeta(block.type).label}</span>
           <button ref={setActivatorNodeRef} {...listeners} className="drag" title="拖动排序">⠿</button>
@@ -220,6 +287,8 @@ function BlockView({ block, theme, gap }: { block: Block; theme: Theme; gap: num
           <button title="下移" onClick={() => moveBlock(block.id, index + 1)}>↓</button>
           {canEdit && <button title="编辑文字（双击）" onClick={startEdit}>✎</button>}
           <button title="复制模块" onClick={() => duplicateBlock(block.id)}>⧉</button>
+          <button title="收藏为组件" onClick={() => openCollect({ block, via: 'block' })} data-testid="collect-block">◈</button>
+          {block.type === 'html' && <button title="在模块里点选一部分收藏为组件" onClick={() => setPicking(block.id)} data-testid="pick-fragment">⌖</button>}
           <button
             title="收藏为模板"
             onClick={async () => {
