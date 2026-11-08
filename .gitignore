@@ -6,3 +6,4 @@ test-results
 playwright-report
 *.log
 data-e2e/
+tsconfig.tsbuildinfo
