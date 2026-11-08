@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createBlock } from '../../src/core/blocks'
 import { compileDoc } from '../../src/core/compiler'
 import { componentBlock, fingerprint, hueFamily, makeDraft, searchComponents, validateDraft, type LibraryComponent } from '../../src/core/components'
-import { componentPieces, expandPick, fragmentHtml, fragmentLabel, fragmentStats, isCarousel, pickElement, splitCandidates } from '../../src/core/fragments'
+import { componentPieces, expandPick, fragmentHtml, fragmentLabel, fragmentStats, horizontalInset, insertionAnchor, isCarousel, pickElement, placeFragment, splitCandidates } from '../../src/core/fragments'
 import { displayHtml, displayUrl, rehostUrls, rewriteImages, storedHtml } from '../../src/core/images'
 import { collectColors, docMainColors, fixedDecorCount, harmonize, recolorHtml } from '../../src/core/recolor'
 import { sanitizeHtml } from '../../src/core/sanitize'
@@ -63,7 +63,55 @@ describe('fragment picking', () => {
     expect(out).toContain('font-size: 18px')
     expect(out).toContain('color: #111111')
     expect(out).not.toContain('#528065') // 自身已有颜色，不覆盖
-    expect(out).not.toContain('padding') // 不可继承的样式不带过来
+    // 不可继承的样式不写到片段自身；外层的内边距变成外面一圈左右空白
+    expect(parse(`<body>${out}</body>`).getElementById('p')!.getAttribute('style')).not.toContain('padding')
+    expect(out.startsWith('<section style="padding-left: 9px; padding-right: 9px; box-sizing: border-box"><p id="p"')).toBe(true)
+  })
+  it('keeps the side space the outer layers gave the fragment', () => {
+    // 仿真实大版块：纹理单栏左右 15px、白色卡片 20px，里面的图片框插入后应和原来一样宽
+    const r = rootOf(`<section style="background-color: #f5fef1"><section style="display: flex; padding: 0px 15px"><section style="display: inline-block; width: 100%; padding: 20px"><section id="frame" style="margin: 10px 0px; border: 1px solid #9cc393"><img src="${JPG(1)}"></section></section></section></section>`)
+    const out = fragmentHtml(r.querySelector('#frame')!, r)
+    expect(out.startsWith('<section style="padding-left: 35px; padding-right: 35px; box-sizing: border-box"><section id="frame"')).toBe(true)
+    const el = (style: string) => rootOf(`<section style="${style}"></section>`).firstElementChild!
+    expect(horizontalInset([el('padding: 4px 6px 8px'), el('margin: 0 auto; border: 2px dashed #000')])).toEqual([8, 8])
+    expect(horizontalInset([el('padding: 10px; padding-left: 3px; border-left: 1px solid; border-right: none')])).toEqual([4, 10])
+    expect(horizontalInset([el('padding: 0 5%; margin-left: -12px; border-width: 0 3px')])).toEqual([0, 3])
+    expect(horizontalInset([el('padding: 0'), el('')])).toEqual([0, 0])
+    expect(fragmentHtml(r.querySelector('#frame')!, r.querySelector('#frame')!.parentElement!)).not.toContain('padding-left')
+  })
+
+  it('puts a component into the big block after the paragraph holding the caret, without doubling the side space', () => {
+    const card = (body: string) =>
+      rootOf(`<section style="background-color: #f5fef1"><section style="display: flex; padding: 0px 15px"><section id="card" style="display: inline-block; width: 100%; padding: 20px"><p id="p1"><span><strong id="b">文字一</strong></span></p>${body}<p id="p2">文字二</p></section></section></section>`)
+    const frame = `<section style="padding-left: 35px; padding-right: 35px; box-sizing: border-box"><section id="frame" style="border: 1px solid #9cc393"><img src="${JPG(1)}"></section></section>`
+    let r = card('')
+    const caret = r.querySelector('#b')!.firstChild!
+    const anchor = insertionAnchor(caret, r)!
+    expect(anchor.id).toBe('p1')
+    const added = placeFragment(anchor, r, frame)
+    // 插回卡片里：外层已经留了 35px，外包的留白去掉，图片框就在第一段和第二段之间
+    expect(added.map((e) => e.id)).toEqual(['frame'])
+    expect(Array.from(r.querySelector('#card')!.children).map((e) => e.id)).toEqual(['p1', 'frame', 'p2'])
+    expect(r.innerHTML).not.toContain('padding-left: 35px')
+    // 只有一部分留白时补上差值
+    r = card('')
+    placeFragment(r.querySelector('#card')!, r, frame)
+    expect(r.querySelector('#frame')!.parentElement!.getAttribute('style')).toBe('padding-left: 20px; padding-right: 20px; box-sizing: border-box')
+    // 正文外面又包了一层 5px：最后一段后面插入时放到这层外面，宽度和原来一样；不是最后一段时留在原处
+    r = card(`<section id="text" style="padding: 0 5px"><p id="t1">甲</p><p id="t2">乙</p><p><br></p></section>`)
+    placeFragment(insertionAnchor(r.querySelector('#t2')!.firstChild, r)!, r, frame)
+    expect(Array.from(r.querySelector('#card')!.children).map((e) => e.id)).toEqual(['p1', 'text', 'frame', 'p2'])
+    r = card(`<section id="text" style="padding: 0 5px"><p id="t1">甲</p><p id="t2">乙</p></section>`)
+    placeFragment(insertionAnchor(r.querySelector('#t1')!.firstChild, r)!, r, frame)
+    expect(Array.from(r.querySelector('#text')!.children).map((e) => e.id)).toEqual(['t1', 'frame', 't2'])
+    // 光标在一栏的段落里时放在这一栏里；光标就在横排的一格上时放到整行后面，不添一栏；SVG 轮播按整个轮播算；不在内容里时返回 null
+    r = card(`<section id="row" style="display: flex"><section id="col" style="flex: 1"><p id="c">左栏</p></section><section id="cell" style="flex: 1">右栏</section></section><section id="wrap"><svg id="svg"><g><foreignObject><p id="deep">x</p></foreignObject></g></svg></section>`)
+    expect(insertionAnchor(r.querySelector('#c')!.firstChild, r)!.id).toBe('c')
+    expect(insertionAnchor(r.querySelector('#cell')!.firstChild, r)!.id).toBe('row')
+    expect(insertionAnchor(r.querySelector('#deep')!.firstChild, r)!.id).toBe('svg')
+    expect(insertionAnchor(r, r)).toBeNull()
+    expect(insertionAnchor(null, r)).toBeNull()
+    expect(insertionAnchor(rootOf('<p>外面</p>').firstChild, r)).toBeNull()
   })
 })
 

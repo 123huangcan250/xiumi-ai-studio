@@ -2,16 +2,19 @@ import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { blockMeta } from '../core/blocks'
-import { blockGap, compileBlock, rootStyle } from '../core/compiler'
-import { expandPick, fragmentHtml, pickElement } from '../core/fragments'
+import { blockLabel, blockMeta } from '../core/blocks'
+import { BOX_GAP, blockGap, compileBlock, rootStyle } from '../core/compiler'
+import { expandPick, fragmentHtml, insertionAnchor, pickElement, placeFragment } from '../core/fragments'
 import { displayHtml, storedHtml } from '../core/images'
 import { blockPhotos, swapPhotos, type PhotoPos } from '../core/photos'
 import { sanitizeHtml } from '../core/sanitize'
+import { splitHtmlBlock } from '../core/wxImport'
+import { boxParts, boxTheme } from '../core/kit'
 import { resolveTheme } from '../core/themes'
+import { findBlock } from '../core/tree'
 import type { Block, Theme } from '../core/types'
 import { api } from './api'
-import { openCollect } from './componentActions'
+import { openCollect, setInlineTarget } from './componentActions'
 import { ErrorBoundary } from './ErrorBoundary'
 import { useStore } from './store'
 
@@ -71,10 +74,37 @@ function HtmlEditor({ block, onDone }: { block: Block<'html'>; onDone: () => voi
     const html = sanitizeHtml(storedHtml(ref.current.innerHTML), parseDoc)
     if (html !== block.props.html) updateProps(block.id, { html })
   }
+  const commitRef = useRef(commit)
+  commitRef.current = commit
+  // 记住光标：点组件库时焦点会离开这里，组件插到最后一次光标所在的段落后面
+  const caret = useRef<Node | null>(null)
+  useEffect(() => {
+    const save = () => {
+      const sel = document.getSelection()
+      if (sel?.rangeCount && ref.current?.contains(sel.anchorNode) && sel.anchorNode !== ref.current) caret.current = sel.anchorNode
+    }
+    document.addEventListener('selectionchange', save)
+    const off = setInlineTarget((html) => {
+      const root = ref.current
+      const anchor = root && caret.current?.isConnected ? insertionAnchor(caret.current, root) : null
+      if (!root || !anchor) return false
+      root.querySelectorAll('.media-picked').forEach((el) => el.classList.remove('media-picked'))
+      const added = placeFragment(anchor, root, displayHtml(html))
+      if (!added.length) return false
+      commitRef.current()
+      caret.current = added[added.length - 1]
+      added[0].scrollIntoView({ block: 'nearest' })
+      return true
+    })
+    return () => {
+      document.removeEventListener('selectionchange', save)
+      off()
+    }
+  }, [])
   return (
     <div onClick={(e) => e.stopPropagation()}>
       <div className="rich-toolbar">
-        <span className="hint" style={{ margin: '0 6px' }}>直接修改文字（保留原样式）；点击图片可选中，按 Delete 删除</span>
+        <span className="hint" style={{ margin: '0 6px' }}>直接修改文字（保留原样式）；点击图片可选中，按 Delete 删除；点组件库里的组件会插到光标所在段落后面</span>
         {picked && (
           <button type="button" className="danger" onMouseDown={(e) => (e.preventDefault(), removePicked())} data-testid="delete-picked">
             删除所选图片
@@ -171,8 +201,9 @@ function FragmentPicker({ block, theme, onDone }: { block: Block<'html'>; theme:
 
 const RICH_TYPES = new Set(['paragraph', 'card', 'imageText'])
 
-const BlockHtml = memo(function BlockHtml({ block, theme }: { block: Block; theme: Theme }) {
-  const html = useMemo(() => displayHtml(compileBlock(block, theme)), [block, theme])
+const BlockHtml = memo(function BlockHtml({ block, theme, inBox }: { block: Block; theme: Theme; inBox?: boolean }) {
+  // 画布显示空图片位、空图注的占位；文本框内的模块按文本框样式自适应
+  const html = useMemo(() => displayHtml(compileBlock(block, theme, { hints: true, inBox })), [block, theme, inBox])
   const photos = useMemo(() => blockPhotos(block), [block])
   const ref = useRef<HTMLDivElement>(null)
   // 标记可移动的照片：拖到另一张照片上互换位置；装饰图、二维码不参与
@@ -197,6 +228,13 @@ export function photoTarget(el: EventTarget | Element | null): { img: HTMLImageE
   return img && block ? { img, pos: { blockId: block.dataset.blockId!, index: Number(img.dataset.photo) } } : null
 }
 
+/** 事件目标所在的空图片位（套件模块的占位图） */
+export function slotTarget(el: EventTarget | Element | null): { img: HTMLImageElement; pos: PhotoPos } | null {
+  const img = (el as Element | null)?.closest?.('img[data-slot]') as HTMLImageElement | null
+  const block = img?.closest('[data-block-id]') as HTMLElement | null
+  return img && block ? { img, pos: { blockId: block.dataset.blockId!, index: Number(img.dataset.slot) } } : null
+}
+
 /** 照片在画布上显示的高宽比，即相框比例 */
 export const shownRatio = (img: Element | null) => {
   const r = img?.getBoundingClientRect()
@@ -218,13 +256,38 @@ function BrokenBlock({ block, error }: { block: Block; error: Error }) {
   )
 }
 
-function BlockView({ block, theme, gap }: { block: Block; theme: Theme; gap: number }) {
+/** 大型文本框：页眉、页脚按编译结果显示，内容区里的子模块可以单独选中、拖动、编辑 */
+function BoxBody({ block, theme }: { block: Block<'box'>; theme: Theme }) {
+  const { title, label, variant, children } = block.props
+  const parts = useMemo(() => boxParts({ title, label, variant, children: [] }), [title, label, variant])
+  const { setNodeRef, isOver } = useDroppable({ id: `box:${block.id}`, data: { parentId: block.id } })
+  return (
+    <div style={styleObj(parts.outer)}>
+      <div className="block-html" dangerouslySetInnerHTML={{ __html: parts.header }} />
+      <div style={styleObj(parts.body)} className="box-body">
+        <SortableContext items={children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+          {children.map((c, i) => (
+            <BlockView key={c.id} block={c} theme={theme} gap={i === children.length - 1 ? 0 : BOX_GAP} parentId={block.id} />
+          ))}
+        </SortableContext>
+        <div ref={setNodeRef} className={`box-drop ${isOver ? 'over' : ''} ${children.length ? '' : 'empty'}`} data-testid="box-drop">
+          {children.length ? '放进文本框末尾' : '文本框是空的：把模块拖到这里，或选中文本框后点击左侧模块'}
+        </div>
+      </div>
+      <div className="block-html" dangerouslySetInnerHTML={{ __html: parts.footer }} />
+    </div>
+  )
+}
+
+function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme; gap: number; parentId?: string }) {
   const selected = useStore((s) => s.selectedId === block.id)
   const editing = useStore((s) => s.editingId === block.id)
   const picking = useStore((s) => s.pickingId === block.id)
-  const { select, setEditing, setPicking, updateProps, removeBlock, duplicateBlock, moveBlock, notify } = useStore.getState()
-  const index = useStore((s) => s.doc.blocks.findIndex((b) => b.id === block.id))
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } = useSortable({ id: block.id })
+  const { select, setEditing, setPicking, updateProps, removeBlock, replaceBlock, duplicateBlock, moveBlock, moveBlockTo, notify } = useStore.getState()
+  // 在所在层（顶层或文本框内）的位置
+  const index = useStore((s) => findBlock(s.doc.blocks, block.id)?.index ?? -1)
+  const inBox = !!parentId
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } = useSortable({ id: block.id, data: { parentId: parentId ?? null } })
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
     transition,
@@ -234,17 +297,25 @@ function BlockView({ block, theme, gap }: { block: Block; theme: Theme; gap: num
   const canRich = RICH_TYPES.has(block.type)
   const canEdit = canRich || block.type === 'html'
   const startEdit = () => canEdit && setEditing(block.id)
+  // 以前导入的版块常把整节内容（标题、正文、轮播）放在一个模块里，拆开后才能单独选中和收藏
+  const splitBlock = () => {
+    if (block.type !== 'html') return
+    const parts = splitHtmlBlock(block, parseDoc)
+    if (!parts) return notify('这个模块里没有可以拆开的结构')
+    replaceBlock(block.id, parts)
+    notify(`已拆成 ${parts.length} 个模块，可撤销`)
+  }
 
-  let body = <BlockHtml block={block} theme={theme} />
+  let body = block.type === 'box' ? <BoxBody block={block} theme={theme} /> : <BlockHtml block={block} theme={theme} inBox={inBox} />
   if (picking && block.type === 'html') body = <FragmentPicker block={block} theme={theme} onDone={() => setPicking(null)} />
   else if (editing && block.type === 'html') body = <HtmlEditor block={block} onDone={() => setEditing(null)} />
   else if (editing && canRich) {
     const p: any = block.props
     const editor = (
-      <Suspense fallback={<BlockHtml block={block} theme={theme} />}>
+      <Suspense fallback={<BlockHtml block={block} theme={theme} inBox={inBox} />}>
       <RichEditor
         value={p.content}
-        theme={theme}
+        theme={inBox ? boxTheme(theme) : theme}
         fontSize={block.type === 'imageText' ? theme.fontSize - 1 : undefined}
         onChange={(content) => updateProps(block.id, { content }, `${block.id}:content`)}
         onDone={() => setEditing(null)}
@@ -281,18 +352,31 @@ function BlockView({ block, theme, gap }: { block: Block; theme: Theme; gap: num
     >
       {selected && !editing && !picking && (
         <div className="block-toolbar" onClick={(e) => e.stopPropagation()}>
-          <span className="block-label">{block.type === 'html' ? block.props.label || '原文片段' : blockMeta(block.type).label}</span>
+          <span className="block-label">{blockLabel(block)}</span>
           <button ref={setActivatorNodeRef} {...listeners} className="drag" title="拖动排序">⠿</button>
           <button title="上移" disabled={index === 0} onClick={() => moveBlock(block.id, index - 1)}>↑</button>
           <button title="下移" onClick={() => moveBlock(block.id, index + 1)}>↓</button>
+          {parentId && (
+            <button
+              title="移出文本框（放到文本框下方）"
+              onClick={() => {
+                const { doc } = useStore.getState()
+                moveBlockTo(block.id, null, doc.blocks.findIndex((b) => b.id === parentId) + 1)
+              }}
+              data-testid="move-out"
+            >
+              ⇱
+            </button>
+          )}
           {canEdit && <button title="编辑文字（双击）" onClick={startEdit}>✎</button>}
           <button title="复制模块" onClick={() => duplicateBlock(block.id)}>⧉</button>
           <button title="收藏为组件" onClick={() => openCollect({ block, via: 'block' })} data-testid="collect-block">◈</button>
           {block.type === 'html' && <button title="在模块里点选一部分收藏为组件" onClick={() => setPicking(block.id)} data-testid="pick-fragment">⌖</button>}
+          {block.type === 'html' && <button title="拆开此模块：把卡片里的标题、正文、轮播拆成独立模块" onClick={splitBlock} data-testid="split-block">✂</button>}
           <button
             title="收藏为模板"
             onClick={async () => {
-              const name = prompt('模板名称', block.type === 'html' ? block.props.label : blockMeta(block.type).label)
+              const name = prompt('模板名称', blockLabel(block))
               if (!name) return
               await api.saveTemplate(name, [block], useStore.getState().doc)
               notify('已收藏到「模板」')

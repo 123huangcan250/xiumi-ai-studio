@@ -1,10 +1,11 @@
 import { richToMarkdown } from './richtext'
-import type { Doc } from './types'
+import type { Block, Doc } from './types'
 
 export function docToMarkdown(doc: Doc): string {
   const out: string[] = []
   const img = (src?: string, alt = '') => (src ? `![${alt}](${src})` : '')
-  for (const b of doc.blocks) {
+  const pics = (list: { image?: { src: string }; caption: string }[]) => list.filter((x) => x.image).flatMap((x) => [img(x.image!.src, x.caption), x.caption && `*${x.caption}*`])
+  const walk = (b: Block) => {
     const p: any = b.props
     switch (b.type) {
       case 'cover':
@@ -63,7 +64,19 @@ export function docToMarkdown(doc: Doc): string {
       case 'ending':
         out.push('---', p.text && `**${p.text}**`, p.note, p.author)
         break
+      case 'box':
+        out.push(p.title && `### ${p.title}`)
+        p.children.forEach(walk)
+        break
+      case 'carousel':
+      case 'photos':
+        out.push(...pics(b.type === 'photos' ? p.pics.slice(0, p.count) : p.pics))
+        break
+      case 'frame':
+        out.push(img(p.image?.src, p.caption), p.caption && `*${p.caption}*`)
+        break
     }
   }
+  doc.blocks.forEach(walk)
   return out.filter(Boolean).join('\n\n') + '\n'
 }

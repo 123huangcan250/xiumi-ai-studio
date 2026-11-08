@@ -6,9 +6,11 @@ export interface BlockMeta<T extends BlockType = BlockType> {
   type: T
   label: string
   icon: string
-  group: '结构' | '文字' | '图片' | '信息'
+  group: '结构' | '文字' | '图片' | '信息' | '套件'
   defaults: () => BlockPropsMap[T]
 }
+
+const emptyPics = (n: number) => Array.from({ length: n }, () => ({ caption: '' }))
 
 const META: { [K in BlockType]: BlockMeta<K> } = {
   cover: {
@@ -76,12 +78,40 @@ const META: { [K in BlockType]: BlockMeta<K> } = {
       label: '原文片段',
     }),
   },
+  box: {
+    type: 'box', label: '大型文本框', icon: '▭', group: '套件',
+    defaults: () => ({
+      title: '在这里输入文本框标题',
+      label: 'BERICHT · 01',
+      variant: 'plate',
+      children: [{ id: newId(), type: 'paragraph', props: { content: textToRich('在这里输入正文。选中文本框后点击左侧模块，或把模块拖进框内，图片、轮播、多图都会自动适配文本框的宽度、字号和间距。'), align: 'justify' } }],
+    }),
+  },
+  carousel: {
+    type: 'carousel', label: '轮播', icon: '⇆', group: '套件',
+    defaults: () => ({ label: 'BILDERGALERIE · 图集', pics: emptyPics(3), ratio: '4:3', variant: 'peek' }),
+  },
+  frame: {
+    type: 'frame', label: '图片框', icon: '⧈', group: '套件',
+    defaults: () => ({ caption: '', label: 'DEUTSCHLAND', variant: 'flag' }),
+  },
+  photos: {
+    type: 'photos', label: '多图', icon: '⊞', group: '套件',
+    defaults: () => ({ count: 2, layout: 'even', ratio: '4:3', pics: emptyPics(2) }),
+  },
 }
 
 export const BLOCK_TYPES = Object.keys(META) as BlockType[]
 
 export function blockMeta<T extends BlockType>(type: T): BlockMeta<T> {
   return META[type] as unknown as BlockMeta<T>
+}
+
+/** 模块在界面上的名称：原文片段用自己的名称，多图按张数叫双图 / 三图 / 四图 */
+export function blockLabel(b: Block): string {
+  if (b.type === 'html') return b.props.label || META.html.label
+  if (b.type === 'photos') return ({ 2: '双图', 3: '三图', 4: '四图' } as Record<number, string>)[b.props.count] ?? META.photos.label
+  return META[b.type]?.label ?? b.type
 }
 
 export function newId() {
@@ -95,7 +125,10 @@ export function createBlock<T extends BlockType>(type: T, props?: Partial<BlockP
 
 /** 深拷贝并重新分配 id（复制模块 / 套用模板） */
 export function cloneBlock<T extends Block>(b: T): T {
-  return { ...structuredClone(b), id: newId() }
+  const copy = { ...structuredClone(b), id: newId() }
+  // 文本框里的子模块也要换新 id，否则复制出来的两个文本框会互相串
+  if (copy.type === 'box') copy.props.children = copy.props.children.map((c) => cloneBlock(c))
+  return copy
 }
 
 export function isBlockType(t: string): t is BlockType {
@@ -113,9 +146,15 @@ const ENUMS: Record<string, string[]> = {
   'image.variant': ['full', 'framed', 'rounded'],
   'paragraph.align': ['left', 'justify', 'center'],
   'imageText.imagePosition': ['left', 'right'],
+  'box.variant': ['plate', 'rule', 'paper'],
+  'carousel.ratio': ['4:3', '3:2', '16:9', '1:1', '3:4'],
+  'carousel.variant': ['peek', 'full'],
+  'frame.variant': ['flag', 'circuit', 'ticket'],
+  'photos.layout': ['even', 'feature'],
+  'photos.ratio': ['4:3', '3:4', '1:1'],
 }
 /** 默认值里没有、但允许出现的可选字段 */
-const OPTIONAL_IMAGE: BlockType[] = ['cover', 'imageText', 'image', 'profile', 'ending']
+const OPTIONAL_IMAGE: BlockType[] = ['cover', 'imageText', 'image', 'profile', 'ending', 'frame']
 
 const str = (v: unknown) => (v === null || v === undefined ? '' : typeof v === 'object' ? '' : String(v))
 const isRich = (v: any) => v && typeof v === 'object' && v.type === 'doc' && Array.isArray(v.content)
@@ -155,8 +194,17 @@ export function coerceProps<T extends BlockType>(type: T, raw: unknown, partial 
     else if (k === 'items') out[k] = Array.isArray(v) ? v.filter((x) => x && typeof x === 'object').map((x) => ({ time: str(x.time), title: str(x.title), desc: str(x.desc) })) : d
     else if (k === 'headers') out[k] = Array.isArray(v) ? v.map(str) : d
     else if (k === 'rows') out[k] = Array.isArray(v) ? v.filter(Array.isArray).map((r: unknown[]) => r.map(str)) : d
+    else if (k === 'count') out[k] = Math.min(4, Math.max(2, Math.round(Number(v)) || 2))
+    else if (k === 'pics') out[k] = Array.isArray(v) ? v.slice(0, 30).map((x) => ({ ...(imageRef(x?.image) && { image: imageRef(x.image) }), caption: str(x?.caption) })) : d
+    // 文本框不能嵌套：子模块里的文本框直接丢弃
+    else if (k === 'children') out[k] = normalizeBlocks(v).filter((c) => c.type !== 'box')
     else if (typeof d === 'string') out[k] = str(v)
     else out[k] = d
+  }
+  // 多图：图片位数量与张数一致
+  if (type === 'photos' && !partial) {
+    const n = out.count as number
+    out.pics = Array.from({ length: n }, (_, i) => out.pics[i] ?? { caption: '' })
   }
   return out as Partial<BlockPropsMap[T]>
 }

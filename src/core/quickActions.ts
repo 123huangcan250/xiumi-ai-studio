@@ -87,22 +87,22 @@ export const QUICK_ACTIONS: QuickAction[] = [
 
 /** 发送给大模型的精简文档上下文（富文本转纯文本，图片只给数量） */
 export function aiContext(doc: Doc) {
-  return {
-    title: doc.title,
-    themeId: doc.themeId,
-    blocks: doc.blocks.map((b, index) => {
-      // 原文片段只给文字槽位，AI 按槽位修改
-      if (b.type === 'html') {
-        const slots = extractSlots(b.props.html).flatMap((s) => (s.kind === 'text' ? [{ id: s.id, role: s.role, text: s.text.slice(0, 300), ...(s.tight && { max: s.max }) }] : []))
-        return { index, id: b.id, type: b.type, props: { label: b.props.label, slots } }
-      }
-      const p: any = { ...b.props }
-      for (const k of Object.keys(p)) {
-        if (k === 'content') p[k] = richToPlain(p[k])
-        else if (k === 'image') p[k] = p[k] ? '[图片]' : undefined
-        else if (k === 'images') p[k] = `[${p[k].length} 张图片]`
-      }
-      return { index, id: b.id, type: b.type, props: p }
-    }),
+  const block = (b: Block, index: number): Record<string, unknown> => {
+    // 原文片段只给文字槽位，AI 按槽位修改
+    if (b.type === 'html') {
+      const slots = extractSlots(b.props.html).flatMap((s) => (s.kind === 'text' ? [{ id: s.id, role: s.role, text: s.text.slice(0, 300), ...(s.tight && { max: s.max }) }] : []))
+      return { index, id: b.id, type: b.type, props: { label: b.props.label, slots } }
+    }
+    const p: any = { ...b.props }
+    for (const k of Object.keys(p)) {
+      if (k === 'content') p[k] = richToPlain(p[k])
+      else if (k === 'image') p[k] = p[k] ? '[图片]' : undefined
+      else if (k === 'images') p[k] = `[${p[k].length} 张图片]`
+      // 图片位只给图注；文本框内的模块单独列出 id，可以逐个修改
+      else if (k === 'pics') p[k] = p[k].map((x: any) => ({ image: x.image ? '[图片]' : '[空]', caption: x.caption }))
+      else if (k === 'children') p[k] = p[k].map(block)
+    }
+    return { index, id: b.id, type: b.type, props: p }
   }
+  return { title: doc.title, themeId: doc.themeId, blocks: doc.blocks.map(block) }
 }

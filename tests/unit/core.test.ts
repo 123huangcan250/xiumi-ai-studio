@@ -92,7 +92,13 @@ describe('compiled markup is well-formed', () => {
 
 describe('every block renders with every theme', () => {
   it('no throws and non-empty output', () => {
-    for (const t of BLOCK_TYPES) for (const theme of THEMES) expect(compileBlock(createBlock(t), theme).length).toBeGreaterThan(10)
+    // 套件的图片模块没放图片时导出为空（导出前另有提示），画布模式下显示占位
+    const imageOnly = new Set(['carousel', 'frame', 'photos'])
+    for (const t of BLOCK_TYPES)
+      for (const theme of THEMES) {
+        expect(compileBlock(createBlock(t), theme, { hints: true }).length).toBeGreaterThan(10)
+        if (!imageOnly.has(t)) expect(compileBlock(createBlock(t), theme).length).toBeGreaterThan(10)
+      }
   })
   it('escapes user text', () => {
     const html = compileBlock(createBlock('quote', { text: '<img src=x onerror=alert(1)>' }), THEMES[0])

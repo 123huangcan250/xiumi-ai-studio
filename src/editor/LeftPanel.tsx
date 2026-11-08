@@ -1,10 +1,12 @@
 import { useDraggable } from '@dnd-kit/core'
 import { useCallback, useEffect, useState } from 'react'
 import { BLOCK_TYPES, blockMeta, cloneBlock, createBlock } from '../core/blocks'
+import { addPicTo } from '../core/photos'
 import type { BlockType } from '../core/types'
 import { api, assetRef, type Asset, type ProjectSummary, type Template } from './api'
 import { ComponentLibrary } from './ComponentLibrary'
 import { CropModal } from './CropModal'
+import { KIT_ITEMS, KIT_THEME_ID, type KitItem } from './kitItems'
 import { emptyDoc, saveNow, selectedBlock, useStore } from './store'
 
 type Tab = 'blocks' | 'components' | 'assets' | 'templates' | 'projects'
@@ -28,6 +30,24 @@ function LibItem({ type }: { type: BlockType }) {
   )
 }
 
+function KitLibItem({ item }: { item: KitItem }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: `kit:${item.key}` })
+  return (
+    <button
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={`lib-item ${isDragging ? 'dragging' : ''}`}
+      onClick={() => useStore.getState().insertBlock(item.make())}
+      title="点击插入到选中模块之后（选中大型文本框时放进框内），或拖入画布"
+      data-testid={`kit-${item.key}`}
+    >
+      <span className="lib-icon">{item.icon}</span>
+      <span>{item.label}</span>
+    </button>
+  )
+}
+
 /** 选中图片类模块时，点击素材即替换/追加；否则插入单图模块 */
 export function useAssetToDoc() {
   return useCallback((a: Asset) => {
@@ -36,7 +56,12 @@ export function useAssetToDoc() {
     const ref = assetRef(a)
     if (b && b.type === 'gallery') s.updateProps(b.id, { images: [...b.props.images, ref] })
     else if (b && ['image', 'imageText', 'profile', 'cover', 'ending'].includes(b.type)) s.updateProps(b.id, { image: ref })
-    else s.insertBlock(createBlock('image', { image: ref }))
+    else if (b && (b.type === 'carousel' || b.type === 'photos' || b.type === 'frame')) {
+      // 轮播追加；多图依次填空位；图片框替换
+      const next = addPicTo(b, ref)
+      if (next) s.updateProps(b.id, next.props)
+      else s.notify('这组图片已放满：把素材拖到某张图片上可以替换', 'error')
+    } else s.insertBlock(createBlock('image', { image: ref }))
   }, [])
 }
 
@@ -109,6 +134,30 @@ export function LeftPanel() {
         ))}
       </nav>
       <div className="panel-body">
+        {tab === 'blocks' && (
+          <section className="kit-section" data-testid="kit-section">
+            <h4>
+              清华电机 · 德国实践
+              <button
+                className="link"
+                title="正文 14 号黑色、注释 12 号灰色，标题与强调色为清华紫"
+                onClick={() => {
+                  useStore.getState().setDocFields({ themeId: KIT_THEME_ID, themeOverrides: undefined })
+                  notify('已套用「清华电机·德国」主题')
+                }}
+                data-testid="kit-theme"
+              >
+                套用配套主题
+              </button>
+            </h4>
+            <div className="lib-grid">
+              {KIT_ITEMS.map((k) => (
+                <KitLibItem key={k.key} item={k} />
+              ))}
+            </div>
+            <p className="hint">选中大型文本框后再点模块，会放进框内；也可以直接拖进框里。</p>
+          </section>
+        )}
         {tab === 'blocks' &&
           groups.map((g) => (
             <section key={g}>

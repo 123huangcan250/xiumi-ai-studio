@@ -49,7 +49,7 @@ function ComponentCard({ c, doc, onChanged }: { c: LibraryComponent; doc: Doc; o
   const photos = c.stats.photos + c.stats.bgPhotos
   return (
     <div className="comp-card" data-testid="component-card">
-      <div ref={setNodeRef} {...listeners} {...attributes} onClick={() => insertComponent(c.block, { missing: c.missing })} title="点击插入到选中位置之后，或拖入画布" data-testid="component-insert">
+      <div ref={setNodeRef} {...listeners} {...attributes} onClick={() => insertComponent(c.block, { missing: c.missing })} title="点击插入到选中位置之后（正在编辑原文模块时插到光标处），或拖入画布" data-testid="component-insert">
         <LazyPreview block={c.block} doc={doc} />
       </div>
       {editing ? (
@@ -115,7 +115,7 @@ function PartCard({ p, doc, collected }: { p: VirtualPart; doc: Doc; collected: 
   const source = p.block.type === 'html' ? p.block.props.source : undefined
   return (
     <div className="comp-card" data-testid="part-card">
-      <div ref={setNodeRef} {...listeners} {...attributes} onClick={() => insertComponent(p.block)} title="点击插入到选中位置之后，或拖入画布" data-testid="part-insert">
+      <div ref={setNodeRef} {...listeners} {...attributes} onClick={() => insertComponent(p.block)} title="点击插入到选中位置之后（正在编辑原文模块时插到光标处），或拖入画布" data-testid="part-insert">
         <LazyPreview block={p.block} doc={doc} />
       </div>
       <div className="comp-info">

@@ -331,3 +331,22 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .color-swatches label { width: 24px; height: 24px; border-radius: 4px; border: 1px solid var(--line); cursor: pointer; overflow: hidden; display: block; }
 .color-swatches input { opacity: 0; width: 100%; height: 100%; padding: 0; border: 0; cursor: pointer; }
 .g-count { position: absolute; right: 2px; bottom: 2px; background: rgba(0, 0, 0, .6); color: #fff; font-size: 11px; padding: 0 4px; border-radius: 3px; }
+
+/* 清华电机 · 德国实践套件 */
+.kit-section { padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.kit-section h4 { color: #660874; }
+.kit-section .link { border: 0; background: none; color: var(--brand); padding: 0; font-size: 12px; font-weight: 400; }
+.kit-section .link:hover { text-decoration: underline; }
+.box-body .block { outline-offset: 2px; }
+.box-body .block:hover { outline-color: #d6b8dd; }
+.box-drop { height: 0; overflow: hidden; border: 1px dashed transparent; border-radius: 6px; text-align: center; color: var(--faint); font-size: 12px; letter-spacing: 0; line-height: 26px; }
+.app.dragging .box-drop { height: 28px; margin-top: 10px; border-color: #d9c6df; }
+.box-drop.empty { height: auto; min-height: 56px; margin-top: 0; padding: 10px; line-height: 1.6; border-color: #d9c6df; display: flex; align-items: center; justify-content: center; }
+.box-drop.over { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+.block-html img[data-slot] { cursor: copy; }
+.pics-edit { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 6px; }
+.pic-row { display: grid; grid-template-columns: 44px 1fr auto; gap: 6px; align-items: center; }
+.pic-row img, .pic-empty { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; display: flex; align-items: center; justify-content: center; background: #f4eef6; color: #9a7fa3; font-size: 10px; }
+.pic-row input { min-width: 0; }
+.pic-actions { display: flex; gap: 2px; }
+.pic-actions button { padding: 2px 6px; font-size: 11px; }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { blockMeta } from '../core/blocks'
+import { blockLabel, blockMeta } from '../core/blocks'
 import { displayUrl } from '../core/images'
 import { sanitizeHtml } from '../core/sanitize'
 import { setPhoto } from '../core/photos'
@@ -7,7 +7,7 @@ import { collectColors, docMainColors, fixedDecorCount, harmonize, recolorHtml }
 import { backgroundPhotos, cleanText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, setBackgroundPhoto, type SlotRole, type TextSlot } from '../core/slots'
 import { resolveTheme } from '../core/themes'
 import { richToPlain, textToRich } from '../core/richtext'
-import type { Block, ImageRef } from '../core/types'
+import type { Block, ImageRef, PicItem } from '../core/types'
 import { api, type Asset } from './api'
 import { shownRatio } from './Canvas'
 import { useStore } from './store'
@@ -270,6 +270,35 @@ const VARIANTS = {
   divider: [['auto', '跟随主题'], ['line', '细线'], ['dots', '圆点'], ['ornament', '菱形'], ['space', '留白']],
 } as const
 
+/** 套件模块的图片位：每张图都有图注位置（可留空）；轮播可以增删图片位，多图的位置数由张数决定 */
+function PicsField({ pics, onChange, removable }: { pics: PicItem[]; onChange: (pics: PicItem[], key: string) => void; removable?: boolean }) {
+  const set = (i: number, patch: Partial<PicItem>, key: string) => onChange(pics.map((x, j) => (j === i ? { ...x, ...patch } : x)), key)
+  const move = (i: number) => {
+    const a = [...pics]
+    ;[a[i - 1], a[i]] = [a[i], a[i - 1]]
+    onChange(a, 'pics')
+  }
+  return (
+    <div className="field">
+      <span>图片与图注 · 选中本模块后点击左侧素材依次放入，或把素材拖到某个图片位上</span>
+      <div className="pics-edit">
+        {pics.map((x, i) => (
+          <div key={i} className="pic-row" data-testid="pic-row">
+            {x.image ? <img src={x.image.src.startsWith('/media/') ? `${x.image.src.split('?')[0]}?fit=1:1&w=120` : x.image.src} alt="" /> : <span className="pic-empty">图片 {i + 1}</span>}
+            <input value={x.caption} placeholder="图注（可留空）" onChange={(e) => set(i, { caption: e.target.value }, `pic${i}`)} />
+            <div className="pic-actions">
+              <button title="前移" disabled={i === 0} onClick={() => move(i)}>←</button>
+              {x.image && <button title="清空图片（保留图片位）" onClick={() => set(i, { image: undefined }, 'pics')}>⌫</button>}
+              {removable && <button title="删除这个图片位" onClick={() => onChange(pics.filter((_, j) => j !== i), 'pics')}>✕</button>}
+            </div>
+          </div>
+        ))}
+      </div>
+      {removable && <button onClick={() => onChange([...pics, { caption: '' }], 'pics')}>＋ 添加图片位</button>}
+    </div>
+  )
+}
+
 export function PropsForm({ block }: { block: Block }) {
   const updateProps = useStore((s) => s.updateProps)
   const upd: Upd = (props, field) => updateProps(block.id, props, `${block.id}:${field}`)
@@ -386,10 +415,60 @@ export function PropsForm({ block }: { block: Block }) {
     case 'ending':
       body = <>{t('结尾语', 'text')}{t('引导语', 'note')}{t('署名（可多行）', 'author', true)}{img('二维码 / 图片')}</>
       break
+    case 'box':
+      body = (
+        <>
+          {t('标题', 'title')}
+          {t('小标签（德文 / 英文）', 'label')}
+          <Select label="样式" value={p.variant} options={[['plate', '紫色铭牌'], ['rule', '线框'], ['paper', '浅底']]} onChange={(v) => upd({ variant: v }, 'variant')} />
+          <p className="hint">
+            框内有 {p.children.length} 个模块。选中文本框后点击左侧模块会放进框内末尾；选中框内模块再点击，会插到它后面。
+            放进来的模块自动使用 14 号黑色正文、12 号灰色注释和文本框的宽度。
+          </p>
+        </>
+      )
+      break
+    case 'carousel':
+      body = (
+        <>
+          {t('小标签', 'label')}
+          <Select label="样式" value={p.variant} options={[['peek', '露出下一张'], ['full', '整张']]} onChange={(v) => upd({ variant: v }, 'variant')} />
+          <Select label="图片比例" value={p.ratio} options={[['4:3', '4:3'], ['3:2', '3:2'], ['16:9', '16:9'], ['1:1', '1:1'], ['3:4', '3:4']]} onChange={(v) => upd({ ratio: v }, 'ratio')} />
+          <PicsField pics={p.pics} onChange={(pics, key) => upd({ pics }, key)} removable />
+        </>
+      )
+      break
+    case 'frame':
+      body = (
+        <>
+          {img()}
+          {t('图注（可留空）', 'caption')}
+          {t(p.variant === 'ticket' ? '票根文字（如 MÜNCHEN → BERLIN）' : '角标文字（如城市德文名）', 'label')}
+          <Select label="样式" value={p.variant} options={[['flag', '三色框'], ['circuit', '电路角框'], ['ticket', '车票']]} onChange={(v) => upd({ variant: v }, 'variant')} />
+        </>
+      )
+      break
+    case 'photos': {
+      const LAYOUTS: Record<number, [string, string][]> = { 2: [['even', '并排'], ['feature', '错落']], 3: [['even', '一行三张'], ['feature', '上一下二']], 4: [['even', '田字格'], ['feature', '上一下三']] }
+      body = (
+        <>
+          <Select
+            label="张数"
+            value={p.count}
+            options={[[2, '双图'], [3, '三图'], [4, '四图']]}
+            onChange={(v) => upd({ count: v, pics: Array.from({ length: v }, (_, i) => p.pics[i] ?? { caption: '' }) }, 'count')}
+          />
+          <Select label="版式" value={p.layout} options={LAYOUTS[p.count]} onChange={(v) => upd({ layout: v }, 'layout')} />
+          {p.layout === 'even' && <Select label="图片比例" value={p.ratio} options={[['4:3', '4:3'], ['3:4', '3:4'], ['1:1', '1:1']]} onChange={(v) => upd({ ratio: v }, 'ratio')} />}
+          <PicsField pics={p.pics.slice(0, p.count)} onChange={(pics, key) => upd({ pics }, key)} />
+        </>
+      )
+      break
+    }
   }
   return (
     <div className="props-form">
-      <h4>{blockMeta(block.type).icon} {block.type === 'html' ? p.label || blockMeta(block.type).label : blockMeta(block.type).label}</h4>
+      <h4>{blockMeta(block.type).icon} {blockLabel(block)}</h4>
       {body}
     </div>
   )

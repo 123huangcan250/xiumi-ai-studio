@@ -60,6 +60,17 @@ export const THEMES: Theme[] = [
     radius: 14, imageRadius: 12,
     headingVariant: 'pill', quoteVariant: 'mark', cardVariant: 'accent', dividerVariant: 'dots', coverVariant: 'hero',
   },
+  {
+    id: 'thu-eea-de',
+    name: '清华电机·德国',
+    description: '清华紫配德国黑红金，正文 14 号黑色、注释 12 号灰色；与“清华电机 · 德国实践”套件模块配套',
+    colors: { primary: '#660874', primarySoft: '#F7F2F8', accent: '#D9A400', text: '#000000', muted: '#888888', bg: '#FFFFFF', surface: '#FAF7FB', border: '#E3D6E7' },
+    fontBody: SANS, fontHeading: SANS,
+    fontSize: 14, h1Size: 22, h2Size: 18, smallSize: 12,
+    lineHeight: 1.75, letterSpacing: 0.5, paragraphSpacing: 14, blockSpacing: 24,
+    radius: 2, imageRadius: 0,
+    headingVariant: 'number', quoteVariant: 'line', cardVariant: 'border', dividerVariant: 'line', coverVariant: 'band',
+  },
 ]
 
 const customThemes = new Map<string, Theme>()

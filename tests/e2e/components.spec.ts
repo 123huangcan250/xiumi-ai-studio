@@ -220,7 +220,19 @@ test.describe.serial('组件库', () => {
     await pasteArticle(page, GREEN)
     await page.getByTestId('article-import').click()
     await expect(page.locator('.toast')).toContainText('已导入')
+    // 现在导入时卡片会拆开：轮播单独成块，标题和图注各在自己的模块里
+    const htmlBlocks = page.locator('[data-block-type=html]')
+    const carouselBlock = htmlBlocks.filter({ has: page.locator('svg[viewBox="0 0 1080 720"]') })
+    await expect(carouselBlock).toHaveCount(1)
+    expect((await carouselBlock.innerText()).replace(/[⠿\s]/g, '')).toBe('') // 只剩拖动手柄
+    await expect(htmlBlocks.filter({ hasText: '绿色标题' })).not.toContainText('绿色图注')
 
+    // 以前导入的项目里仍是一整个大版块：在它里面按建议拆分或点选
+    const now = Date.now()
+    const old = { id: `old-${now}`, title: '以前导入的大版块', author: '', digest: '', themeId: 'minimal-magazine', createdAt: now, updatedAt: now, blocks: [{ id: 'big1', type: 'html', props: { html: GREEN.slice(0, GREEN.indexOf('<section powered-by')), label: '大版块' } }] }
+    await page.request.put(`/api/projects/${old.id}`, { data: old })
+    await page.reload()
+    await expect(page.locator('.title-input')).toHaveValue('以前导入的大版块')
     const big = page.locator('[data-block-type=html]').filter({ hasText: '绿色标题' }).first()
     await big.click({ position: { x: 5, y: 5 } })
     await page.getByTestId('collect-block').click()
@@ -269,6 +281,19 @@ test.describe.serial('组件库', () => {
     await page.getByTestId('pick-cancel').click()
     await expect(page.getByTestId('fragment-picker')).toHaveCount(0)
     await expect(canvas(page)).toContainText('绿色标题')
+
+    // 拆开以前导入的大版块：轮播单独成块，标题和图注分开；可撤销
+    await expect(htmlBlocks).toHaveCount(1)
+    await big.click({ position: { x: 5, y: 5 } })
+    await page.getByTestId('split-block').click()
+    await expect(page.locator('.toast')).toContainText('已拆成')
+    expect(await htmlBlocks.count()).toBeGreaterThan(3)
+    await expect(carouselBlock).toHaveCount(1)
+    expect((await carouselBlock.innerText()).replace(/[⠿\s]/g, '')).toBe('')
+    await expect(htmlBlocks.filter({ hasText: '绿色标题' })).not.toContainText('绿色图注')
+    await page.locator('body').click({ position: { x: 2, y: 2 } })
+    await page.keyboard.press('Control+z')
+    await expect(htmlBlocks).toHaveCount(1)
   })
 
   test('统一配色：可撤销；换背景图后就地编辑不丢失，导出时一并内嵌', async ({ page }) => {

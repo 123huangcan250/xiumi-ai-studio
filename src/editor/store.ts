@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { cloneBlock, createBlock, newId, normalizeBlocks } from '../core/blocks'
 import { applyOp, validateOp } from '../core/ops'
 import { allThemes, registerTheme } from '../core/themes'
+import { findBlock, insertBlocksAt, insertionPoint, moveBlockTo, removeBlockById, replaceBlockWith, updateBlock } from '../core/tree'
 import type { Block, BlockType, Doc, DocOp, Theme } from '../core/types'
 import { api } from './api'
 
@@ -46,11 +47,17 @@ interface State {
   setPicking: (id: string | null) => void
   setMatchColors: (on: boolean) => void
   updateProps: (id: string, props: Record<string, any>, coalesceKey?: string) => void
-  insertBlock: (typeOrBlock: BlockType | Block, index?: number) => string
+  /** index 省略时插在选中模块之后；选中的是大型文本框（或框内模块）时插入框内 */
+  insertBlock: (typeOrBlock: BlockType | Block, index?: number, parentId?: string | null) => string
   insertBlocks: (blocks: Block[], index?: number) => void
   removeBlock: (id: string) => void
+  /** 用几个模块替换一个模块（拆开模块），可撤销 */
+  replaceBlock: (id: string, blocks: Block[]) => void
   duplicateBlock: (id: string) => void
+  /** 在同一层内移动 */
   moveBlock: (id: string, to: number) => void
+  /** 移到某个文本框内（parentId）或顶层（null） */
+  moveBlockTo: (id: string, parentId: string | null, index: number) => void
   setDocFields: (fields: Partial<Doc>, coalesceKey?: string) => void
   undo: () => void
   redo: () => void
@@ -136,46 +143,55 @@ export const useStore = create<State>((set, get) => ({
   setMatchColors: (on) => set({ matchColors: on }),
   updateProps(id, props, coalesceKey) {
     const { doc, commit } = get()
-    commit({ ...doc, blocks: doc.blocks.map((b) => (b.id === id ? ({ ...b, props: { ...b.props, ...props } } as Block) : b)) }, coalesceKey)
+    commit({ ...doc, blocks: updateBlock(doc.blocks, id, (b) => ({ ...b, props: { ...b.props, ...props } }) as Block) }, coalesceKey)
   },
-  insertBlock(typeOrBlock, index) {
+  insertBlock(typeOrBlock, index, parentId = null) {
     const { doc, selectedId, commit } = get()
     const block = typeof typeOrBlock === 'string' ? createBlock(typeOrBlock) : typeOrBlock
-    const sel = doc.blocks.findIndex((b) => b.id === selectedId)
-    const at = index ?? (sel >= 0 ? sel + 1 : doc.blocks.length)
-    const blocks = [...doc.blocks]
-    blocks.splice(at, 0, block)
-    commit({ ...doc, blocks })
+    const at = index === undefined ? insertionPoint(doc.blocks, selectedId, block.type === 'box') : { parentId: block.type === 'box' ? null : parentId, index }
+    commit({ ...doc, blocks: insertBlocksAt(doc.blocks, at.parentId, at.index, [block]) })
     set({ selectedId: block.id })
     return block.id
   },
   insertBlocks(list, index) {
     const { doc, selectedId, commit } = get()
-    const sel = doc.blocks.findIndex((b) => b.id === selectedId)
-    const at = index ?? (sel >= 0 ? sel + 1 : doc.blocks.length)
-    const blocks = [...doc.blocks]
-    blocks.splice(at, 0, ...normalizeBlocks(list).map(cloneBlock))
-    commit({ ...doc, blocks })
+    const blocks = normalizeBlocks(list).map(cloneBlock)
+    const at = index === undefined ? insertionPoint(doc.blocks, selectedId, blocks.some((b) => b.type === 'box')) : { parentId: null, index }
+    commit({ ...doc, blocks: insertBlocksAt(doc.blocks, at.parentId, at.index, blocks) })
   },
   removeBlock(id) {
     const { doc, commit, selectedId } = get()
-    const i = doc.blocks.findIndex((b) => b.id === id)
-    commit({ ...doc, blocks: doc.blocks.filter((b) => b.id !== id) })
-    if (selectedId === id) set({ selectedId: doc.blocks[i + 1]?.id ?? doc.blocks[i - 1]?.id ?? null, editingId: null })
+    const at = findBlock(doc.blocks, id)
+    if (!at) return
+    const siblings = at.parent ? at.parent.props.children : doc.blocks
+    commit({ ...doc, blocks: removeBlockById(doc.blocks, id) })
+    if (selectedId === id) set({ selectedId: siblings[at.index + 1]?.id ?? siblings[at.index - 1]?.id ?? at.parent?.id ?? null, editingId: null })
+  },
+  replaceBlock(id, list) {
+    const { doc, commit } = get()
+    if (!findBlock(doc.blocks, id) || !list.length) return
+    commit({ ...doc, blocks: replaceBlockWith(doc.blocks, id, list) })
+    set({ selectedId: list[0].id, editingId: null, pickingId: null })
   },
   duplicateBlock(id) {
     const { doc, commit } = get()
-    const i = doc.blocks.findIndex((b) => b.id === id)
-    if (i < 0) return
-    const copy = cloneBlock(doc.blocks[i])
-    const blocks = [...doc.blocks]
-    blocks.splice(i + 1, 0, copy)
-    commit({ ...doc, blocks })
+    const at = findBlock(doc.blocks, id)
+    if (!at) return
+    const copy = cloneBlock(at.block)
+    commit({ ...doc, blocks: insertBlocksAt(doc.blocks, at.parent?.id ?? null, at.index + 1, [copy]) })
     set({ selectedId: copy.id })
   },
   moveBlock(id, to) {
     const { doc, commit } = get()
-    commit(applyOp(doc, { op: 'move', id, to }))
+    const at = findBlock(doc.blocks, id)
+    if (!at) return
+    if (!at.parent) commit(applyOp(doc, { op: 'move', id, to }))
+    else commit({ ...doc, blocks: moveBlockTo(doc.blocks, id, at.parent.id, to) })
+  },
+  moveBlockTo(id, parentId, index) {
+    const { doc, commit } = get()
+    const next = moveBlockTo(doc.blocks, id, parentId, index)
+    if (next !== doc.blocks) commit({ ...doc, blocks: next })
   },
   setDocFields(fields, coalesceKey) {
     get().commit({ ...get().doc, ...fields }, coalesceKey)
@@ -233,7 +249,8 @@ export const useStore = create<State>((set, get) => ({
   },
 }))
 
-export const selectedBlock = (s: State) => s.doc.blocks.find((b) => b.id === s.selectedId) ?? null
+export const selectedBlock = (s: State) => findBlock(s.doc.blocks, s.selectedId)?.block ?? null
+
 
 // ---------- 自动保存 ----------
 let timer: ReturnType<typeof setTimeout> | undefined

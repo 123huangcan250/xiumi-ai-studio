@@ -33,6 +33,16 @@ export type BlockType =
   | 'divider'
   | 'ending'
   | 'html'
+  | 'box'
+  | 'carousel'
+  | 'frame'
+  | 'photos'
+
+/** 套件图片模块的一个图片位：图片可以为空（导出时跳过），图注可以留空 */
+export interface PicItem {
+  image?: ImageRef
+  caption: string
+}
 
 export interface BlockPropsMap {
   cover: { kicker: string; title: string; subtitle: string; meta: string; image?: ImageRef; variant: 'auto' | 'hero' | 'band' | 'minimal' }
@@ -50,6 +60,15 @@ export interface BlockPropsMap {
   ending: { text: string; author: string; note: string; image?: ImageRef }
   /** 原文片段：导入的公众号版块，保留原内联样式（已清洗） */
   html: { html: string; label: string; source?: ContentSource }
+  // ---- 清华电机 · 德国实践套件 ----
+  /** 大型文本框：容器，框内可以放其他模块（不能再放文本框），框随内容自适应 */
+  box: { title: string; label: string; variant: 'plate' | 'rule' | 'paper'; children: Block[] }
+  /** 轮播：左右滑动的图集，每张图都有图注位置 */
+  carousel: { label: string; pics: PicItem[]; ratio: '4:3' | '3:2' | '16:9' | '1:1' | '3:4'; variant: 'peek' | 'full' }
+  /** 图片框：单张图片 + 装饰相框 */
+  frame: { image?: ImageRef; caption: string; label: string; variant: 'flag' | 'circuit' | 'ticket' }
+  /** 双图 / 三图 / 四图 */
+  photos: { count: 2 | 3 | 4; layout: 'even' | 'feature'; ratio: '4:3' | '3:4' | '1:1'; pics: PicItem[] }
 }
 
 /** 导入内容的来源，收藏为组件时带入，便于追溯 */

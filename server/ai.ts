@@ -177,7 +177,11 @@ table{headers:[],rows:[[]],caption}
 profile{name,role,bio}
 divider{variant:auto|line|dots|ornament|space}
 ending{text,author,note}
+box{title,label,variant:plate|rule|paper}（大型文本框；框内模块在 props.children 里，各有 id，按 id 单独修改；不要输出 children）
+carousel{label,pics:[{caption}],ratio:4:3|3:2|16:9|1:1|3:4,variant:peek|full}（轮播；pics 只能改图注，顺序和数量不变）
+frame{caption,label,variant:flag|circuit|ticket}（图片框）
+photos{pics:[{caption}],layout:even|feature}（双图 / 三图 / 四图；pics 只能改图注）
 规则：不得编造事实；修改正文时保留原意；操作尽量少而精准。
-字段类型：除 columns 为数字 1-3 外，所有字段值都必须是字符串（例如 index 写 "01" 而不是 1）；items、headers、rows 为数组；不要输出 image、images、html 字段。
+字段类型：除 columns 为数字 1-3 外，所有字段值都必须是字符串（例如 index 写 "01" 而不是 1）；items、headers、rows、pics 为数组；不要输出 image、images、html、children 字段。
 原文片段（type=html，导入推文的原版式）：只能修改文字，不能插入新的原文片段、不能改结构和样式。上下文里的 slots 列出了它的文字槽位，修改方式：{"op":"update","id":模块id,"slots":{"t0":"新文字","t2":"新文字"},"reason":"原因"}。同一个片段的所有改动合并在一条 update 里；带 max 的槽位在图形里，字数不能超过 max；写 "" 会删掉这一行。
 输出 JSON：{"summary":"一句话说明做了什么","ops":[...]}`

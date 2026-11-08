@@ -1,47 +1,24 @@
 // 微信 HTML 编译器：文档 JSON → 全内联样式 HTML。
 // 画布、手机预览、复制、草稿箱都使用同一份输出，保证所见即所得。
+import { boxParts, boxTheme, KIT_RENDERERS, KIT_TYPES, kitEmptySlots, type KitCtx } from './kit'
 import { guardHtml } from './sanitize'
+import { css, esc, safeColor } from './style'
 import { resolveTheme } from './themes'
+import { flatBlocks } from './tree'
 import type { Block, Doc, ImageRef, RichNode, RichText, Theme } from './types'
+
+export { css, esc }
 
 export interface CompileOptions {
   /** 把（已附加裁切参数的）图片地址映射为最终地址：绝对 URL / base64 / mmbiz URL */
   mapImage?: (url: string) => string
   /** 非公众号文章链接的处理方式；微信会过滤外链，默认转成文字 */
   externalLinks?: 'text' | 'keep'
+  /** 仅画布：显示空图片位、空图注的占位提示（不进入导出结果） */
+  hints?: boolean
+  /** 模块位于大型文本框内：按文本框的字号、颜色和间距自适应 */
+  inBox?: boolean
 }
-
-// 只允许经过验证、在公众号编辑器中通用的属性；其他属性直接丢弃。
-const ALLOWED_CSS = new Set([
-  'margin', 'margin-top', 'margin-bottom', 'margin-left', 'margin-right',
-  'padding', 'padding-top', 'padding-bottom', 'padding-left', 'padding-right',
-  'font-size', 'font-weight', 'font-family', 'font-style', 'color', 'background-color',
-  'line-height', 'letter-spacing', 'text-align', 'text-indent', 'text-decoration',
-  'border', 'border-top', 'border-bottom', 'border-left', 'border-right', 'border-radius', 'border-collapse',
-  'width', 'max-width', 'height', 'display', 'vertical-align', 'box-sizing', 'overflow',
-  'word-break', 'white-space', 'box-shadow', 'opacity',
-])
-const UNSAFE_VALUE = /(expression|javascript:|url\(|var\(|@import|<|>)/i
-
-export function css(decls: Record<string, string | number | undefined | false>): string {
-  let out = ''
-  for (const [k, v] of Object.entries(decls)) {
-    if (v === undefined || v === false || v === '') continue
-    if (!ALLOWED_CSS.has(k)) continue
-    const val = v === 0 ? '0' : typeof v === 'number' && k !== 'line-height' && k !== 'opacity' && k !== 'font-weight' ? `${v}px` : String(v)
-    if (UNSAFE_VALUE.test(val)) continue
-    // 样式写在 style="..." 中：字体名的双引号必须换成单引号，否则会截断属性
-    out += `${k}:${val.replace(/"/g, "'")};`
-  }
-  return out
-}
-
-export function esc(s: unknown): string {
-  return (s === null || s === undefined ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
-
-const COLOR_RE = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\))$/i
-const safeColor = (c: unknown) => (typeof c === 'string' && COLOR_RE.test(c.trim()) ? c.trim() : undefined)
 
 /** 给本地素材附加裁切参数（服务器用 sharp 生成对应尺寸） */
 export function variantUrl(src: string, fit?: string, w = 1080): string {
@@ -52,12 +29,18 @@ export function variantUrl(src: string, fit?: string, w = 1080): string {
   return `${src.split('?')[0]}?${q}`
 }
 
-class Ctx {
+class Ctx implements KitCtx {
   t: Theme
   opts: CompileOptions
   constructor(t: Theme, opts: CompileOptions) {
     this.t = t
     this.opts = opts
+  }
+  get hints() {
+    return !!this.opts.hints
+  }
+  get inBox() {
+    return !!this.opts.inBox
   }
   get c() {
     return this.t.colors
@@ -179,7 +162,7 @@ export function renderRich(rich: RichText | undefined, ctx: Ctx, align = 'justif
 // ---------- 模块 ----------
 
 type Renderer<T extends Block['type']> = (b: Extract<Block, { type: T }>, ctx: Ctx) => string
-type Renderers = { [K in Exclude<Block['type'], 'html'>]: Renderer<K> }
+type Renderers = { [K in Exclude<Block['type'], 'html' | (typeof KIT_TYPES)[number]>]: Renderer<K> }
 
 const R: Renderers = {
   cover(b, ctx) {
@@ -481,10 +464,28 @@ function renderHtml(b: Extract<Block, { type: 'html' }>, ctx: Ctx): string {
     .replace(MEDIA_BG, (_m, q, u) => `url(${q}${esc(map(u.replace(/&amp;/g, '&')))}${q})`)
 }
 
+/** 文本框内子模块之间的间距 */
+export const BOX_GAP = 16
+
 export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = {}): string {
-  const ctx = new Ctx(theme, opts)
+  // 文本框内的模块统一使用文本框的字号、颜色和间距
+  const t = opts.inBox ? boxTheme(theme) : theme
+  const ctx = new Ctx(t, opts)
   if (block.type === 'html') return renderHtml(block, ctx)
-  const render = R[block.type as Exclude<Block['type'], 'html'>] as Renderer<Exclude<Block['type'], 'html'>>
+  if (block.type === 'box') {
+    const parts = boxParts(block.props, ctx)
+    const kids = block.props.children.filter((c) => c.type !== 'box')
+    const inner = kids
+      .map((c, i) => {
+        const html = compileBlock(c, theme, { ...opts, inBox: true })
+        return `<section style="${css({ 'margin-bottom': i === kids.length - 1 ? 0 : BOX_GAP })}">${html}</section>`
+      })
+      .join('')
+    return `<section style="${parts.outer}">${parts.header}<section style="${parts.body}">${inner}</section>${parts.footer}</section>`
+  }
+  const kit = KIT_RENDERERS[block.type as keyof typeof KIT_RENDERERS] as ((b: Block, ctx: KitCtx) => string) | undefined
+  if (kit) return kit(block, ctx)
+  const render = R[block.type as keyof Renderers] as Renderer<keyof Renderers>
   return render(block as never, ctx)
 }
 
@@ -525,6 +526,8 @@ export function compileDoc(doc: Doc, opts: CompileOptions = {}): CompileResult {
     parts.join('') +
     `</section>`
   const warnings = lintWechatHtml(html)
+  const empty = flatBlocks(doc.blocks).reduce((n, b) => n + kitEmptySlots(b), 0)
+  if (empty) warnings.push(`有 ${empty} 个图片位置还没放图片，导出时会留空`)
   if (failed.length) warnings.unshift(`第 ${failed.join('、')} 个模块数据异常，已跳过输出`)
   return { html, charCount: html.length, warnings }
 }

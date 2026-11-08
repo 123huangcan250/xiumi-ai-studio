@@ -1,6 +1,7 @@
 import { coerceProps, createBlock, isBlockType, newId } from './blocks'
 import { richToPlain } from './richtext'
 import { extractSlots, fillSlots } from './slots'
+import { findBlock, flatBlocks, removeBlockById, updateBlock } from './tree'
 import type { Block, Doc, DocOp } from './types'
 
 /** 校验并修复一条 op；非法时返回错误信息 */
@@ -16,7 +17,8 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
       return { op: { op: 'insert', index, block, reason: op.reason } }
     }
     case 'update': {
-      const b = doc.blocks.find((x) => x.id === op.id)
+      // 大型文本框里的模块也可以按 id 修改
+      const b = findBlock(doc.blocks, op.id)?.block
       if (!b) return { error: `找不到模块 ${op.id}` }
       // 原文片段：只接受文字槽位，HTML 由槽位在当前内容上重新计算（不信任传入的 props.html）
       if (b.type === 'html') {
@@ -32,12 +34,19 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
         if (!Object.keys(slots).length) return { error: `修改 ${op.id} 没有有效的文字槽位` }
         return { op: { op: 'update', id: op.id, props: { html: fillSlots(b.props.html, slots, { split: false }) }, slots, reason: op.reason } }
       }
-      const props = coerceProps(b.type, op.props, true)
+      const props: Record<string, any> = coerceProps(b.type, op.props, true)
+      // 文本框的子模块只能逐个修改，不能整体替换（避免丢内容）
+      delete props.children
+      // 图片位：AI 只能改图注，图片和位置保持不变
+      if (props.pics && 'pics' in b.props) {
+        const given = props.pics as { caption: string }[]
+        props.pics = b.props.pics.map((old, i) => ({ ...old, caption: given[i]?.caption ?? old.caption }))
+      }
       if (!Object.keys(props).length) return { error: `修改 ${op.id} 没有有效字段` }
       return { op: { op: 'update', id: op.id, props, reason: op.reason } }
     }
     case 'remove':
-      return doc.blocks.some((x) => x.id === op.id) ? { op } : { error: `找不到模块 ${op.id}` }
+      return findBlock(doc.blocks, op.id) ? { op } : { error: `找不到模块 ${op.id}` }
     case 'move':
       return doc.blocks.some((x) => x.id === op.id) ? { op: { ...op, to: Number(op.to) || 0 } } : { error: `找不到模块 ${op.id}` }
     case 'setTheme':
@@ -56,9 +65,9 @@ export function applyOp(doc: Doc, op: DocOp): Doc {
       blocks.splice(op.index, 0, { ...op.block, id: op.block.id || newId() })
       return { ...doc, blocks }
     case 'update':
-      return { ...doc, blocks: blocks.map((b) => (b.id === op.id ? ({ ...b, props: { ...b.props, ...op.props } } as Block) : b)) }
+      return { ...doc, blocks: updateBlock(blocks, op.id, (b) => ({ ...b, props: { ...b.props, ...op.props } }) as Block) }
     case 'remove':
-      return { ...doc, blocks: blocks.filter((b) => b.id !== op.id) }
+      return { ...doc, blocks: removeBlockById(blocks, op.id) }
     case 'move': {
       const from = blocks.findIndex((b) => b.id === op.id)
       if (from < 0) return doc
@@ -86,12 +95,12 @@ export function describeOp(doc: Doc, op: DocOp): { title: string; before?: strin
     case 'insert':
       return { title: `在第 ${op.index + 1} 位插入 ${op.block.type}`, after: summarize(op.block) }
     case 'update': {
-      const b = doc.blocks.find((x) => x.id === op.id)
+      const b = findBlock(doc.blocks, op.id)?.block
       const after = b ? summarize({ ...b, props: { ...b.props, ...op.props } } as Block) : ''
       return { title: `修改 ${label(b)}`, before: b ? summarize(b) : '', after }
     }
     case 'remove': {
-      const b = doc.blocks.find((x) => x.id === op.id)
+      const b = findBlock(doc.blocks, op.id)?.block
       return { title: `删除 ${label(b)}`, before: b ? summarize(b) : '' }
     }
     case 'move': {
@@ -124,6 +133,14 @@ export function summarize(b: Block): string {
       return `图片 ${p.caption ?? ''}`
     case 'divider':
       return `分割 ${p.variant}`
+    case 'box':
+      return [p.title, ...flatBlocks(p.children).map(summarize)].filter(Boolean).join('；')
+    case 'carousel':
+      return `轮播 ${p.pics.filter((x: any) => x.image).length} 张图 ${p.pics.map((x: any) => x.caption).filter(Boolean).join(' / ')}`
+    case 'photos':
+      return `${p.count} 张图 ${p.pics.map((x: any) => x.caption).filter(Boolean).join(' / ')}`
+    case 'frame':
+      return `图片框 ${[p.caption, p.label].filter(Boolean).join(' · ')}`
     case 'html':
       return `${p.label}：${String(p.html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)}`
     default:

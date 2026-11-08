@@ -8,7 +8,7 @@ import { displayHtml, rehostUrls, rewriteImages } from '../core/images'
 import { analyzeStyle, themeFromReport } from '../core/styleExtract'
 import { registerTheme } from '../core/themes'
 import type { Block, Doc, SourceKind } from '../core/types'
-import { articleToHtmlBlocks, articleToMarkdown, extractArticle, type ImportedArticle } from '../core/wxImport'
+import { articleToHtmlBlocks, articleToMarkdown, cardContent, extractArticle, type ImportedArticle } from '../core/wxImport'
 import { api, assetRef, type Asset } from './api'
 import { ImportWizard } from './ImportWizard'
 import { Modal } from './Modal'
@@ -98,9 +98,9 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
       let kept: Block[] = blocks.map((b) => (b.type === 'html' ? { ...b, props: { ...b.props, source } } : b))
       const urls = [...new Set(kept.flatMap((b) => (b.type === 'html' ? rehostUrls(b.props.html, parse) : [])))]
       let rehostFailed = 0
+      const map: Record<string, string> = {}
       if (urls.length) {
         setBusy(`转存 ${urls.length} 张图片…`)
-        const map: Record<string, string> = {}
         for (let i = 0; i < urls.length; i += 60) {
           const got = await api.fetchAssets(urls.slice(i, i + 60)).catch(() => ({}) as Record<string, Asset>)
           for (const [u, a] of Object.entries(got)) map[u] = `/media/${a.file}`
@@ -130,9 +130,12 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
       let repeated = 0
       if (asComponents) {
         setBusy('加入组件库…')
-        for (const b of kept) {
+        for (const [i, b] of kept.entries()) {
           if (b.type !== 'html') continue
-          for (const piece of componentPieces(b.props.html, b.props.label, parse)) {
+          // 从卡片里拆出来的模块按卡片里的原始内容收藏：外壳按位置调整过边距，会让同样的结构指纹不同
+          const content = cardContent.get(blocks[i])
+          const html = content ? (urls.length ? rewriteImages(content, map, parse) : content) : b.props.html
+          for (const piece of componentPieces(html, b.props.label, parse)) {
             const block = createBlock('html', { html: piece.html, label: piece.label, source })
             const r = await api.saveComponent(makeDraft({ name: piece.label, block, source, via: 'import', attested: authorized }, parse))
             if (r.duplicate) repeated++
