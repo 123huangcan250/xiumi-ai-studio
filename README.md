@@ -45,7 +45,7 @@ pnpm check   # ESLint + TypeScript + Vitest 单元测试
 pnpm e2e     # Playwright：验收流程 + 剪贴板 + 截图回归（首次运行生成基线）
 ```
 
-**微信兼容性**：自动化测试只覆盖静态规则、HTML 结构与剪贴板内容；**尚未在真实公众号后台粘贴验证**。请按 [docs/03-wechat-compat-test.md](docs/03-wechat-compat-test.md) 人工测试并记录。
+**微信兼容性**：自动化测试只覆盖静态规则、HTML 结构与剪贴板内容；**在微信公众号平台验证过部分功能，目前最建议的方法是在xiumi-ai-studio平台导出HTML文件，然后导入xiumi平台，之后同步到微信公众号**，。请按 [docs/03-wechat-compat-test.md](docs/03-wechat-compat-test.md) 人工测试并记录。
 
 ## 目录
 
