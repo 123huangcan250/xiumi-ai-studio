@@ -27,7 +27,7 @@ export default defineConfig({
     },
     {
       command: 'npx vite --port 5273 --strictPort',
-      env: { API_PORT: '5274' },
+      env: { API_PORT: '5274', VITE_CACHE_DIR: 'node_modules/.vite-e2e' },
       port: 5273,
       reuseExistingServer: false,
     },

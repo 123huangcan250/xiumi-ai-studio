@@ -294,13 +294,16 @@ export function fillSlots(html: string, values: SlotValues, opts: FillOptions = 
   const { parse = defaultParse, ratios, split = true, bold = true } = opts
   const root = rootOf(html, parse)
   const doc = root.ownerDocument
+  const emptied: Element[] = []
   for (const { slot, node } of scan(root)) {
     const v = values[slot.id]
     if (v === undefined || v === null) continue
     if (slot.kind === 'image') {
       // 照片比照片位少：移除这个照片位和它的相框，不保留模板里的旧照片
       if (v === '') {
-        frameOf(node as Element, root).remove()
+        const frame = frameOf(node as Element, root)
+        if (frame.parentElement) emptied.push(frame.parentElement)
+        frame.remove()
         continue
       }
       if (typeof v !== 'object' || !SAFE_SRC.test(v.src)) continue
@@ -310,8 +313,56 @@ export function fillSlots(html: string, values: SlotValues, opts: FillOptions = 
       img.removeAttribute('height')
       continue
     }
-    if (typeof v === 'string') writeText(node, v, slot.role, doc, split, bold)
+    if (typeof v === 'string') {
+      // 删掉的图注、标题行：它的外框（引号装饰、色条）可能也随之变空
+      if (!v.trim() && node.parentElement && slot.role !== 'body') emptied.push(node.parentElement)
+      writeText(node, v, slot.role, doc, split, bold)
+    }
   }
+  // 照片位、图注移除后，只剩编号标签（IMG 01）、图标和空框的区域一并移除：向外找到不含中文、不含照片的最外层
+  for (const start of emptied) {
+    let top: Element | null = null
+    for (let el: Element | null = start; el && el !== root && el.isConnected; el = el.parentElement) {
+      if (/[一-鿿]/.test(el.textContent ?? '') || Array.from(el.querySelectorAll('img')).some((x) => !isDecorImg(x))) break
+      top = el
+    }
+    top?.remove()
+  }
+  return root.innerHTML
+}
+
+/** 大型容器里装的一项：一段段文字（沿用容器正文的段落样式），或一段现成的模块 HTML */
+export type NestPiece = { lines: string[] } | { html: string }
+
+/**
+ * 把内容装进容器：先按 values 清理容器里的其他文字和照片位，再在第一个正文位的位置依次放入各项。
+ * 容器没有正文位时返回 null，由调用方改为逐项排列。
+ */
+export function nestInto(html: string, pieces: NestPiece[], values: SlotValues, opts: FillOptions = {}): string | null {
+  const { parse = defaultParse } = opts
+  const body = extractSlots(html, parse).find((s) => s.kind === 'text' && s.role === 'body')
+  if (!body) return null
+  // 记号里带中文：清理空照片区域时不会把正文位当作空区域删掉
+  const MARK = '@@嵌入内容@@'
+  const root = rootOf(fillSlots(html, { ...values, [body.id]: MARK }, { ...opts, split: false }), parse)
+  const doc = root.ownerDocument
+  const hit = scan(root).find((h) => h.slot.kind === 'text' && h.slot.text === MARK)
+  if (!hit || hit.node.nodeType !== 1) return null
+  const anchor = hit.node as Element
+  for (const p of pieces) {
+    if ('lines' in p) {
+      for (const line of p.lines) {
+        const c = anchor.cloneNode(true) as Element
+        setLine(c, line, doc, true)
+        anchor.before(c)
+      }
+    } else {
+      const box = doc.createElement('section')
+      box.innerHTML = p.html
+      anchor.before(box)
+    }
+  }
+  anchor.remove()
   return root.innerHTML
 }
 

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { nanoid } from 'nanoid'
 import { COMPONENT_SCHEMA, normalizeTags, validateDraft, type LibraryComponent } from '../src/core/components'
+import { isRoleId, roleDef } from '../src/core/roles'
 import { collection, DIRS } from './store'
 
 const col = collection<LibraryComponent>(DIRS.components)
@@ -33,7 +34,7 @@ export async function saveComponent(raw: unknown): Promise<{ component: LibraryC
   return { component, duplicate: false }
 }
 
-/** 只允许修改名称、类别和标签；内容要改就重新收藏 */
+/** 只允许修改名称、标准名称、类别和标签；内容要改就重新收藏 */
 export async function updateComponent(id: string, raw: any): Promise<LibraryComponent> {
   const c = await col.get(id)
   if (!c) throw httpError('组件不存在', 404)
@@ -42,6 +43,8 @@ export async function updateComponent(id: string, raw: any): Promise<LibraryComp
     ...(typeof raw?.name === 'string' && raw.name.trim() && { name: raw.name.trim().slice(0, 40) }),
     ...(Array.isArray(raw?.tags) && { tags: normalizeTags(raw.tags) }),
     ...(typeof raw?.kind === 'string' && ['cover', 'heading', 'body', 'image', 'mixed', 'ending', 'decor'].includes(raw.kind) && { kind: raw.kind }),
+    // 标准名称决定类别
+    ...(isRoleId(raw?.role) && { role: raw.role, ...(raw.role !== 'other' && { kind: roleDef(raw.role).kind }) }),
     rev: c.rev + 1,
     updatedAt: Date.now(),
   }

@@ -1,12 +1,16 @@
 // 组件库的操作：画布、左侧面板和拖放共用，放在这里避免循环依赖。
 import { compileBlock } from '../core/compiler'
-import { componentBlock, type ComponentOrigin } from '../core/components'
+import { componentBlock, type ComponentOrigin, type LibraryComponent } from '../core/components'
 import { collectColors, docMainColors, harmonize, recolorHtml } from '../core/recolor'
+import { guessRole, type RoleId } from '../core/roles'
 import { resolveTheme } from '../core/themes'
 import type { Block, ContentSource } from '../core/types'
 import { useStore } from './store'
 
 export const parseDoc = (s: string) => new DOMParser().parseFromString(s, 'text/html')
+
+/** 组件的标准名称：旧组件没有分类时按内容自动识别 */
+export const componentRole = (c: Pick<LibraryComponent, 'role' | 'block' | 'name'>): RoleId => c.role || guessRole(c.block, { parse: parseDoc, label: c.name })
 
 /** 正在就地编辑的原文模块：点击插入组件时放到它的光标处，返回 false 表示没有可用的光标位置 */
 let inlineTarget: ((html: string) => boolean) | null = null

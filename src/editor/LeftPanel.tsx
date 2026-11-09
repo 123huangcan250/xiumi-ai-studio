@@ -4,6 +4,7 @@ import { BLOCK_TYPES, blockMeta, cloneBlock, createBlock } from '../core/blocks'
 import { addPicTo } from '../core/photos'
 import type { BlockType } from '../core/types'
 import { api, assetRef, type Asset, type ProjectSummary, type Template } from './api'
+import { TemplateModules } from './TemplateModules'
 import { ComponentLibrary } from './ComponentLibrary'
 import { CropModal } from './CropModal'
 import { KIT_ITEMS, KIT_THEME_ID, type KitItem } from './kitItems'
@@ -83,6 +84,7 @@ export function LeftPanel() {
   const [tab, setTab] = useState<Tab>('blocks')
   const [assets, setAssets] = useState<Asset[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
+  const [viewing, setViewing] = useState<Template | null>(null)
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [cropping, setCropping] = useState<Asset | null>(null)
   const [busy, setBusy] = useState(false)
@@ -228,6 +230,9 @@ export function LeftPanel() {
                   >
                     套用
                   </button>
+                  <button title="查看模板里的模块，确认每个模块的标准名称" onClick={() => setViewing(t)} data-testid="template-modules">
+                    模块
+                  </button>
                   <button
                     title="用此模板新建项目"
                     onClick={async () => {
@@ -254,6 +259,7 @@ export function LeftPanel() {
               </div>
             ))}
             {!templates.length && <p className="empty">还没有收藏的模板</p>}
+            {viewing && <TemplateModules template={viewing} onClose={() => setViewing(null)} />}
           </>
         )}
 

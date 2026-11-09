@@ -1,4 +1,5 @@
 import type { ComponentDraft, LibraryComponent } from '../core/components'
+import type { RoleId } from '../core/roles'
 import type { Block, Doc, ImageRef, Theme } from '../core/types'
 
 export interface Asset {
@@ -51,6 +52,8 @@ export interface Template {
   blocks: Block[]
   themeId?: string
   themeOverrides?: Doc['themeOverrides']
+  /** 模块 id → 标准名称（用户确认过的）；没有时套用前自动识别 */
+  roles?: Record<string, RoleId>
   createdAt: number
 }
 
@@ -97,9 +100,10 @@ export const api = {
   saveTemplate: (name: string, blocks: Block[], theme?: Pick<Doc, 'themeId' | 'themeOverrides'>) =>
     req<Template>('POST', '/api/templates', { name, blocks, themeId: theme?.themeId, themeOverrides: theme?.themeOverrides }),
   deleteTemplate: (id: string) => req('DELETE', `/api/templates/${id}`),
+  updateTemplate: (id: string, patch: { name?: string; roles?: Record<string, RoleId> }) => req<Template>('PUT', `/api/templates/${id}`, patch),
   components: () => req<LibraryComponent[]>('GET', '/api/components'),
   saveComponent: (draft: ComponentDraft) => req<{ component: LibraryComponent; duplicate: boolean }>('POST', '/api/components', draft),
-  updateComponent: (id: string, patch: { name?: string; tags?: string[]; kind?: string }) => req<LibraryComponent>('PUT', `/api/components/${id}`, patch),
+  updateComponent: (id: string, patch: { name?: string; tags?: string[]; kind?: string; role?: RoleId }) => req<LibraryComponent>('PUT', `/api/components/${id}`, patch),
   deleteComponent: (id: string) => req('DELETE', `/api/components/${id}`),
   themes: () => req<Theme[]>('GET', '/api/themes'),
   saveTheme: (t: Theme) => req('POST', '/api/themes', t),
@@ -111,7 +115,8 @@ export const api = {
   testAi: (p: AiProfile) => req<{ ok: boolean; reply: unknown; ms: number }>('POST', '/api/settings/ai/test', p),
   aiOutline: (text: string, imageNames: string[], imageNotes: string[] = [], profileId?: string) => req<any>('POST', '/api/ai/outline', { text, imageNames, imageNotes, profileId }),
   aiDesign: (brief: unknown, hint: string, profileId?: string) => req<{ designs: any[] }>('POST', '/api/ai/design', { brief, hint, profileId }),
-  aiTemplateFill: (body: { text: string; photos: string[]; catalog: unknown; hint: string; profileId?: string }) => req<any>('POST', '/api/ai/template-fill', body),
+  aiCopywrite: (body: { brief: string; style: string; length: string; levels: number; extra: string; previous?: string; revise?: string; profileId?: string }) => req<{ markdown?: string }>('POST', '/api/ai/copywrite', body),
+  aiPlacePhotos: (body: unknown) => req<{ placements?: unknown[] }>('POST', '/api/ai/place-photos', body),
   aiEdit: (context: unknown, instruction: string, profileId?: string) => req<{ summary: string; ops: any[] }>('POST', '/api/ai/edit', { context, instruction, profileId }),
   fetchReference: (url: string) => req<{ html: string }>('POST', '/api/reference/fetch', { url }),
   fetchArticle: (url: string) => req<{ html: string }>('POST', '/api/article/fetch', { url }),

@@ -350,3 +350,64 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .pic-row input { min-width: 0; }
 .pic-actions { display: flex; gap: 2px; }
 .pic-actions button { padding: 2px 6px; font-size: 11px; }
+
+/* AI 生成文案 */
+.copywriter { display: grid; grid-template-columns: minmax(0, 420px) minmax(0, 1fr); gap: 18px; }
+.cw-form textarea, .cw-form input { width: 100%; }
+.cw-form .field input { margin-top: 6px; }
+.cw-result { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cw-legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 12px; color: var(--muted, #666); }
+.cw-legend b, .cw-legend span { background: #f5f6f8; border-radius: 4px; padding: 2px 6px; font-family: ui-monospace, Consolas, monospace; font-weight: normal; }
+.cw-text { width: 100%; min-height: 46vh; resize: vertical; font-size: 13px; line-height: 1.7; }
+.cw-check { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12px; color: var(--faint); }
+.cw-check .warn { flex-basis: 100%; margin: 0; }
+.row .grow { flex: 1; min-width: 0; }
+@media (max-width: 900px) { .copywriter { grid-template-columns: 1fr; } }
+
+/* 模板模块 / 组件挑选 */
+.tm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; max-height: 64vh; overflow: auto; padding: 2px; }
+.tm-card { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; background: #fff; text-align: left; padding: 0; }
+.tm-card.pick { cursor: pointer; }
+.tm-card.pick.on { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-soft); }
+.tm-info { display: flex; flex-direction: column; gap: 4px; padding: 8px; font-size: 12px; }
+.tm-info small { color: var(--faint); }
+.tm-info em { color: #b25b00; font-style: normal; }
+.comp-preview.tall { height: 200px; overflow: hidden auto; }
+
+/* 本次使用的模块 */
+.tpl-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); }
+.tpl-chip.on { border-color: var(--brand); background: var(--brand-soft); }
+.tpl-chip .link { padding: 0; color: inherit; }
+.tpl-chip .link + .link { color: var(--brand); border-left: 1px solid var(--line); padding-left: 6px; }
+.kit-comps { margin-top: 8px; }
+.kit-comps .chip .link { padding: 0 0 0 4px; }
+.kit-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+.kit-table th { text-align: left; font-weight: normal; width: 150px; padding: 3px 4px; white-space: nowrap; }
+.kit-table th .link { padding: 0; color: var(--text); }
+.kit-table td { padding: 3px 4px; }
+.kit-table td select { max-width: 340px; font-size: 12px; }
+.kit-table td small { color: #b25b00; }
+.kit-table tr.off th .link { color: var(--faint); text-decoration: line-through; }
+
+/* 照片：组和指定位置 */
+.photo-list li { grid-template-columns: 34px 56px minmax(0, 1fr) 18px; }
+.photo-no { display: flex; align-items: center; gap: 2px; font-size: 12px; color: var(--faint); cursor: pointer; }
+.photo-fields { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.anchor input { width: 100%; font-size: 12px; }
+.anchor small, .photo-group small { font-size: 11px; }
+.ok { color: #2f8a3c; }
+.bad { color: var(--danger); }
+.group-tag { color: var(--brand); font-size: 12px; }
+.photo-group { border: 1px dashed var(--brand); border-radius: 8px; padding: 8px; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; font-size: 12px; background: #fbfaff; }
+.photo-group select { font-size: 12px; }
+
+/* 排版前确认 */
+.plan-issues { border: 1px solid #f0c27a; background: #fffaf0; border-radius: var(--radius); padding: 10px 12px; margin-top: 10px; }
+.plan-issues h5 { margin: 0 0 6px; font-size: 13px; }
+.plan-issues .issue { border-top: 1px dashed #f0c27a; padding: 8px 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.plan-issues .issue p { margin: 0; }
+.plan-issues .issue input:not([type]) { width: 100%; }
+.plan-issues .check select { margin-left: 6px; }
+.role-tag { color: var(--brand); }
+.role-tag.guess { color: var(--faint); }
+.comp-role-filter { width: 100%; margin: 6px 0; }

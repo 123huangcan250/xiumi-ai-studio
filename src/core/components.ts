@@ -7,6 +7,7 @@ import { toHsl } from './color'
 import { clusterHues, collectColors, fixedDecorCount } from './recolor'
 import { guardHtml, sanitizeHtml } from './sanitize'
 import { skeleton, type Parse } from './slots'
+import { guessRole, isRoleId, roleDef, type RoleId } from './roles'
 import { guessKind, type PartKind } from './templateFill'
 import type { Block, ContentSource, SourceKind } from './types'
 
@@ -31,6 +32,8 @@ export interface LibraryComponent {
   rev: number
   name: string
   kind: PartKind
+  /** 标准名称（一级标题、双图左右……）；旧数据为空，表示未分类 */
+  role?: RoleId | ''
   tags: string[]
   block: Block
   /** 结构指纹：文字图片不同但样式相同的组件指纹相同，用于去重 */
@@ -69,15 +72,17 @@ export function fingerprint(block: Block, parse: Parse = defaultParse): string {
 }
 
 /** 生成待保存的组件：统计槽位、颜色和指纹；导入内容必须已确认使用权 */
-export function makeDraft(input: { name: string; kind?: PartKind; tags?: string[]; block: Block; source: ContentSource; via: ComponentOrigin['via']; attested: boolean }, parse: Parse = defaultParse): ComponentDraft {
+export function makeDraft(input: { name: string; kind?: PartKind; role?: RoleId; tags?: string[]; block: Block; source: ContentSource; via: ComponentOrigin['via']; attested: boolean }, parse: Parse = defaultParse): ComponentDraft {
   const { block, source } = input
+  const role = input.role ?? guessRole(block, { parse, label: input.name })
   const html = block.type === 'html'
   const content = html ? block.props.html : ''
   const colors = html ? clusterHues(collectColors(content, parse)).map((g) => g.rep.hex) : []
   const text = html ? (parse(`<!doctype html><body>${content}`).body.textContent ?? '').replace(/\s+/g, ' ').trim() : JSON.stringify(block.props).replace(/[{}[\]"]/g, ' ')
   return {
     name: input.name.trim() || '未命名组件',
-    kind: input.kind ?? guessKind(block, parse),
+    kind: input.kind ?? (role === 'other' ? guessKind(block, parse) : roleDef(role).kind),
+    role,
     // 轮播没有文字可搜，自动带上标签
     tags: normalizeTags([...(input.tags ?? []), ...(html && isCarousel(content, parse) ? ['轮播'] : [])]),
     block,
@@ -119,7 +124,8 @@ export function validateDraft(raw: any): { draft?: ComponentDraft; error?: strin
   return {
     draft: {
       name: str(raw.name, 40).trim() || '未命名组件',
-      kind: KINDS.includes(raw.kind) ? raw.kind : 'body',
+      kind: isRoleId(raw.role) && raw.role !== 'other' ? roleDef(raw.role).kind : KINDS.includes(raw.kind) ? raw.kind : 'body',
+      role: isRoleId(raw.role) ? raw.role : '',
       tags: normalizeTags(raw.tags),
       block,
       fingerprint: str(raw.fingerprint, 80),
@@ -177,16 +183,19 @@ export function hueFamily(hex?: string): HueFamily {
 export interface ComponentQuery {
   text?: string
   kind?: PartKind | ''
+  role?: RoleId | ''
   hue?: HueFamily | ''
 }
 
 /** 按文字（名称、标签、内容、来源）、类别、主色系筛选 */
-export function searchComponents<T extends Pick<LibraryComponent, 'name' | 'kind' | 'tags' | 'text' | 'palette' | 'origin'>>(list: T[], q: ComponentQuery): T[] {
+export function searchComponents<T extends Pick<LibraryComponent, 'name' | 'kind' | 'role' | 'tags' | 'text' | 'palette' | 'origin'>>(list: T[], q: ComponentQuery, roleOf: (c: T) => RoleId | '' = (c) => c.role ?? ''): T[] {
   const words = (q.text ?? '').toLowerCase().split(/\s+/).filter(Boolean)
   return list.filter((c) => {
     if (q.kind && c.kind !== q.kind) return false
+    if (q.role && roleOf(c) !== q.role) return false
     if (q.hue && hueFamily(c.palette[0]) !== q.hue) return false
-    const hay = [c.name, ...c.tags, c.text, c.origin.title, c.origin.account, KIND_LABEL[c.kind]].join(' ').toLowerCase()
+    const role = roleOf(c)
+    const hay = [c.name, ...c.tags, c.text, c.origin.title, c.origin.account, KIND_LABEL[c.kind], role ? roleDef(role).name : ''].join(' ').toLowerCase()
     return words.every((w) => hay.includes(w))
   })
 }

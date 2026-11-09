@@ -5,15 +5,17 @@ import { blockMeta } from '../core/blocks'
 import { compileBlock } from '../core/compiler'
 import { fingerprint, HUE_FAMILIES, KIND_LABEL, searchComponents, SOURCE_LABEL, type HueFamily, type LibraryComponent } from '../core/components'
 import { displayHtml } from '../core/images'
+import { ROLES, roleDef, type RoleId } from '../core/roles'
 import { buildCatalog, type Part, type PartKind } from '../core/templateFill'
 import { resolveTheme } from '../core/themes'
 import type { Block, Doc } from '../core/types'
 import { api, type Template } from './api'
-import { insertComponent, openCollect, parseDoc } from './componentActions'
+import { componentRole, insertComponent, openCollect, parseDoc } from './componentActions'
+import { RoleSelect } from './RoleSelect'
 import { useStore } from './store'
 
 /** 进入可视区才渲染预览：组件可能很大（含 SVG 轮播），离开可视区就卸载 */
-function LazyPreview({ block, doc }: { block: Block; doc: Doc }) {
+export function LazyPreview({ block, doc, tall }: { block: Block; doc: Pick<Doc, 'themeId' | 'themeOverrides'>; tall?: boolean }) {
   const box = useRef<HTMLDivElement>(null)
   const [shown, setShown] = useState(false)
   useEffect(() => {
@@ -34,7 +36,7 @@ function LazyPreview({ block, doc }: { block: Block; doc: Doc }) {
     }
   }, [shown, block, doc])
   return (
-    <div className="comp-preview" ref={box}>
+    <div className={`comp-preview${tall ? ' tall' : ''}`} ref={box}>
       <div className="comp-inner" dangerouslySetInnerHTML={{ __html: html }} />
     </div>
   )
@@ -45,6 +47,7 @@ function ComponentCard({ c, doc, onChanged }: { c: LibraryComponent; doc: Doc; o
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(c.name)
   const [tags, setTags] = useState(c.tags.join(' '))
+  const [role, setRole] = useState<RoleId>(componentRole(c))
   const { attributes, listeners, setNodeRef } = useDraggable({ id: `comp:${c.id}`, data: { block: c.block, missing: c.missing, label: c.name } })
   const photos = c.stats.photos + c.stats.bgPhotos
   return (
@@ -56,13 +59,14 @@ function ComponentCard({ c, doc, onChanged }: { c: LibraryComponent; doc: Doc; o
         <div className="comp-edit">
           <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} data-testid="component-name" />
           <input value={tags} placeholder="标签，空格分隔" onChange={(e) => setTags(e.target.value)} data-testid="component-tags" />
+          <RoleSelect value={role} onChange={setRole} testId="component-role" />
           <div className="tpl-actions">
             <button onClick={() => setEditing(false)}>取消</button>
             <button
               className="accent"
               data-testid="component-edit-save"
               onClick={async () => {
-                await api.updateComponent(c.id, { name, tags: tags.split(/[\s,，、]+/) })
+                await api.updateComponent(c.id, { name, tags: tags.split(/[\s,，、]+/), role })
                 setEditing(false)
                 onChanged()
               }}
@@ -76,7 +80,7 @@ function ComponentCard({ c, doc, onChanged }: { c: LibraryComponent; doc: Doc; o
           <div className="comp-info">
             <b title={c.name}>{c.name}</b>
             <small>
-              {KIND_LABEL[c.kind]} · {c.stats.texts} 处文字 · {photos} 张图
+              <span className={c.role ? 'role-tag' : 'role-tag guess'} title={c.role ? '标准名称' : '还没有确认标准名称，点「编辑」确认'}>{roleDef(componentRole(c)).name}{!c.role && '？'}</span> · {c.stats.texts} 处文字 · {photos} 张图
               {c.origin.kind !== 'original' && ` · ${SOURCE_LABEL[c.origin.kind]}`}
             </small>
             {c.tags.length > 0 && <small className="comp-tags">{c.tags.map((t) => `#${t}`).join(' ')}</small>}
@@ -147,6 +151,7 @@ export function ComponentLibrary({ templates }: { templates: Template[] }) {
   const [text, setText] = useState('')
   const [kind, setKind] = useState<PartKind | ''>('')
   const [hue, setHue] = useState<HueFamily | ''>('')
+  const [role, setRole] = useState<RoleId | ''>('')
   const refresh = useCallback(() => api.components().then(setList).catch((e) => notify(e.message, 'error')), [notify])
   useEffect(() => {
     refresh()
@@ -169,7 +174,7 @@ export function ComponentLibrary({ templates }: { templates: Template[] }) {
       })
   }, [view, templates])
 
-  const shown = useMemo(() => searchComponents(list, { text, kind, hue }), [list, text, kind, hue])
+  const shown = useMemo(() => searchComponents(list, { text, kind, hue, role }, componentRole), [list, text, kind, hue, role])
   const words = text.toLowerCase().split(/\s+/).filter(Boolean)
   const shownParts = parts.filter((p) => (!kind || p.kind === kind) && words.every((w) => `${p.name} ${p.from} ${p.text}`.toLowerCase().includes(w)))
   const collected = useMemo(() => new Set(list.map((c) => c.fingerprint)), [list])
@@ -187,6 +192,12 @@ export function ComponentLibrary({ templates }: { templates: Template[] }) {
           <button key={k} className={kind === k ? 'on' : ''} onClick={() => setKind(kind === k ? '' : k)} data-testid={`kind-${k}`}>{KIND_LABEL[k]}</button>
         ))}
       </div>
+      {view === 'saved' && (
+        <select className="comp-role-filter" value={role} onChange={(e) => setRole(e.target.value as RoleId | '')} data-testid="component-role-filter">
+          <option value="">全部标准名称</option>
+          {ROLES.filter((r) => list.some((c) => componentRole(c) === r.id)).map((r) => <option key={r.id} value={r.id}>{r.name}（{list.filter((c) => componentRole(c) === r.id).length}）</option>)}
+        </select>
+      )}
       {view === 'saved' && (
         <div className="comp-hues">
           {HUE_FAMILIES.map((h) => (

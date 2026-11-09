@@ -6,7 +6,8 @@ import { nanoid } from 'nanoid'
 import { cropAsset, deleteAsset, listAssets, saveAsset, variantPath } from './assets'
 import { listComponents, removeComponent, saveComponent, updateComponent } from './components'
 import { IMAGE_HOST, safeFetch, WECHAT_IMAGE_HOST } from './net'
-import { aiStatus, chatJson, DESIGN_SYSTEM, EDIT_SYSTEM, OUTLINE_SYSTEM, TEMPLATE_SYSTEM } from './ai'
+import { aiStatus, chatJson, COPY_SYSTEM, DESIGN_SYSTEM, EDIT_SYSTEM, OUTLINE_SYSTEM, PLACE_SYSTEM } from './ai'
+import { isRoleId } from '../src/core/roles'
 import { publicAiSettings, resolveDraftProfile, saveAiSettings } from './settings'
 import { importFile } from './importer'
 import { collection, DIRS, ROOT, safeId } from './store'
@@ -22,7 +23,7 @@ type Doc = { id: string; title: string; updatedAt: number; [k: string]: any }
 type Version = { id: string; projectId: string; label: string; createdAt: number; doc: Doc }
 
 const projects = collection<Doc>(DIRS.projects)
-const templates = collection<{ id: string; name: string; blocks: unknown[]; themeId?: string; themeOverrides?: unknown; createdAt: number }>(DIRS.templates)
+const templates = collection<{ id: string; name: string; blocks: unknown[]; themeId?: string; themeOverrides?: unknown; roles?: Record<string, string>; createdAt: number }>(DIRS.templates)
 const themes = collection<{ id: string; name: string }>(DIRS.themes)
 const versionsOf = (pid: string) => collection<Version>(join(DIRS.versions, safeId(pid)))
 
@@ -128,6 +129,19 @@ app.post('/api/templates', h(async (req, res) => {
   await templates.put(t)
   res.json(t)
 }))
+/** 修改模板名称和模块的标准名称（roles：模块 id → 标准名称 id） */
+app.put('/api/templates/:id', h(async (req, res) => {
+  const t = await templates.get(String(req.params.id))
+  if (!t) return res.status(404).json({ error: '模板不存在' })
+  const ids = new Set((t.blocks as { id?: string }[]).map((b) => b.id))
+  const roles: Record<string, string> = {}
+  if (req.body?.roles && typeof req.body.roles === 'object') {
+    for (const [k, v] of Object.entries(req.body.roles)) if (ids.has(k) && isRoleId(v)) roles[k] = v
+  }
+  const next = { ...t, ...(typeof req.body?.name === 'string' && req.body.name.trim() && { name: req.body.name.trim().slice(0, 60) }), ...(req.body?.roles && { roles }) }
+  await templates.put(next)
+  res.json(next)
+}))
 app.delete('/api/templates/:id', h(async (req, res) => {
   await templates.remove(String(req.params.id))
   res.json({ ok: true })
@@ -182,20 +196,38 @@ ${JSON.stringify(req.body.brief)}
 用户的风格要求：${hint || '无，自行判断最适合该内容的风格'}`
   res.json(await chatJson(DESIGN_SYSTEM, user, { maxTokens: 6000, temperature: 0.8, profileId: pid(req) }))
 }))
-app.post('/api/ai/template-fill', h(async (req, res) => {
-  const text = String(req.body.text ?? '').slice(0, 30000)
-  const photos: string[] = Array.isArray(req.body.photos) ? req.body.photos.slice(0, 60).map(String) : []
-  const user = `新推文的文稿或要点：
-${text}
+app.post('/api/ai/copywrite', h(async (req, res) => {
+  const b = req.body ?? {}
+  const levels = Math.min(3, Math.max(1, Math.round(Number(b.levels)) || 2))
+  const names = ['一级标题（##）', '二级标题（###）', '三级标题（####）'].slice(0, levels).join('、')
+  const previous = String(b.previous ?? '').slice(0, 12000)
+  const revise = String(b.revise ?? '').slice(0, 800)
+  const user = `活动描述：
+${String(b.brief ?? '').slice(0, 6000)}
 
-照片（编号：文件名｜用户描述）：
-${photos.map((n, i) => `${i + 1}：${n}`).join('\n') || '无'}
+文风：${String(b.style ?? '').slice(0, 200) || '自然真实的活动通讯'}
+篇幅：正文约 ${String(b.length ?? '1500–2000')} 字
+标题级别：使用 ${levels} 级标题：${names}
+补充要求：${String(b.extra ?? '').slice(0, 500) || '无'}${previous ? `
 
-模板部件：
-${JSON.stringify(req.body.catalog ?? []).slice(0, 60000)}
+上一版文案：
+${previous}
 
-用户的额外要求：${String(req.body.hint ?? '').slice(0, 500) || '无'}`
-  res.json(await chatJson(TEMPLATE_SYSTEM, user, { maxTokens: 8000, temperature: 0.5, profileId: pid(req) }))
+修改意见：${revise || '换一种写法重新写，保留事实'}
+请在上一版基础上按修改意见改写，格式要求不变，输出完整文案。` : ''}`
+  res.json(await chatJson(COPY_SYSTEM, user, { maxTokens: 6000, temperature: 0.85, profileId: pid(req) }))
+}))
+app.post('/api/ai/place-photos', h(async (req, res) => {
+  const b = req.body ?? {}
+  const user = `段落：
+${JSON.stringify(b.items ?? []).slice(0, 30000)}
+
+照片单元：
+${JSON.stringify(b.units ?? []).slice(0, 8000)}
+
+可用版式（按照片张数）：
+${JSON.stringify(b.layouts ?? {})}`
+  res.json(await chatJson(PLACE_SYSTEM, user, { maxTokens: 3000, temperature: 0.3, profileId: pid(req) }))
 }))
 app.post('/api/ai/edit', h(async (req, res) => {
   const { context, instruction } = req.body

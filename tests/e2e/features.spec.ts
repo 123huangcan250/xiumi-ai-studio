@@ -8,7 +8,7 @@ const MOCK_PORT = 5298
 const PRIMARY = ['#7a1f2b', '#1d4e5f', '#3f3a8c']
 let mock: Server
 const calls: string[] = []
-let templateRequest = ''
+let placeRequest = ''
 
 function designs() {
   return {
@@ -23,18 +23,13 @@ function designs() {
   }
 }
 
-/** 模拟模型套用模板：用到模板里除装饰外的每个部件，文字全部换成标记文字，照片按顺序分配 */
-function templatePlan(user: string) {
-  const catalog: any[] = JSON.parse(user.split('模板部件：\n')[1]?.split('\n\n用户的额外要求')[0] ?? '[]')
-  let photo = 1 // 照片编号从 1 开始
-  const parts = catalog
-    .filter((p) => p.id.startsWith('p') && p.kind !== 'decor')
-    .map((p, k) => ({
-      part: p.id,
-      text: Object.fromEntries(p.texts.map((t: any) => [t.id, t.role === 'label' ? null : `AI 文案 ${k}-${t.id}`])),
-      images: Array.from({ length: typeof p.images === 'number' ? p.images : 0 }, () => photo++),
-    }))
-  return { title: 'AI 套用标题', digest: '模拟摘要', parts }
+/** 模拟模型写的文案：带标题级别 */
+const COPY = ['# AI 文案标题', '副标题：模拟副标题', '导语第一段，现场的灯亮了起来。', '## 开幕式', 'AI 文案正文一，五个院系的同学完成了光的接力。', '## 创客市集', 'AI 文案正文二，四十二个摊位。', '文字：测试宣传部'].join('\n\n')
+
+/** 模拟模型安排照片：含照片 3 的单元放在“正文一”后面，其余放在导语后 */
+function placePlan(user: string) {
+  const units: any[] = JSON.parse(user.split('照片单元：\n')[1]?.split('\n\n可用版式')[0] ?? '[]')
+  return { placements: units.map((u) => ({ photos: u.photos, after: u.photos.includes(3) ? 'P3' : 'P1' })) }
 }
 
 test.beforeAll(async () => {
@@ -46,8 +41,8 @@ test.beforeAll(async () => {
       const sys = JSON.parse(body || '{}').messages?.[0]?.content ?? ''
       calls.push(sys.slice(0, 40))
       const user = JSON.parse(body || '{}').messages?.[1]?.content ?? ''
-      if (sys.includes('模板部件')) templateRequest = user
-      const content = sys.includes('模板部件') ? templatePlan(user) : sys.includes('视觉设计师') ? designs() : sys.includes('主编') ? { sections: [] } : { ok: true, model: 'mock' }
+      if (sys.includes('照片放在文章哪一段')) placeRequest = user
+      const content = sys.includes('照片放在文章哪一段') ? placePlan(user) : sys.includes('主笔') ? { markdown: COPY } : sys.includes('视觉设计师') ? designs() : sys.includes('主编') ? { sections: [] } : { ok: true, model: 'mock' }
       res.setHeader('content-type', 'application/json')
       res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify(content) } }] }))
     })
@@ -146,37 +141,70 @@ test('粘贴公众号推文，保留原样式导入并保存为模板', async ({
   await expect(page.getByTestId('canvas')).toContainText('社团招新季')
 })
 
-test('套用导入的推文模板生成新推文，并按槽位改字', async ({ page }) => {
+test('AI 写文案、按标准名称套用模板模块并安排照片，再按槽位改字', async ({ page }) => {
+  page.on('dialog', (d) => d.accept())
   await page.goto('/')
   await page.getByRole('button', { name: '模板', exact: true }).click()
+  // 模板的模块：每个模块都有标准名称，可以确认保存
+  await page.getByTestId('template-modules').first().click()
+  await expect(page.getByTestId('template-module').first()).toBeVisible()
+  await expect(page.getByTestId('module-role-0')).toHaveValue('cover')
+  await page.getByTestId('save-module-roles').click()
+  await expect(page.locator('.toast')).toContainText('已保存模块的标准名称')
+
   await page.getByTestId('apply-template').first().click()
-  await expect(page.getByTestId('pick-template').first()).toHaveClass(/\bon\b/)
+  await expect(page.getByTestId('pick-template').first().locator('..')).toHaveClass(/\bon\b/)
+  await expect(page.getByTestId('kit-table')).toContainText('封面标题')
   await page.getByTestId('load-sample').click()
   await expect(page.locator('.import-step .hint').first()).toContainText('图片 10 张')
-  // 右侧照片清单：编号 + 描述，描述随请求发给模型
-  await expect(page.getByTestId('photo-notes').locator('li')).toHaveCount(10)
-  await page.getByTestId('photo-note-3').fill('开幕式全体合影')
-  await expect(page.getByTestId('generate')).toHaveText('AI 套用模板')
-  await page.getByTestId('generate').click()
 
-  const cards = page.locator('[data-testid^="variant-tpl-"]')
-  await expect(cards).toHaveCount(2)
-  await expect(cards.first()).toContainText('AI 套用模板')
-  await expect(cards.first().locator('.mini-inner')).toContainText('AI 文案')
+  // 一键生成文案：带标题级别，导入正文框
+  await page.getByTestId('open-copywriter').click()
+  await page.getByTestId('cw-brief').fill('秋季科技文化节，开幕式和创客市集')
+  await page.getByTestId('cw-generate').click()
+  await expect(page.getByTestId('cw-result')).toHaveValue(/## 开幕式/)
+  await expect(page.getByTestId('cw-check')).toContainText('一级标题 2 个')
+  await page.getByTestId('cw-import').click()
+  await expect(page.getByTestId('import-text')).toHaveValue(/^# AI 文案标题/)
+
+  // 照片：描述随请求发给模型；两张照片指定放在同一句后面时先确认怎么排
+  await expect(page.getByTestId('photo-notes').locator('li')).toHaveCount(10)
+  const fileOf = async (i: number) => (await page.getByTestId('photo-notes').locator('li img').nth(i).getAttribute('src'))!.split('?')[0]
+  const [p1, p3] = [await fileOf(0), await fileOf(2)]
+  await page.getByTestId('photo-note-3').fill('开幕式全体合影')
+  await page.getByTestId('photo-anchor-1').fill('四十二个摊位')
+  await page.getByTestId('photo-anchor-2').fill('四十二个摊位')
+  await expect(page.getByTestId('generate')).toHaveText('套用模板生成')
+  await page.getByTestId('generate').click()
+  // 这个模板没有单独的标题模块：文案的一级标题超出，需要先处理
+  await expect(page.getByTestId('issue-levels')).toContainText('所选模块只有 0 级标题模块')
+  await expect(page.getByTestId('plan-continue')).toBeDisabled()
+  await page.getByTestId('flatten-levels').click()
+  await expect(page.getByTestId('import-text')).toHaveValue(/\*\*开幕式\*\*/)
+  await expect(page.getByTestId('issue-crowded')).toContainText('照片 1、2')
+  await page.getByTestId('crowd-singles').check()
+  await page.getByTestId('plan-continue').click()
+
+  const card = page.locator('[data-testid^="variant-kit-"]')
+  await expect(card).toHaveCount(1)
+  const preview = card.locator('.mini-inner')
+  await expect(preview).toContainText('AI 文案标题')
+  await expect(preview).toContainText('AI 文案正文一')
+  await expect(preview).not.toContainText('社团招新季')
   expect(calls.some((c) => c.includes('排版编辑'))).toBe(true)
-  expect(templateRequest).toMatch(/3：photo-03\.jpg｜开幕式全体合影/)
+  expect(placeRequest).toContain('照片3：开幕式全体合影')
+  // 指定了位置的照片不交给模型
+  expect(placeRequest).not.toMatch(/照片[12](?!\d)/)
+  // 照片 3 放在模型指定的“正文一”之后、下一章之前；照片 1、2 在“四十二个摊位”之后
+  const html = await preview.innerHTML()
+  expect(html.indexOf(p3)).toBeGreaterThan(html.indexOf('AI 文案正文一'))
+  expect(html.indexOf(p3)).toBeLessThan(html.indexOf('创客市集'))
+  expect(html.indexOf(p1)).toBeGreaterThan(html.indexOf('四十二个摊位'))
   // 结果较多时弹窗不超出窗口，内容区可滚动
   const modal = (await page.locator('.modal').boundingBox())!
   expect(modal.y + modal.height).toBeLessThanOrEqual(900)
   expect(await page.locator('.modal-body').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
-
-  // 规则填充：沿用模板的底色版块，换成样例文稿的标题，不残留模板旧标题
-  const rule = cards.nth(1)
-  const preview = rule.locator('.mini-inner')
-  await expect(preview).toContainText('2026 秋季校园科技文化节圆满落幕')
-  await expect(preview).not.toContainText('社团招新季')
-  expect(await preview.innerHTML()).toContain('#f3eefa')
-  await rule.getByRole('button', { name: '使用此方案' }).click()
+  await card.getByRole('button', { name: '使用此方案' }).click()
   await expect(page.getByTestId('save-status')).toHaveText('已保存', { timeout: 10_000 })
 
   // 选中原文片段，在右侧按槽位改字，保留原样式
