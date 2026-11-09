@@ -76,6 +76,10 @@ test('导出给秀米：本地图片不内嵌；有接口时传微信图床，�
   expect(Object.keys(files).sort()).toEqual(['图片/01.jpg', '图片/02.jpg', '导入秀米.txt', '说明.txt'].sort())
   expect(files['图片/01.jpg'].subarray(0, 2).toString('hex')).toBe('ffd8')
   const text = files['导入秀米.txt'].toString('utf8')
+  // 纯 ASCII：秀米按 GBK 读也不会乱码；中文写成实体（文字）
+  expect(text).not.toMatch(/[\u0080-\u{10FFFF}]/u)
+  expect(text).toContain('&#x6587;&#x5B57;')
+  expect(files['说明.txt'].subarray(0, 3).toString('hex')).toBe('efbbbf')
   expect(text).not.toContain('/media/')
   expect(text).toContain(JPG(3).replace('&', '&amp;'))
   // 单图、照片、背景（同一张）共 3 处占位，都很小，避免被秀米连位置删掉
@@ -98,6 +102,7 @@ test('导出给秀米：本地图片不内嵌；有接口时传微信图床，�
   const [txt] = await Promise.all([page.waitForEvent('download'), up.click()])
   const out = readFileSync((await txt.path())!, 'utf8')
   expect(uploaded).toHaveLength(2)
+  expect(out).not.toMatch(/[\u0080-\u{10FFFF}]/u)
   expect(out).not.toContain('/media/')
   expect(out).not.toContain('data:image')
   expect(out).toContain('https://mmbiz.qpic.cn/uploaded/0')

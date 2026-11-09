@@ -2,7 +2,7 @@
 // 剪贴板写入方式参考 doocs/md（WTFPL）：ClipboardItem 优先，execCommand 兜底；首尾加零高度段落。
 import { compileDoc, css, type CompileResult } from '../core/compiler'
 import { fitRatio } from '../core/photos'
-import { makeZip, replaceLocalImages } from '../core/xiumiExport'
+import { asciiHtml, makeZip, replaceLocalImages, xiumiSvgBoxes } from '../core/xiumiExport'
 import type { Doc } from '../core/types'
 import { api } from './api'
 
@@ -136,10 +136,12 @@ const XIUMI_NOTES = (n: number) => `导入秀米的步骤
 
 /** 导出给秀米（不需要公众号接口）：本地图片换成占位图，另附按出现顺序编号的图片包 */
 export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void): Promise<{ blob: Blob; name: string; images: number }> {
-  const { html, urls } = replaceLocalImages(compileDoc(doc).html, (url, i) => placeholder(i + 1, fitRatio(url)))
+  const replaced = replaceLocalImages(compileDoc(doc).html, (url, i) => placeholder(i + 1, fitRatio(url)))
+  const { urls } = replaced
+  const html = asciiHtml(xiumiSvgBoxes(replaced.html))
   if (!urls.length) return { blob: new Blob([html], { type: 'text/plain;charset=utf-8' }), name: '导入秀米.txt', images: 0 }
   const enc = new TextEncoder()
-  const files = [{ name: '导入秀米.txt', data: enc.encode(html) }, { name: '说明.txt', data: enc.encode(XIUMI_NOTES(urls.length)) }]
+  const files = [{ name: '导入秀米.txt', data: enc.encode(html) }, { name: '说明.txt', data: enc.encode('﻿' + XIUMI_NOTES(urls.length)) }]
   for (const [i, url] of urls.entries()) {
     onProgress?.(`打包图片 ${i + 1}/${urls.length}`)
     const r = await fetch(url)
@@ -154,5 +156,5 @@ export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void)
 export async function xiumiUploaded(doc: Doc, onProgress?: (msg: string) => void): Promise<string> {
   const { html } = await compileForWechat(doc, 'wechat', onProgress)
   if (/(?:src="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
-  return html
+  return asciiHtml(xiumiSvgBoxes(html))
 }

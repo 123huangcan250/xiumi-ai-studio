@@ -6,7 +6,7 @@ import { nanoid } from 'nanoid'
 import { cropAsset, deleteAsset, listAssets, saveAsset, variantPath } from './assets'
 import { listComponents, removeComponent, saveComponent, updateComponent } from './components'
 import { IMAGE_HOST, safeFetch, WECHAT_IMAGE_HOST } from './net'
-import { aiStatus, chatJson, COPY_SYSTEM, DESIGN_SYSTEM, EDIT_SYSTEM, OUTLINE_SYSTEM, PLACE_SYSTEM } from './ai'
+import { aiStatus, chatJson, COPY_SYSTEM, DESIGN_SYSTEM, EDIT_SYSTEM, ENRICH_SYSTEM, OUTLINE_SYSTEM, PLACE_SYSTEM } from './ai'
 import { isRoleId } from '../src/core/roles'
 import { publicAiSettings, resolveDraftProfile, saveAiSettings } from './settings'
 import { importFile } from './importer'
@@ -216,6 +216,27 @@ ${previous}
 修改意见：${revise || '换一种写法重新写，保留事实'}
 请在上一版基础上按修改意见改写，格式要求不变，输出完整文案。` : ''}`
   res.json(await chatJson(COPY_SYSTEM, user, { maxTokens: 6000, temperature: 0.85, profileId: pid(req) }))
+}))
+app.post('/api/ai/enrich-copy', h(async (req, res) => {
+  const b = req.body ?? {}
+  const photos: { no?: unknown; note?: unknown; group?: unknown; after?: unknown }[] = Array.isArray(b.photos) ? b.photos.slice(0, 60) : []
+  const lines = photos
+    .map((p) => {
+      const tags = [p.group && `组 ${String(p.group).slice(0, 2)}`, p.after && `放在「${String(p.after).slice(0, 80)}」后面`].filter(Boolean).join('，')
+      return `照片 ${Number(p.no) || '?'}${tags ? `（${tags}）` : ''}：${String(p.note ?? '').slice(0, 300)}`
+    })
+    .filter((l) => !l.endsWith('：'))
+  const keep: string[] = Array.isArray(b.keep) ? b.keep.map((s: unknown) => String(s).slice(0, 200)).slice(0, 30) : []
+  if (!lines.length) throw Object.assign(new Error('没有照片描述，无需补充'), { status: 400 })
+  const user = `原文案：
+${String(b.text ?? '').slice(0, 15000)}
+
+照片描述（按照片编号）：
+${lines.join('\n')}
+
+必须原样保留的句子：
+${keep.map((k) => `- ${k}`).join('\n') || '无'}`
+  res.json(await chatJson(ENRICH_SYSTEM, user, { maxTokens: 8000, temperature: 0.5, profileId: pid(req) }))
 }))
 app.post('/api/ai/place-photos', h(async (req, res) => {
   const b = req.body ?? {}

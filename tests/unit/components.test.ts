@@ -13,7 +13,7 @@ import { collectColors, docMainColors, fixedDecorCount, harmonize, recolorHtml }
 import { sanitizeHtml } from '../../src/core/sanitize'
 import { backgroundPhotos, extractSlots, removeBackgroundPhotos, setBackgroundPhoto, skeleton } from '../../src/core/slots'
 import { guessKind } from '../../src/core/templateFill'
-import { makeZip, replaceLocalImages, xiumiReport } from '../../src/core/xiumiExport'
+import { asciiHtml, makeZip, replaceLocalImages, xiumiReport, xiumiSvgBoxes } from '../../src/core/xiumiExport'
 import { THEMES } from '../../src/core/themes'
 import { toHsl } from '../../src/core/color'
 import type { Doc } from '../../src/core/types'
@@ -297,6 +297,53 @@ describe('export for Xiumi', () => {
     const nameLen = view.getUint16(26, true)
     expect(new TextDecoder().decode(zip.slice(30, 30 + nameLen))).toBe('图片/01.jpg')
     expect(new TextDecoder().decode(zip.slice(30 + nameLen, 30 + nameLen + data.length))).toBe('内容')
+  })
+  it('writes the import file as pure ASCII, so reading it as GBK cannot garble the Chinese', () => {
+    const src =
+      `<section style="font-family: 'PingFang SC', 微软雅黑"><p>清华电机 · 赴德国实践 × 2026 🇩🇪&nbsp;50 Hz · 3φ · 120°</p>` +
+      `<img src="https://example.com/图片.jpg" alt="双图 · 建议 4:3"><svg viewBox="0 0 10 10"><text x="0" y="5">TSINGHUA · EST. 1911</text></svg></section>` +
+      compileDoc({ id: 'd', title: '实践', author: '', digest: '', themeId: 'thu-eea-de', createdAt: 0, updatedAt: 0, blocks: [createBlock('box'), createBlock('photos')] }).html
+    const out = asciiHtml(src)
+    expect(out).not.toMatch(/[\u0080-\u{10FFFF}]/u)
+    // 解析后与原文完全一致：正文、属性、SVG 文字、emoji（两个码位）都还原
+    expect(rootOf(out).innerHTML).toBe(rootOf(src).innerHTML)
+    expect(out).toContain('&#x1F1E9;&#x1F1EA;')
+    // 原问题：不带 BOM 的 UTF-8 按 GBK 读，· 变成“路”；ASCII 文件按 GBK 读不变
+    const asGbk = (s: string) => new TextDecoder('gbk').decode(new TextEncoder().encode(s))
+    expect(asGbk(src)).toContain('路')
+    expect(asGbk(out)).toBe(out)
+  })
+  it('puts every svg in a zero line-height box so xiumi cannot push it down and clip it', () => {
+    const icon = '<svg viewBox="0 0 14 14" width="14" height="14" xmlns="http://www.w3.org/2000/svg" style="display:block;flex-shrink:0;width:14px;height:14px;overflow:hidden;margin:2px 6px 0 0"><rect x="1" y="4" width="11" height="8"></rect></svg>'
+    const inline = '<svg viewBox="0 0 9 9" width="9" height="9" style="display:inline-block;vertical-align:middle;width:9px"><circle cx="4" cy="4" r="3"></circle></svg>'
+    const src = `<section style="display:flex;align-items:flex-start">${icon}<span>图｜变电设备</span></section><p>前${inline}后</p><svg viewBox="0 0 1 1"></svg>`
+    const out = xiumiSvgBoxes(src)
+    const root = rootOf(out)
+    const [a, b] = [...root.querySelectorAll('svg')].map((s) => s as SVGElement)
+    // 外层盒子：行高 0，带走外边距和 flex；SVG 本身是块级、只保留尺寸
+    const boxA = a.parentElement as HTMLElement
+    expect(boxA.tagName).toBe('SECTION')
+    expect(boxA.style.lineHeight).toBe('0')
+    expect(boxA.style.fontSize).toBe('0px')
+    expect(boxA.style.margin).toBe('2px 6px 0px 0px')
+    expect(boxA.style.flexShrink).toBe('0')
+    expect(boxA.style.width).toBe('14px')
+    expect(a.style.display).toBe('block')
+    expect(a.style.margin).toBe('')
+    expect(a.style.width).toBe('14px')
+    expect(a.style.overflow).toBe('hidden')
+    expect(boxA.parentElement!.style.display).toBe('flex')
+    // 行内的 SVG 用行内块包，不打断段落
+    const boxB = b.parentElement as HTMLElement
+    expect(boxB.tagName).toBe('SPAN')
+    expect(boxB.parentElement!.tagName).toBe('P')
+    expect(boxB.style.display).toBe('inline-block')
+    expect(boxB.style.verticalAlign).toBe('middle')
+    expect(boxB.style.lineHeight).toBe('0')
+    // 内容不变、没写样式的 SVG 不动
+    expect(a.innerHTML).toBe('<rect x="1" y="4" width="11" height="8"></rect>')
+    expect(root.textContent).toBe(rootOf(src).textContent)
+    expect(out).toContain('<svg viewBox="0 0 1 1"></svg>')
   })
 })
 

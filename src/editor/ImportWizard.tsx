@@ -4,6 +4,7 @@ import { assemble, kitLevels, type Placement } from '../core/assemble'
 import { normalizeBlocks } from '../core/blocks'
 import { compileDoc } from '../core/compiler'
 import { copyLevels, copyToMarkdown, levelCounts, limitLevels, normalizeCopyText, parseCopy, type Copy } from '../core/copy'
+import { checkEnriched, enrichChanges, enrichedText, enrichPhotos, keepSentences, type EnrichCheck } from '../core/enrich'
 import { displayHtml } from '../core/images'
 import { buildDoc, RECIPES } from '../core/layouts'
 import { normalizeOutline, parseArticle, type Outline } from '../core/outline'
@@ -100,6 +101,10 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
   /** 排版前确认：问题随文案、模块和照片设置实时更新 */
   const [reviewing, setReviewing] = useState(false)
   const [writing, setWriting] = useState(false)
+  /** 按照片补充文案：已就哪组照片描述问过（是/否都算），正在询问，改写结果待确认 */
+  const [enrichAsked, setEnrichAsked] = useState('')
+  const [enrichAsk, setEnrichAsk] = useState(false)
+  const [enriched, setEnriched] = useState<{ before: string; changes: string[]; check: EnrichCheck } | null>(null)
   const noteOf = (a: Asset) => (notes[a.id] ?? '').trim()
 
   const refreshTemplates = () => api.templates().then(setTemplates).catch(() => {})
@@ -195,8 +200,31 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
     setTplDocs([{ key: `kit-${Date.now()}`, name: '套用模板', description: `按文案的标题级别和段落顺序，使用${sources}里选定的模块；${usedAi ? 'AI 按照片描述安排了照片位置' : '照片按指定位置和章节顺序排列'}`, doc: r.doc, ai: usedAi, warnings: r.warnings }])
   }
 
-  const generate = () =>
+  const enrichList = useMemo(() => enrichPhotos({ images, notes, groups, anchors }), [images, notes, groups, anchors])
+  const enrichKey = JSON.stringify(enrichList)
+
+  /** 是：AI 综合原文案和照片描述改写，结果先给用户看 */
+  const enrich = () =>
     run(async () => {
+      const keep = keepSentences(text, anchors)
+      const r = await api.aiEnrichCopy({ text, photos: enrichList, keep })
+      const md = enrichedText(r, text)
+      if (!md) throw new Error('模型没有返回文案')
+      setEnriched({ before: text, changes: enrichChanges(r), check: checkEnriched(text, md, keep) })
+      setText(md)
+      setEnrichAsked(enrichKey)
+      setEnrichAsk(false)
+    }, `${ai?.name ?? 'AI'} 正在根据照片补充文案…`)
+
+  const generate = (opts: { skipEnrich?: boolean } = {}) => {
+    // 照片描述是文案写好之后才有的：排版前问一次要不要据此补充文案（描述变了会再问）
+    if (!opts.skipEnrich && aiOn && enrichList.length && text.trim() && enrichAsked !== enrichKey) {
+      setEnrichAsk(true)
+      return
+    }
+    setEnrichAsk(false)
+    setEnriched(null)
+    return run(async () => {
       if (kitMode) {
         const copy = parseCopy(text)
         const check = pendingOf(checkPlan(copy, kit, units))
@@ -231,6 +259,7 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
         }
       }
     }, '解析中…')
+  }
 
   /** 文案标题级别多于标题模块：把多出的级别改为加粗正文 */
   const flatten = () => {
@@ -394,10 +423,35 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
             </div>
             <PhotoPlanner images={images} setImages={setImages} notes={notes} setNotes={setNotes} groups={groups} setGroups={setGroups} anchors={anchors} setAnchors={setAnchors} layouts={kitMode ? layoutOptions(kit) : []} text={text} />
           </div>
-          {!live && (
+          {enrichAsk && !enriched && (
+            <div className="enrich-box" data-testid="enrich-ask">
+              <h5>要根据照片补充文案吗？</h5>
+              <p className="hint">
+                有 {enrichList.length} 张照片写了描述。文案是照片到齐之前写的，{ai?.name ?? 'AI'} 可以把描述里的人物、地点和细节补进对应段落，让文字和照片更对得上。标题和你指定位置的句子不会改；改完先给你看，再排版。
+              </p>
+              <div className="row gap">
+                <button disabled={!!busy} onClick={() => (setEnrichAsked(enrichKey), generate({ skipEnrich: true }))} data-testid="enrich-no">否，直接排版</button>
+                <button className="primary" disabled={!!busy} onClick={enrich} data-testid="enrich-yes">{busy || '是，修改文案'}</button>
+              </div>
+            </div>
+          )}
+          {enriched && (
+            <div className="enrich-box" data-testid="enrich-result">
+              <h5>已根据照片补充文案{enriched.check.added > 0 ? `（正文多了 ${enriched.check.added} 字）` : ''}</h5>
+              {enriched.changes.length > 0 && <ul>{enriched.changes.map((c) => <li key={c}>{c}</li>)}</ul>}
+              {enriched.check.headingsChanged && <p className="warn">⚠ 标题有改动，请在文本框里核对标题级别。</p>}
+              {enriched.check.lostAnchors.length > 0 && <p className="warn">⚠ 这些指定照片位置的句子被改了，对应照片可能放不到原位置：{enriched.check.lostAnchors.map((a) => `「${a}」`).join('')}</p>}
+              <p className="hint">文本框里已经是修改后的文案，可以直接再改。补充的内容应只来自你的照片描述，发布前仍请核对事实。</p>
+              <div className="row gap">
+                <button disabled={!!busy} onClick={() => (setText(enriched.before), setEnriched(null))} data-testid="enrich-undo">撤销修改</button>
+                <button className="primary" disabled={!!busy} onClick={() => generate({ skipEnrich: true })} data-testid="enrich-continue">继续排版</button>
+              </div>
+            </div>
+          )}
+          {!live && !enrichAsk && !enriched && (
             <div className="modal-actions">
               <button onClick={onClose}>取消</button>
-              <button className="primary" disabled={!text.trim() || !!busy} onClick={generate} data-testid="generate">
+              <button className="primary" disabled={!text.trim() || !!busy} onClick={() => generate()} data-testid="generate">
                 {busy || (kitMode ? '套用模板生成' : aiOn ? 'AI 设计三套方案' : '生成三套排版')}
               </button>
             </div>

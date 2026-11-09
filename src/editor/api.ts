@@ -116,6 +116,7 @@ export const api = {
   aiOutline: (text: string, imageNames: string[], imageNotes: string[] = [], profileId?: string) => req<any>('POST', '/api/ai/outline', { text, imageNames, imageNotes, profileId }),
   aiDesign: (brief: unknown, hint: string, profileId?: string) => req<{ designs: any[] }>('POST', '/api/ai/design', { brief, hint, profileId }),
   aiCopywrite: (body: { brief: string; style: string; length: string; levels: number; extra: string; previous?: string; revise?: string; profileId?: string }) => req<{ markdown?: string }>('POST', '/api/ai/copywrite', body),
+  aiEnrichCopy: (body: { text: string; photos: unknown[]; keep: string[]; profileId?: string }) => req<{ markdown?: string; changes?: string[] }>('POST', '/api/ai/enrich-copy', body),
   aiPlacePhotos: (body: unknown) => req<{ placements?: unknown[] }>('POST', '/api/ai/place-photos', body),
   aiEdit: (context: unknown, instruction: string, profileId?: string) => req<{ summary: string; ops: any[] }>('POST', '/api/ai/edit', { context, instruction, profileId }),
   fetchReference: (url: string) => req<{ html: string }>('POST', '/api/reference/fetch', { url }),

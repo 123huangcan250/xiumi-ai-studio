@@ -411,3 +411,7 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .role-tag { color: var(--brand); }
 .role-tag.guess { color: var(--faint); }
 .comp-role-filter { width: 100%; margin: 6px 0; }
+.enrich-box { border: 1px solid #c9b6e4; background: #fbf8ff; border-radius: var(--radius); padding: 10px 12px; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.enrich-box h5 { margin: 0; font-size: 13px; }
+.enrich-box ul { margin: 0; padding-left: 18px; font-size: 13px; }
+.enrich-box .row { justify-content: flex-end; }

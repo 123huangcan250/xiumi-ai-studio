@@ -53,6 +53,8 @@ test.afterAll(() => mock.close())
 
 test('配置 AI 模型并生成三套 AI 设计方案', async ({ page }) => {
   await page.goto('/')
+  // 测试服务器刚启动时可能还在预构建依赖并刷新页面：等页面稳定后再操作
+  await page.waitForLoadState('networkidle')
   await page.getByTestId('open-ai-settings').click()
   await page.getByTestId('ai-add-preset').selectOption('custom')
   await page.getByLabel('名称', { exact: true }).fill('本地模拟模型')
@@ -174,8 +176,19 @@ test('AI 写文案、按标准名称套用模板模块并安排照片，再按�
   await page.getByTestId('photo-note-3').fill('开幕式全体合影')
   await page.getByTestId('photo-anchor-1').fill('四十二个摊位')
   await page.getByTestId('photo-anchor-2').fill('四十二个摊位')
+  // 组成一组后，在组员那一行也能指定整组的位置
+  await page.getByTestId('photo-pick-9').check()
+  await page.getByTestId('photo-pick-10').check()
+  await page.getByTestId('make-group').click()
+  await page.getByTestId('photo-anchor-10').fill('导语第一段')
+  await expect(page.getByTestId('group-anchor')).toHaveValue('导语第一段')
+  await expect(page.getByTestId('photo-anchor-9')).toHaveValue('导语第一段')
+  await expect(page.getByTestId('photo-notes').locator('.anchor .ok').first()).toBeVisible()
   await expect(page.getByTestId('generate')).toHaveText('套用模板生成')
   await page.getByTestId('generate').click()
+  // 写了照片描述：先问是否按照片补充文案（补充流程见 enrich.spec.ts），这里不改
+  await expect(page.getByTestId('enrich-ask')).toContainText('1 张照片写了描述')
+  await page.getByTestId('enrich-no').click()
   // 这个模板没有单独的标题模块：文案的一级标题超出，需要先处理
   await expect(page.getByTestId('issue-levels')).toContainText('所选模块只有 0 级标题模块')
   await expect(page.getByTestId('plan-continue')).toBeDisabled()
@@ -183,6 +196,9 @@ test('AI 写文案、按标准名称套用模板模块并安排照片，再按�
   await expect(page.getByTestId('import-text')).toHaveValue(/\*\*开幕式\*\*/)
   await expect(page.getByTestId('issue-crowded')).toContainText('照片 1、2')
   await page.getByTestId('crowd-singles').check()
+  // 模板里没有双图版式：这一组改为单图依次排列
+  await expect(page.getByTestId('issue-nolayout')).toContainText('照片 9、10')
+  await page.getByTestId('issue-nolayout').locator('input').check()
   await page.getByTestId('plan-continue').click()
 
   const card = page.locator('[data-testid^="variant-kit-"]')
@@ -216,9 +232,13 @@ test('AI 写文案、按标准名称套用模板模块并安排照片，再按�
   // 把一张照片拖到另一张照片上，两张交换位置
   const photos = page.locator('[data-testid=canvas] img[data-photo]')
   const base = async (i: number) => (await photos.nth(i).getAttribute('src'))!.split('?')[0]
-  const [a, b] = [await base(0), await base(1)]
-  expect(a).not.toBe(b)
+  const first = async () => Promise.all([0, 1, 2].map(base))
+  const before = await first()
+  expect(new Set(before).size).toBe(3)
+  // 相邻的大图拖动时页面可能滚动，落点不一定是第二张：只要求恰好有两张互换了位置
   await photos.nth(0).dragTo(photos.nth(1))
   await expect(page.locator('.toast')).toContainText('已交换两张照片')
-  expect([await base(0), await base(1)]).toEqual([b, a])
+  const after = await first()
+  expect([...after].sort()).toEqual([...before].sort())
+  expect(after.filter((s, i) => s !== before[i])).toHaveLength(2)
 })

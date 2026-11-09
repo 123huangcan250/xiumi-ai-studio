@@ -95,7 +95,12 @@ export function PhotoPlanner(props: {
                   <img src={`/media/${a.file}?fit=1:1&w=160`} alt={a.name} title={a.name} />
                   <div className="photo-fields">
                     <textarea rows={2} value={notes[a.id] ?? ''} placeholder="这张照片在做什么？例如：开幕式全体合影" onChange={(e) => setNotes((n) => ({ ...n, [a.id]: e.target.value }))} data-testid={`photo-note-${i + 1}`} />
-                    {g ? <small className="group-tag">在组 {letter(g)} 中</small> : <AnchorInput value={anchors[a.id] ?? ''} onChange={(v) => setAnchors((x) => ({ ...x, [a.id]: v }))} text={text} testId={`photo-anchor-${i + 1}`} />}
+                    {g ? (
+                      <>
+                        <small className="group-tag">在组 {letter(g)} 中 · 下面是整组的位置，组内各张共用</small>
+                        <AnchorInput value={anchors[g.id] ?? ''} onChange={(v) => setAnchors((x) => ({ ...x, [g.id]: v }))} text={text} testId={`photo-anchor-${i + 1}`} />
+                      </>
+                    ) : <AnchorInput value={anchors[a.id] ?? ''} onChange={(v) => setAnchors((x) => ({ ...x, [a.id]: v }))} text={text} testId={`photo-anchor-${i + 1}`} />}
                   </div>
                   <button className="link" title="不使用这张照片" onClick={() => remove(a.id)}>✕</button>
                 </li>

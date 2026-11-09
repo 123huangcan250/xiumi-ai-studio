@@ -3,7 +3,40 @@
 // 微信图床和普通 https 外链可以显示；背景图能显示，但在秀米里不能单独选中编辑。
 // 所以本地图片要么先传到微信图床，要么换成占位图、另附编号图片包，导入后手动重传。
 
-const LOCAL_IMAGE = /(src="|url\((?:&quot;|["']?))(\/media\/[^"'&)]*(?:&amp;[^"'&)]*)*)/g
+/**
+ * 把非 ASCII 字符写成 &#x…; 实体，让导出文件只剩 ASCII。
+ * 不带 BOM 的 UTF-8 文件在中文 Windows 上常被当成 GBK 读（秀米上传、记事本类编辑器），中文全变乱码（· → 路）；
+ * 纯 ASCII 文件按哪种编码读都一样，秀米按 HTML 解析时实体会还原成原字符（属性值和 SVG 文字里也一样）。
+ * 输出经过清洗，没有 <style>/<script> 这类不解析实体的元素。
+ */
+export function asciiHtml(html: string): string {
+  return html.replace(/[\u0080-\u{10FFFF}]/gu,(c) => `&#x${c.codePointAt(0)!.toString(16).toUpperCase()};`)
+}
+
+const SVG = /<svg\b([^>]*?)\sstyle="([^"]*)"([^>]*)>([\s\S]*?)<\/svg>/g
+const OUTER = /^(margin|flex|align-self|vertical-align|order)/
+
+/**
+ * 秀米导入 SVG 时把它的样式（尺寸、overflow:hidden、display:block）挪到自己加的外层 div 上，SVG 本身只剩 max-width，
+ * 变回行内元素坐在文字基线上：外层继承 28px 左右的行高，SVG 被往下推几像素，又被外层按原尺寸裁掉（14px 小图标只剩上半截）。
+ * 这里给每个 SVG 套一层行高为 0 的盒子，外边距、flex、对齐这些放在盒子上，秀米再怎么包，里面都没有行高可推。
+ */
+export function xiumiSvgBoxes(html: string): string {
+  return html.replace(SVG, (_m, pre: string, style: string, post: string, body: string) => {
+    const decls = style.split(';').map((d) => d.trim()).filter(Boolean)
+    const prop = (d: string) => d.split(':')[0].trim().toLowerCase()
+    const inline = decls.some((d) => prop(d) === 'display' && /inline/.test(d))
+    const outer = decls.filter((d) => OUTER.test(prop(d)))
+    const own = decls.filter((d) => !OUTER.test(prop(d)) && prop(d) !== 'display')
+    const tag = inline ? 'span' : 'section'
+    // 宽度也给盒子一份：margin:0 auto 居中、flex 里占位都靠它
+    const width = decls.filter((d) => ['width', 'max-width'].includes(prop(d)))
+    const box = [`display:${inline ? 'inline-block' : 'block'}`, ...width, ...outer, 'line-height:0', 'font-size:0'].join(';')
+    return `<${tag} style="${box}"><svg${pre} style="${['display:block', ...own].join(';')}"${post}>${body}</svg></${tag}>`
+  })
+}
+
+const LOCAL_IMAGE =/(src="|url\((?:&quot;|["']?))(\/media\/[^"'&)]*(?:&amp;[^"'&)]*)*)/g
 
 /**
  * 按在文章中出现的先后替换本地图片（img 和背景图都算）。
