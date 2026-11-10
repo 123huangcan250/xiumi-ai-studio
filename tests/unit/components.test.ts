@@ -13,7 +13,7 @@ import { collectColors, docMainColors, fixedDecorCount, harmonize, recolorHtml }
 import { sanitizeHtml } from '../../src/core/sanitize'
 import { backgroundPhotos, extractSlots, removeBackgroundPhotos, setBackgroundPhoto, skeleton } from '../../src/core/slots'
 import { guessKind } from '../../src/core/templateFill'
-import { asciiHtml, makeZip, replaceLocalImages, xiumiReport, xiumiSvgBoxes } from '../../src/core/xiumiExport'
+import { asciiHtml, makeZip, replaceLocalImages, splitForXiumi, xiumiLength, xiumiReport, xiumiSvgBoxes } from '../../src/core/xiumiExport'
 import { THEMES } from '../../src/core/themes'
 import { toHsl } from '../../src/core/color'
 import type { Doc } from '../../src/core/types'
@@ -312,6 +312,32 @@ describe('export for Xiumi', () => {
     const asGbk = (s: string) => new TextDecoder('gbk').decode(new TextEncoder().encode(s))
     expect(asGbk(src)).toContain('路')
     expect(asGbk(out)).toBe(out)
+  })
+  it('splits an article longer than the xiumi import limit at module boundaries, keeping the outer container', () => {
+    const para = (i: number, n: number) => `<section style="margin-bottom: 16px"><p title="a>b">段落${i} ${'字'.repeat(n)}</p><img src="x.jpg" alt=""><br><svg viewBox="0 0 2 2"><rect width="1" height="1"/></svg></section>`
+    const root = (kids: string) => `<section style="font-size: 16px; color: #333">${kids}</section>`
+    const kids = Array.from({ length: 10 }, (_, i) => para(i, 2000)).join('')
+    const html = root(kids)
+    expect(splitForXiumi(html, 1_000_000)).toEqual([html])
+    const parts = splitForXiumi(html, 7000)
+    expect(parts.length).toBeGreaterThan(2)
+    for (const p of parts) {
+      expect(xiumiLength(p)).toBeLessThanOrEqual(7000)
+      expect(p.startsWith('<section style="font-size: 16px; color: #333"><section style="margin-bottom: 16px">')).toBe(true)
+      expect(rootOf(p).children.length).toBe(1) // 每段是一个完整闭合的元素
+    }
+    // 拼回去与原文一致：一个模块都不少、不重复
+    expect(parts.map((p) => p.slice(root('').length - '</section>'.length, -'</section>'.length)).join('')).toBe(kids)
+
+    // 单个模块太长：往里一层切，外层两级容器都保留
+    const big = root(`<section style="border: 1px solid #000">${Array.from({ length: 6 }, (_, i) => `<p>${i}${'长'.repeat(3000)}</p>`).join('')}</section>`)
+    const pieces = splitForXiumi(big, 7000)
+    expect(pieces.length).toBe(3)
+    for (const p of pieces) expect(p).toMatch(/^<section style="font-size: 16px; color: #333"><section style="border: 1px solid #000"><p>\d长/)
+    expect(pieces.map((p) => rootOf(p).textContent).join('')).toBe(rootOf(big).textContent)
+
+    // 实体按还原后的一个字符算（导出文件里中文写成实体，秀米按还原后计数）
+    expect(xiumiLength('&#x6587;&#x5B57;&amp;')).toBe(3)
   })
   it('puts every svg in a zero line-height box so xiumi cannot push it down and clip it', () => {
     const icon = '<svg viewBox="0 0 14 14" width="14" height="14" xmlns="http://www.w3.org/2000/svg" style="display:block;flex-shrink:0;width:14px;height:14px;overflow:hidden;margin:2px 6px 0 0"><rect x="1" y="4" width="11" height="8"></rect></svg>'

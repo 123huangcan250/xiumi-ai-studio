@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { compileDoc, variantUrl } from '../core/compiler'
 import { docToMarkdown } from '../core/exporters'
 import { displayHtml } from '../core/images'
-import { xiumiReport } from '../core/xiumiExport'
+import { splitForXiumi, xiumiReport, xiumiSvgBoxes } from '../core/xiumiExport'
 import { AiSettingsModal } from './AiSettingsModal'
 import { api, type VersionSummary } from './api'
 import { Modal } from './Modal'
@@ -84,6 +84,10 @@ function ExportModal({ onClose }: { onClose: () => void }) {
   const base = compileDoc(doc)
   const safeName = (doc.title || 'article').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
   const xiumi = xiumiReport(base.html)
+  const xiumiParts = splitForXiumi(xiumiSvgBoxes(base.html)).length
+  /** 超出秀米一次导入的上限时先提示会导出多份文件；用户取消就不下载 */
+  const confirmParts = (parts: number) =>
+    parts <= 1 || confirm(`这篇超出秀米一次导入的上限（约 13 万字符，超出部分会被秀米丢掉），将导出 ${parts} 份文件（打包为 zip）。\n\n请下载后解压，按「导入秀米-1.txt」到「导入秀米-${parts}.txt」的顺序依次导入秀米。\n\n点“确定”下载。`)
   const runXiumi = async (fn: () => Promise<void>) => {
     try {
       await fn()
@@ -140,6 +144,7 @@ function ExportModal({ onClose }: { onClose: () => void }) {
         <h4>导入秀米</h4>
         <p className="hint">秀米不接受内嵌图片，但能显示微信图床的图片。{xiumi.localImages ? `这篇有 ${xiumi.localImages} 张本地图片需要处理。` : '这篇没有本地图片，可以直接导入。'}</p>
         {xiumi.backgrounds > 0 && <p className="hint">有 {xiumi.backgrounds} 处背景图（如轮播）：导入后能显示，但在秀米里不能单独选中编辑。</p>}
+        {xiumiParts > 1 && <p className="warn" data-testid="xiumi-parts">⚠ 这篇超出秀米一次导入的上限（约 13 万字符，超出部分会被秀米丢掉），将导出 {xiumiParts} 份文件，请下载后依次导入秀米。</p>}
         {xiumi.dataImages > 0 && <p className="warn">⚠ 有 {xiumi.dataImages} 处导入时自带的内嵌图片，秀米会换成占位图。</p>}
         {xiumi.localBackgrounds > 0 && !wx?.configured && <p className="warn">⚠ 有 {xiumi.localBackgrounds} 处背景图用了本地素材。不配置微信接口的话，它们在秀米里无法替换。</p>}
         <div className="row gap">
@@ -152,8 +157,10 @@ function ExportModal({ onClose }: { onClose: () => void }) {
               onClick={() =>
                 runXiumi(async () => {
                   setBusy('上传图片…')
-                  download(`${safeName}-导入秀米.txt`, await xiumiUploaded(doc, setBusy))
-                  notify('已下载，在秀米“导入 HTML 代码”里使用')
+                  const r = await xiumiUploaded(doc, setBusy)
+                  if (!confirmParts(r.parts)) return
+                  download(`${safeName}-${r.name}`, r.blob)
+                  notify(r.parts > 1 ? `已下载，解压后按「说明.txt」依次导入 ${r.parts} 个文件` : '已下载，在秀米“导入 HTML 代码”里使用')
                 })
               }
             >
@@ -167,8 +174,9 @@ function ExportModal({ onClose }: { onClose: () => void }) {
               runXiumi(async () => {
                 setBusy('打包…')
                 const r = await xiumiPackage(doc, setBusy)
-                download(r.images ? `${safeName}-导入秀米.zip` : `${safeName}-导入秀米.txt`, r.blob)
-                notify(r.images ? `已下载，解压后按「说明.txt」操作，导入后需手动替换 ${r.images} 张图片` : '已下载，在秀米“导入 HTML 代码”里使用')
+                if (!confirmParts(r.parts)) return
+                download(`${safeName}-${r.name}`, r.blob)
+                notify(r.parts > 1 || r.images ? `已下载，解压后按「说明.txt」操作${r.parts > 1 ? `，依次导入 ${r.parts} 个文件` : ''}${r.images ? `，导入后需手动替换 ${r.images} 张图片` : ''}` : '已下载，在秀米“导入 HTML 代码”里使用')
               })
             }
           >

@@ -2,7 +2,7 @@
 // 剪贴板写入方式参考 doocs/md（WTFPL）：ClipboardItem 优先，execCommand 兜底；首尾加零高度段落。
 import { compileDoc, css, type CompileResult } from '../core/compiler'
 import { fitRatio } from '../core/photos'
-import { asciiHtml, makeZip, replaceLocalImages, xiumiSvgBoxes } from '../core/xiumiExport'
+import { asciiHtml, makeZip, replaceLocalImages, splitForXiumi, xiumiSvgBoxes } from '../core/xiumiExport'
 import type { Doc } from '../core/types'
 import { api } from './api'
 
@@ -123,25 +123,58 @@ function placeholder(n: number, ratio = 0.66): string {
   return canvas.toDataURL('image/jpeg', 0.5)
 }
 
-const XIUMI_NOTES = (n: number) => `导入秀米的步骤
+const partName = (i: number, n: number) => (n > 1 ? `导入秀米-${i + 1}.txt` : '导入秀米.txt')
 
-1. 打开秀米的“导入 HTML 代码”，上传或粘贴「导入秀米.txt」。
-2. 秀米会提示部分图片已用占位图替代，这是正常的，秀米不接受内嵌图片。
-3. 在秀米里从上到下逐个替换占位图，依次使用「图片」文件夹里的 01 到 ${String(n).padStart(2, '0')}。
-   同一张图可能在文章里出现多次。
+const XIUMI_NOTES = (images: number, parts: number) =>
+  [
+    '导入秀米的步骤',
+    '',
+    parts > 1
+      ? `1. 这篇超过秀米单次导入的长度上限（约 13 万字符，超出部分会被直接丢掉），已分成 ${parts} 个文件。\n` +
+        `   在秀米的“导入 HTML 代码”里按 1 到 ${parts} 的顺序依次导入「导入秀米-1.txt」…「导入秀米-${parts}.txt」，\n` +
+        '   确认后面几段接在第一段末尾；如果秀米把某段放成了单独的图文，把它整段复制到上一段的末尾。'
+      : '1. 打开秀米的“导入 HTML 代码”，上传或粘贴「导入秀米.txt」。',
+    ...(images
+      ? [
+          '2. 秀米会提示部分图片已用占位图替代，这是正常的，秀米不接受内嵌图片。',
+          `3. 在秀米里从上到下逐个替换占位图，依次使用「图片」文件夹里的 01 到 ${String(images).padStart(2, '0')}。`,
+          '   同一张图可能在文章里出现多次。',
+          '',
+          '以背景图方式使用的本地图片，在秀米里选不中，无法这样替换。',
+          '这种情况请配置微信接口，改用“上传图片并下载”。',
+        ]
+      : []),
+    '',
+  ].join('\n')
 
-以背景图方式使用的本地图片，在秀米里选不中，无法这样替换。
-这种情况请配置微信接口，改用“上传图片并下载”。
-`
+/** 秀米导入文件：SVG 加盒子、按长度上限分段、写成纯 ASCII；一个文件直接给 txt，多个打成 zip 并附说明 */
+function xiumiFiles(html: string): { name: string; data: Uint8Array }[] {
+  const enc = new TextEncoder()
+  const parts = splitForXiumi(xiumiSvgBoxes(html))
+  return parts.map((p, i) => ({ name: partName(i, parts.length), data: enc.encode(asciiHtml(p)) }))
+}
+
+export interface XiumiDownload {
+  blob: Blob
+  name: string
+  /** 需要手动替换的本地图片数 */
+  images: number
+  /** 导入文件数（超过秀米长度上限时分段） */
+  parts: number
+}
+
+function xiumiZip(files: { name: string; data: Uint8Array }[], images: number): XiumiDownload {
+  const parts = files.filter((f) => f.name.startsWith('导入秀米')).length
+  if (files.length === 1) return { blob: new Blob([files[0].data as Uint8Array<ArrayBuffer>], { type: 'text/plain;charset=utf-8' }), name: '导入秀米.txt', images, parts }
+  const notes = { name: '说明.txt', data: new TextEncoder().encode('﻿' + XIUMI_NOTES(images, parts)) }
+  return { blob: new Blob([makeZip([...files.slice(0, parts), notes, ...files.slice(parts)])], { type: 'application/zip' }), name: '导入秀米.zip', images, parts }
+}
 
 /** 导出给秀米（不需要公众号接口）：本地图片换成占位图，另附按出现顺序编号的图片包 */
-export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void): Promise<{ blob: Blob; name: string; images: number }> {
+export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void): Promise<XiumiDownload> {
   const replaced = replaceLocalImages(compileDoc(doc).html, (url, i) => placeholder(i + 1, fitRatio(url)))
   const { urls } = replaced
-  const html = asciiHtml(xiumiSvgBoxes(replaced.html))
-  if (!urls.length) return { blob: new Blob([html], { type: 'text/plain;charset=utf-8' }), name: '导入秀米.txt', images: 0 }
-  const enc = new TextEncoder()
-  const files = [{ name: '导入秀米.txt', data: enc.encode(html) }, { name: '说明.txt', data: enc.encode('﻿' + XIUMI_NOTES(urls.length)) }]
+  const files = xiumiFiles(replaced.html)
   for (const [i, url] of urls.entries()) {
     onProgress?.(`打包图片 ${i + 1}/${urls.length}`)
     const r = await fetch(url)
@@ -149,12 +182,12 @@ export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void)
     const ext = url.split('?')[0].endsWith('.png') ? 'png' : 'jpg'
     files.push({ name: `图片/${String(i + 1).padStart(2, '0')}.${ext}`, data: new Uint8Array(await r.arrayBuffer()) })
   }
-  return { blob: new Blob([makeZip(files)], { type: 'application/zip' }), name: '导入秀米.zip', images: urls.length }
+  return xiumiZip(files, urls.length)
 }
 
 /** 导出给秀米（已配置公众号接口）：本地图片先传到微信图床，全部变成秀米能接受的地址 */
-export async function xiumiUploaded(doc: Doc, onProgress?: (msg: string) => void): Promise<string> {
+export async function xiumiUploaded(doc: Doc, onProgress?: (msg: string) => void): Promise<XiumiDownload> {
   const { html } = await compileForWechat(doc, 'wechat', onProgress)
   if (/(?:src="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
-  return asciiHtml(xiumiSvgBoxes(html))
+  return xiumiZip(xiumiFiles(html), 0)
 }

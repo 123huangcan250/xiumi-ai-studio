@@ -36,6 +36,96 @@ export function xiumiSvgBoxes(html: string): string {
   })
 }
 
+/**
+ * 秀米“导入 HTML”只保留前 131072（128×1024）个字符，后面的直接丢掉，被截断的标签连同其后的内容都不见了。
+ * 2026-11 实测：导出解码后 139254 字符，截断点正好落在第 131072 个字符（实体按还原后的一个字符算）。
+ * 留出余量，每个导入文件不超过这个长度。
+ */
+export const XIUMI_LIMIT = 120_000
+
+/** 秀米计数用的长度：实体按还原后的一个字符算 */
+export function xiumiLength(html: string): number {
+  return html.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, '.').length
+}
+
+const VOID = /^(area|base|br|col|embed|hr|img|input|link|meta|source|track|wbr)$/i
+/** 标签：属性值里的 > 不算结束 */
+const TAG = `<(\\/?)([a-zA-Z][\\w-]*)((?:\\s+[^\\s=>/]+(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s>]+))?)*)\\s*(\\/?)>`
+
+/** 拆出一个元素的开始标签、子节点（元素或文字，原样字符串）和结束标签；不是单个完整元素时返回 null */
+function element(html: string): { open: string; kids: string[]; close: string } | null {
+  const first = new RegExp(`^${TAG}`).exec(html)
+  if (!first || first[1] || VOID.test(first[2]) || first[4]) return null
+  const close = `</${first[2]}>`
+  if (!html.endsWith(close)) return null
+  const inner = html.slice(first[0].length, html.length - close.length)
+  const kids: string[] = []
+  const tag = new RegExp(TAG, 'g')
+  let depth = 0
+  let start = 0
+  let m: RegExpExecArray | null
+  const flushText = (end: number) => {
+    if (end > start) kids.push(inner.slice(start, end))
+  }
+  while ((m = tag.exec(inner))) {
+    const [all, slash, name, , self] = m
+    const selfClosing = !!self || VOID.test(name)
+    if (!slash) {
+      if (depth === 0) {
+        flushText(m.index)
+        start = m.index
+      }
+      if (!selfClosing) depth++
+      else if (depth === 0) {
+        kids.push(all)
+        start = m.index + all.length
+      }
+    } else {
+      depth--
+      if (depth < 0) return null
+      if (depth === 0) {
+        kids.push(inner.slice(start, m.index + all.length))
+        start = m.index + all.length
+      }
+    }
+  }
+  if (depth !== 0) return null
+  flushText(inner.length)
+  return { open: first[0], kids, close }
+}
+
+/**
+ * 按秀米的长度上限切成几段，每段单独导入。在模块之间切；单个模块太长时再往里一层切，
+ * 每段都带上外层容器的开始和结束标签，样式不丢。实在切不开的（一张很长的 SVG）单独成段，超出上限。
+ */
+export function splitForXiumi(html: string, limit = XIUMI_LIMIT): string[] {
+  if (xiumiLength(html) <= limit) return [html]
+  const el = element(html)
+  if (!el || el.kids.length < 2 && !el.kids.some((k) => element(k))) return [html]
+  const shell = xiumiLength(el.open + el.close)
+  const parts: string[] = []
+  let cur: string[] = []
+  let size = shell
+  const flush = () => {
+    if (cur.some((k) => k.trim())) parts.push(el.open + cur.join('') + el.close)
+    cur = []
+    size = shell
+  }
+  for (const kid of el.kids) {
+    const n = xiumiLength(kid)
+    if (shell + n > limit) {
+      flush()
+      for (const piece of splitForXiumi(kid, limit - shell)) parts.push(el.open + piece + el.close)
+      continue
+    }
+    if (size + n > limit) flush()
+    cur.push(kid)
+    size += n
+  }
+  flush()
+  return parts
+}
+
 const LOCAL_IMAGE =/(src="|url\((?:&quot;|["']?))(\/media\/[^"'&)]*(?:&amp;[^"'&)]*)*)/g
 
 /**

@@ -109,6 +109,46 @@ test('导出给秀米：本地图片不内嵌；有接口时传微信图床，�
   expect(out).toMatch(/background-image: url\(&quot;https:\/\/mmbiz\.qpic\.cn\/uploaded\/1&quot;\)/)
 })
 
+test('导出给秀米：超过秀米单次导入的长度上限时按模块分成几个文件，内容不丢', async ({ page }) => {
+  await page.goto('/')
+  const now = Date.now()
+  const id = `xiumi-long-${now}`
+  // 8 个模块，每个约 2 万字符，总长超过秀米的 131072 字符上限
+  const blocks = Array.from({ length: 8 }, (_, i) => ({ id: `b${i}`, type: 'html', props: { label: `模块${i}`, html: `<section style="border: 1px solid #660874"><p>第${i}节开头</p>${`<p style="color: #333333">第${i}节正文，用来凑够长度。</p>`.repeat(450)}<p>第${i}节结尾</p></section>` } }))
+  await page.request.put(`/api/projects/${id}`, { data: { id, title: '长文', author: '', digest: '', themeId: 'tsinghua-purple', createdAt: now, updatedAt: now, blocks } })
+  await page.reload()
+  await page.getByTestId('open-export').click()
+  await expect(page.getByTestId('xiumi-parts')).toContainText('将导出 2 份文件，请下载后依次导入秀米')
+  // 下载前提示会导出多份文件；取消就不下载
+  const prompts: string[] = []
+  let downloads = 0
+  page.on('download', () => downloads++)
+  page.once('dialog', (d) => (prompts.push(d.message()), d.dismiss()))
+  await page.getByTestId('xiumi-package').click()
+  await expect.poll(() => prompts.length).toBe(1)
+  expect(prompts[0]).toContain('将导出 2 份文件')
+  expect(prompts[0]).toContain('依次导入秀米')
+  await expect(page.getByTestId('xiumi-package')).toBeEnabled()
+  expect(downloads).toBe(0)
+  page.once('dialog', (d) => d.accept())
+  const [zip] = await Promise.all([page.waitForEvent('download'), page.getByTestId('xiumi-package').click()])
+  expect(zip.suggestedFilename()).toBe('长文-导入秀米.zip')
+  const files = readZip(readFileSync((await zip.path())!))
+  expect(Object.keys(files).sort()).toEqual(['导入秀米-1.txt', '导入秀米-2.txt', '说明.txt'].sort())
+  expect(files['说明.txt'].toString('utf8')).toContain('依次导入')
+  const decode = (s: string) => s.replace(/&#x([0-9A-F]+);/g, (_m, h) => String.fromCodePoint(parseInt(h, 16)))
+  const parts = ['导入秀米-1.txt', '导入秀米-2.txt'].map((n) => files[n].toString('utf8'))
+  for (const p of parts) {
+    expect(p).not.toMatch(/[\u0080-\u{10FFFF}]/u)
+    expect(decode(p).length).toBeLessThan(131072)
+  }
+  // 每节的开头和结尾都在，而且按顺序
+  const all = parts.map(decode).join('')
+  const marks = Array.from({ length: 8 }, (_, i) => [all.indexOf(`第${i}节开头`), all.indexOf(`第${i}节结尾`)]).flat()
+  expect(marks.every((m) => m >= 0)).toBe(true)
+  expect(marks).toEqual([...marks].sort((a, b) => a - b))
+})
+
 test.describe.serial('组件库', () => {
   test('粘贴秀米内容：转存图片、记录来源、拆分加入组件库', async ({ page }) => {
     await page.goto('/')
