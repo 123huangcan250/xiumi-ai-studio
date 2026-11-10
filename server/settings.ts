@@ -14,6 +14,45 @@ export interface AiProfile {
   model: string
   /** 是否请求 response_format=json_object（部分服务不支持，失败时会自动重试不带该参数） */
   jsonMode: boolean
+  /** 思考强度（reasoning_effort / output_config.effort）；空 = 不发送，用模型默认值 */
+  reasoningEffort?: string
+  /** 检测或上游返回的、这个模型接受的思考强度 */
+  efforts?: string[]
+  /** 上下文窗口（token，0 = 未知），来自上游模型列表，可手动改 */
+  contextWindow?: number
+  /** 单次最大输出（token，0 = 未知）：请求的 max_tokens 不会超过它 */
+  maxOutputTokens?: number
+  /** 额外的请求参数（JSON 对象），合并进请求体，给第三方接口的特殊开关用 */
+  extraBody?: string
+}
+
+/** 思考强度只接受字母、数字和短横线，不信任前端传来的任意字符串 */
+const EFFORT = /^[a-z][a-z0-9-]{0,15}$/
+export const cleanEffort = (v: unknown) => (typeof v === 'string' && EFFORT.test(v.trim().toLowerCase()) ? v.trim().toLowerCase() : '')
+const cleanCount = (v: unknown) => {
+  const n = Math.floor(Number(v))
+  return Number.isFinite(n) && n > 0 ? Math.min(n, 100_000_000) : 0
+}
+/** 额外参数必须是 JSON 对象；不是就丢弃（保存时界面会提示） */
+export function cleanExtraBody(v: unknown): string {
+  if (typeof v !== 'string' || !v.trim()) return ''
+  try {
+    const o = JSON.parse(v)
+    return o && typeof o === 'object' && !Array.isArray(o) ? JSON.stringify(o) : ''
+  } catch {
+    return ''
+  }
+}
+/** 公共的新字段整理（保存和临时测试共用） */
+function tuning(p: Partial<AiProfile>, fallback?: AiProfile): Pick<AiProfile, 'reasoningEffort' | 'efforts' | 'contextWindow' | 'maxOutputTokens' | 'extraBody'> {
+  const efforts = Array.isArray(p.efforts) ? [...new Set(p.efforts.map(cleanEffort).filter(Boolean))].slice(0, 10) : (fallback?.efforts ?? [])
+  return {
+    reasoningEffort: cleanEffort(p.reasoningEffort ?? fallback?.reasoningEffort),
+    efforts,
+    contextWindow: cleanCount(p.contextWindow ?? fallback?.contextWindow),
+    maxOutputTokens: cleanCount(p.maxOutputTokens ?? fallback?.maxOutputTokens),
+    extraBody: cleanExtraBody(p.extraBody ?? fallback?.extraBody),
+  }
 }
 
 interface Settings {
@@ -85,6 +124,7 @@ export async function saveAiSettings(input: { activeId: string; profiles: Partia
         apiKey: key,
         model: String(p.model ?? '').trim(),
         jsonMode: p.jsonMode !== false,
+        ...tuning(p),
       }
     })
   s.ai = { activeId: String(input.activeId ?? ''), profiles }
@@ -104,5 +144,6 @@ export async function resolveDraftProfile(p: Partial<AiProfile>): Promise<AiProf
     apiKey: key,
     model: String(p.model ?? saved?.model ?? ''),
     jsonMode: p.jsonMode !== false,
+    ...tuning(p, saved),
   }
 }

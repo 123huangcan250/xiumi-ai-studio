@@ -32,6 +32,11 @@ interface ChatOpts {
   profileId?: string
   /** 直接指定配置（用于“测试连接”） */
   profile?: AiProfile
+  /** 思考强度：不写 = 用配置里的；'' = 不发送；其他 = 指定（检测支持的强度时用） */
+  effort?: string
+  /** 服务拒绝思考强度时不要悄悄去掉它，直接报错（检测时需要知道哪些强度被拒绝） */
+  keepEffort?: boolean
+  timeoutMs?: number
 }
 
 async function readError(res: Response) {
@@ -44,57 +49,134 @@ async function readError(res: Response) {
   }
 }
 
-export async function chatJson(system: string, user: string, opts: ChatOpts = {}): Promise<any> {
+/** 请求里这些字段不能被“额外参数”改掉 */
+const PROTECTED = new Set(['model', 'messages', 'system', 'stream', 'tools', 'tool_choice'])
+
+/** 配置里的额外请求参数（JSON 对象），去掉不允许覆盖的字段 */
+export function extraBodyOf(p: AiProfile): Record<string, unknown> {
+  if (!p.extraBody) return {}
+  try {
+    const o = JSON.parse(p.extraBody)
+    return Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).filter(([k]) => !PROTECTED.has(k)))
+  } catch {
+    return {}
+  }
+}
+
+/** 一次请求用到的可选参数。第三方服务支持的参数不一样，被拒绝时按报错信息逐项去掉后重试 */
+interface Wire {
+  json: boolean
+  tokenField: 'max_tokens' | 'max_completion_tokens'
+  temperature: boolean
+  effort: boolean
+  maxTokens: number
+}
+
+/** 400 报错里点名了哪个参数，就去掉（或改写）哪个；没有可调整的返回 null */
+export function adjustWire(w: Wire, message: string, keepEffort = false): Wire | null {
+  const m = message.toLowerCase()
+  if (w.tokenField === 'max_tokens' && /max_completion_tokens/.test(m)) return { ...w, tokenField: 'max_completion_tokens' }
+  if (w.temperature && /temperature/.test(m)) return { ...w, temperature: false }
+  if (w.effort && !keepEffort && /reasoning|effort|thinking/.test(m)) return { ...w, effort: false }
+  if (w.json && /response_format|json_object|json_schema|json mode|json_mode/.test(m)) return { ...w, json: false }
+  // 输出上限过大：报错里常带着模型允许的数字
+  if (/max_tokens|max_completion_tokens|output tokens|completion tokens|maximum.*token/.test(m)) {
+    const limit = (m.match(/\d{3,7}/g) ?? []).map(Number).filter((n) => n >= 256 && n < w.maxTokens).sort((x, y) => y - x)[0]
+    if (limit) return { ...w, maxTokens: limit }
+  }
+  // 其他 400：老办法，先去掉 JSON 模式再试
+  if (w.json) return { ...w, json: false }
+  return null
+}
+
+async function sendAdaptive(send: (w: Wire) => Promise<Response>, start: Wire, keepEffort: boolean): Promise<Response> {
+  let w = start
+  for (let i = 0; i < 6; i++) {
+    const res = await send(w)
+    if (res.ok) return res
+    const message = await readError(res)
+    const next = res.status === 400 || res.status === 422 ? adjustWire(w, message, keepEffort) : null
+    if (!next) throw Object.assign(new Error(`AI 请求失败 ${res.status}: ${message}`), { status: 502 })
+    w = next
+  }
+  throw Object.assign(new Error('AI 请求失败：参数被服务反复拒绝'), { status: 502 })
+}
+
+/** 调用模型，返回文本。OpenAI 兼容接口或 Anthropic */
+export async function chatText(system: string, user: string, opts: ChatOpts = {}): Promise<string> {
   const p = opts.profile ?? (await getProfile(opts.profileId))
   if (!p || !p.baseUrl || !p.model) throw Object.assign(new Error('尚未配置 AI 模型：请在「AI 模型设置」中添加'), { status: 503 })
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 180_000)
+  const timeout = opts.timeoutMs ?? 180_000
+  const timer = setTimeout(() => ctrl.abort(), timeout)
+  const effort = opts.effort ?? p.reasoningEffort ?? ''
+  const wanted = opts.maxTokens ?? 8000
+  const start: Wire = {
+    json: p.jsonMode && p.provider !== 'anthropic',
+    tokenField: 'max_tokens',
+    temperature: true,
+    effort: Boolean(effort),
+    maxTokens: p.maxOutputTokens ? Math.min(wanted, p.maxOutputTokens) : wanted,
+  }
+  const extra = extraBodyOf(p)
   try {
     if (p.provider === 'anthropic') {
-      const res = await fetch(`${p.baseUrl}/v1/messages`, {
-        method: 'POST',
-        signal: ctrl.signal,
-        headers: { 'content-type': 'application/json', 'x-api-key': p.apiKey, 'anthropic-version': '2023-06-01' },
-        body: JSON.stringify({
-          model: p.model,
-          max_tokens: opts.maxTokens ?? 8000,
-          temperature: opts.temperature ?? 0.4,
-          system,
-          messages: [{ role: 'user', content: user }],
-        }),
-      })
-      if (!res.ok) throw Object.assign(new Error(`AI 请求失败 ${res.status}: ${await readError(res)}`), { status: 502 })
+      const res = await sendAdaptive(
+        (w) =>
+          fetch(`${p.baseUrl}/v1/messages`, {
+            method: 'POST',
+            signal: ctrl.signal,
+            headers: { 'content-type': 'application/json', 'x-api-key': p.apiKey, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({
+              model: p.model,
+              max_tokens: w.maxTokens,
+              ...(w.temperature ? { temperature: opts.temperature ?? 0.4 } : {}),
+              ...(w.effort ? { output_config: { effort } } : {}),
+              system,
+              messages: [{ role: 'user', content: user }],
+              ...extra,
+            }),
+          }),
+        start,
+        Boolean(opts.keepEffort),
+      )
       const data: any = await res.json()
-      return extractJson(data.content?.map((c: any) => c.text ?? '').join('') ?? '')
+      return data.content?.map((c: any) => c.text ?? '').join('') ?? ''
     }
-    const send = (json: boolean) =>
-      fetch(`${p.baseUrl}/chat/completions`, {
-        method: 'POST',
-        signal: ctrl.signal,
-        headers: { 'content-type': 'application/json', ...(p.apiKey ? { authorization: `Bearer ${p.apiKey}` } : {}) },
-        body: JSON.stringify({
-          model: p.model,
-          temperature: opts.temperature ?? 0.4,
-          max_tokens: opts.maxTokens ?? 8000,
-          ...(json ? { response_format: { type: 'json_object' } } : {}),
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: user },
-          ],
+    const res = await sendAdaptive(
+      (w) =>
+        fetch(`${p.baseUrl}/chat/completions`, {
+          method: 'POST',
+          signal: ctrl.signal,
+          headers: { 'content-type': 'application/json', ...(p.apiKey ? { authorization: `Bearer ${p.apiKey}` } : {}) },
+          body: JSON.stringify({
+            model: p.model,
+            ...(w.temperature ? { temperature: opts.temperature ?? 0.4 } : {}),
+            [w.tokenField]: w.maxTokens,
+            ...(w.effort ? { reasoning_effort: effort } : {}),
+            ...(w.json ? { response_format: { type: 'json_object' } } : {}),
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: user },
+            ],
+            ...extra,
+          }),
         }),
-      })
-    let res = await send(p.jsonMode)
-    // 部分服务不支持 response_format：去掉后重试一次
-    if (!res.ok && p.jsonMode && res.status === 400) res = await send(false)
-    if (!res.ok) throw Object.assign(new Error(`AI 请求失败 ${res.status}: ${await readError(res)}`), { status: 502 })
+      start,
+      Boolean(opts.keepEffort),
+    )
     const data: any = await res.json()
-    return extractJson(data.choices?.[0]?.message?.content ?? '')
+    return data.choices?.[0]?.message?.content ?? ''
   } catch (e: any) {
-    if (e.name === 'AbortError') throw Object.assign(new Error('AI 请求超时（180 秒）'), { status: 504 })
+    if (e.name === 'AbortError') throw Object.assign(new Error(`AI 请求超时（${Math.round(timeout / 1000)} 秒）`), { status: 504 })
     throw e
   } finally {
     clearTimeout(timer)
   }
+}
+
+export async function chatJson(system: string, user: string, opts: ChatOpts = {}): Promise<any> {
+  return extractJson(await chatText(system, user, opts))
 }
 
 export const OUTLINE_SYSTEM = `你是资深的微信公众号主编。把用户提供的文稿整理为结构化大纲，用于自动排版。

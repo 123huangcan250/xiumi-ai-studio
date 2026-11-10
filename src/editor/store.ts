@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { cloneBlock, createBlock, newId, normalizeBlocks } from '../core/blocks'
-import { applyOp, validateOp } from '../core/ops'
+import { applyOp, limitToSelection, validateOp } from '../core/ops'
 import { allThemes, registerTheme } from '../core/themes'
 import { findBlock, insertBlocksAt, insertionPoint, moveBlockTo, removeBlockById, replaceBlockWith, updateBlock } from '../core/tree'
 import type { Block, BlockType, Doc, DocOp, Theme } from '../core/types'
@@ -61,7 +61,8 @@ interface State {
   setDocFields: (fields: Partial<Doc>, coalesceKey?: string) => void
   undo: () => void
   redo: () => void
-  propose: (summary: string, rawOps: any[]) => void
+  /** selectedId：用户选中了模块时，只接受落在这个模块上的操作 */
+  propose: (summary: string, rawOps: any[], selectedId?: string | null) => void
   resolveProposal: (index: number | 'all', status: 'accepted' | 'rejected') => void
   clearProposal: () => void
   refreshThemes: () => void
@@ -207,11 +208,13 @@ export const useStore = create<State>((set, get) => ({
     set({ doc: future[0], future: future.slice(1), past: [...past, doc], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
   },
 
-  propose(summary, rawOps) {
+  propose(summary, rawOps, selectedId) {
     const base = get().doc
     const items: ProposalItem[] = []
     const errors: string[] = []
-    for (const raw of rawOps) {
+    const scoped = limitToSelection(base, selectedId, rawOps)
+    for (const op of scoped.dropped) errors.push(`${OP_NAME[op?.op as string] ?? '未知操作'}不在选中的模块上`)
+    for (const raw of scoped.ops) {
       const { op, error } = validateOp(base, raw)
       if (op) items.push({ op, status: 'pending' })
       else errors.push(error!)
@@ -248,6 +251,9 @@ export const useStore = create<State>((set, get) => ({
     }, 3200)
   },
 }))
+
+/** 被丢弃的操作在提示里的叫法 */
+const OP_NAME: Record<string, string> = { update: '修改其他模块', remove: '删除其他模块', insert: '在远处插入模块', move: '调整顺序', setTheme: '切换主题', setMeta: '修改文章信息' }
 
 export const selectedBlock = (s: State) => findBlock(s.doc.blocks, s.selectedId)?.block ?? null
 

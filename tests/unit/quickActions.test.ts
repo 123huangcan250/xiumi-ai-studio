@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { buildVariants } from '../../src/core/layouts'
-import { applyOps, validateOp } from '../../src/core/ops'
+import { applyOps, limitToSelection, selectionScope, validateOp } from '../../src/core/ops'
+import { createBlock } from '../../src/core/blocks'
 import { parseArticle } from '../../src/core/outline'
 import { QUICK_ACTIONS, aiContext } from '../../src/core/quickActions'
 
@@ -27,5 +28,55 @@ describe('quick actions', () => {
     expect(json).not.toContain('/media/')
     expect(json).not.toContain('"type":"doc"')
     expect(ctx.blocks[0]).toMatchObject({ index: 0, type: 'cover' })
+  })
+})
+
+describe('ai edits limited to the selected module', () => {
+  const para = (id: string, text: string) => ({ ...createBlock('paragraph'), id, props: { ...createBlock('paragraph').props, content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] } } }) as any
+  const child = para('c1', '框里的字')
+  const doc: any = {
+    title: '标题',
+    themeId: 'ink',
+    blocks: [para('a', '第一段'), para('b', '第二段'), { ...createBlock('box'), id: 'box', props: { ...createBlock('box').props, children: [child] } }, para('d', '第四段')],
+  }
+  const raw = [
+    { op: 'update', id: 'b', props: { content: 'x' } },
+    { op: 'update', id: 'a', props: { content: 'y' } },
+    { op: 'remove', id: 'd' },
+    { op: 'insert', index: 1, block: { type: 'divider', props: {} } },
+    { op: 'insert', index: 2, block: { type: 'divider', props: {} } },
+    { op: 'insert', index: 3, block: { type: 'divider', props: {} } },
+    { op: 'move', id: 'b', to: 0 },
+    { op: 'setTheme', themeId: 'x' },
+    { op: 'setMeta', title: '新标题' },
+  ]
+  it('keeps only changes on the selected module and its neighbours-in-place inserts', () => {
+    const r = limitToSelection(doc, 'b', raw)
+    expect(r.ops).toEqual([raw[0], raw[3], raw[4]])
+    expect(r.dropped).toEqual([raw[1], raw[2], raw[5], raw[6], raw[7], raw[8]])
+  })
+  it('treats a text box and its children as one scope; children insert around the box', () => {
+    expect([...selectionScope(doc, 'box')!.ids]).toEqual(['box', 'c1'])
+    const inChild = selectionScope(doc, 'c1')!
+    expect([...inChild.ids]).toEqual(['c1'])
+    expect(inChild.top).toBe(2)
+    expect(limitToSelection(doc, 'c1', [{ op: 'update', id: 'c1', props: {} }, { op: 'update', id: 'box', props: {} }, { op: 'insert', index: 3 }, { op: 'insert', index: 0 }]).ops).toHaveLength(2)
+  })
+  it('passes everything through when nothing is selected', () => {
+    expect(limitToSelection(doc, null, raw)).toEqual({ ops: raw, dropped: [] })
+    expect(limitToSelection(doc, 'missing', raw).dropped).toEqual([])
+  })
+  it('sends the whole selected module and only one-line summaries of the rest', () => {
+    const ctx: any = aiContext(doc, 'b')
+    expect(ctx.focus).toEqual({ id: 'b', type: 'paragraph' })
+    expect(ctx.blocks[1].props.content).toBe('第二段')
+    expect(ctx.blocks[0]).toEqual({ index: 0, id: 'a', type: 'paragraph', summary: '第一段' })
+    expect(ctx.blocks[3].summary).toBe('第四段')
+    // 选中文本框里的子模块：把整个文本框交给模型，方便看到上下文
+    const c2: any = aiContext(doc, 'c1')
+    expect(c2.focus.id).toBe('c1')
+    expect(c2.blocks[2].props.children[0].id).toBe('c1')
+    // 没选中时和原来一样
+    expect((aiContext(doc) as any).focus).toBeUndefined()
   })
 })

@@ -2,6 +2,7 @@
 // 槽位按文档顺序编号（文字 t0、t1…，图片 i0、i1…），同一段 HTML 每次识别结果相同，因此不需要另存标记。
 // 表单改字换图、AI 修改导入内容、套用模板生成新推文，都只替换槽位里的文字和图片地址，结构与样式保持原样。
 import { variantUrl } from './compiler'
+import { splitDecls } from './sanitize'
 import type { ImageRef } from './types'
 
 export type SlotRole = 'title' | 'body' | 'caption' | 'label' | 'number'
@@ -36,6 +37,8 @@ export interface FillOptions {
   split?: boolean
   /** 是否把 **文字** 转为加粗 */
   bold?: boolean
+  /** 保留用户输入的空格（行首、行尾、连续空格写成不换行空格）；表单改字用，其余场景仍然去掉多余空白 */
+  keepSpaces?: boolean
 }
 
 const defaultParse: Parse = (s) => new DOMParser().parseFromString(s, 'text/html')
@@ -72,6 +75,49 @@ function readText(el: Element): string {
   walk(el)
   return cleanText(s)
 }
+
+const NBSP_MARK = '\u0001'
+const BR_MARK = '\u0002'
+
+/**
+ * 文字槽位在表单里显示的内容：和 HTML 的显示效果一致（源码里的换行、缩进折叠成一个空格，行首行尾的空白不显示），
+ * 但不换行空格（&nbsp;）每个都算一个空格，用户输入的空格因此不会被吞掉。
+ */
+function readRaw(node: Node): string {
+  let s = ''
+  const walk = (n: Node) => {
+    if (n.nodeType === 3) s += (n.textContent ?? '').replace(/[\u200b\u200c\ufeff]|\u200d/g, '').replace(/\u00a0/g, NBSP_MARK)
+    else if (n.nodeType === 1) {
+      if (tagOf(n as Element) === 'br') s += BR_MARK
+      else n.childNodes.forEach(walk)
+    }
+  }
+  walk(node)
+  return s
+    .split(BR_MARK)
+    .map((line) => line.replace(/[ \t\r\n\f\v]+/g, ' ').replace(/^ | $/g, '').replaceAll(NBSP_MARK, ' '))
+    .join('\n')
+}
+
+/** 表单里的文字写回后读出来的样子（空行去掉、制表符当空格），用来判断表单内容是否已同步 */
+export function editableText(s: string): string {
+  return s
+    .replace(/\r/g, '')
+    .replace(/[\t\f\v]/g, ' ')
+    .split('\n')
+    .filter((l) => l.trim())
+    .join('\n')
+}
+
+/** 每个文字槽位保留空格的文字（键为槽位 id） */
+export function slotRawTexts(html: string, parse: Parse = defaultParse): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const { slot, node } of scan(rootOf(html, parse))) if (slot.kind === 'text') out[slot.id] = readRaw(node)
+  return out
+}
+
+/** 行首、行尾、连续的空格写成不换行空格，页面上才会显示出来 */
+const keepSpace = (line: string) => line.replace(/ {2,}/g, (m) => '\u00a0'.repeat(m.length)).replace(/^ /, '\u00a0').replace(/ $/, '\u00a0')
 
 function textNodes(el: Node): Text[] {
   const out: Text[] = []
@@ -234,18 +280,19 @@ function setLine(el: Element, line: string, doc: Document, bold: boolean) {
   for (const e of hadText.reverse()) if (e.isConnected && !hasText(e) && !e.querySelector('img, svg, br')) e.remove()
 }
 
-function writeText(node: Node, value: string, role: SlotRole, doc: Document, split: boolean, bold: boolean) {
-  const v = value.replace(/\r/g, '').trim()
+function writeText(node: Node, value: string, role: SlotRole, doc: Document, split: boolean, bold: boolean, keep = false) {
+  const v = keep ? value.replace(/\r/g, '') : value.replace(/\r/g, '').trim()
+  const tidy = (line: string) => (keep ? keepSpace(line) : line)
   if (node.nodeType === 3) {
-    node.textContent = v.replace(/\*\*/g, '').replace(/\s*\n+\s*/g, ' ')
+    node.textContent = tidy(v.replace(/\*\*/g, '').replace(/\s*\n+\s*/g, ' '))
     return
   }
   const el = node as Element
-  if (!v) {
+  if (!v.trim()) {
     el.remove()
     return
   }
-  const lines = v.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+  const lines = v.split(/\n+/).map((x) => (keep ? x : x.trim())).filter((x) => x.trim()).map(tidy)
   // 正文多段：复制段落元素，每段沿用相同样式
   if (split && lines.length > 1 && role === 'body' && tagOf(el) === 'p') {
     let prev = el
@@ -291,7 +338,7 @@ const SAFE_SRC = /^(\/media\/[\w.-]+(\?[\w=&:%-]*)?|https:\/\/[^\s"'<>]+)$/
 
 /** 按槽位替换文字和图片，返回新的 HTML（结构与样式不变） */
 export function fillSlots(html: string, values: SlotValues, opts: FillOptions = {}): string {
-  const { parse = defaultParse, ratios, split = true, bold = true } = opts
+  const { parse = defaultParse, ratios, split = true, bold = true, keepSpaces = false } = opts
   const root = rootOf(html, parse)
   const doc = root.ownerDocument
   const emptied: Element[] = []
@@ -316,7 +363,7 @@ export function fillSlots(html: string, values: SlotValues, opts: FillOptions = 
     if (typeof v === 'string') {
       // 删掉的图注、标题行：它的外框（引号装饰、色条）可能也随之变空
       if (!v.trim() && node.parentElement && slot.role !== 'body') emptied.push(node.parentElement)
-      writeText(node, v, slot.role, doc, split, bold)
+      writeText(node, v, slot.role, doc, split, bold, keepSpaces)
     }
   }
   // 照片位、图注移除后，只剩编号标签（IMG 01）、图标和空框的区域一并移除：向外找到不含中文、不含照片的最外层
@@ -452,5 +499,94 @@ export function skeleton(html: string, parse: Parse = defaultParse): string {
   }
   for (const t of textNodes(root)) t.textContent = ''
   root.querySelectorAll('img').forEach((img) => img.setAttribute('src', ''))
+  return root.innerHTML
+}
+
+export type Align = 'left' | 'center' | 'right'
+const FLEX_ALIGN: Record<Align, string> = { left: 'flex-start', center: 'center', right: 'flex-end' }
+
+const styleOf = (el: Element) => el.getAttribute('style') ?? ''
+const declOf = (el: Element, prop: string) => {
+  for (const d of splitDecls(styleOf(el)).reverse()) {
+    const i = d.indexOf(':')
+    if (i > 0 && d.slice(0, i).trim().toLowerCase() === prop) return d.slice(i + 1).replace(/!important/i, '').trim().toLowerCase()
+  }
+  return ''
+}
+function setDecl(el: Element, prop: string, value: string) {
+  const rest = splitDecls(styleOf(el)).filter((d) => d.slice(0, Math.max(0, d.indexOf(':'))).trim().toLowerCase() !== prop)
+  el.setAttribute('style', [...rest.map((d) => d.trim()), `${prop}: ${value}`].join('; '))
+}
+
+/** 文字所在的块：行内元素向外找到第一个块级容器；SVG 图形里的文字位置是固定的，不能调整 */
+function alignHost(node: Node, root: Element): Element | null {
+  let el: Element | null = node.nodeType === 3 ? node.parentElement : (node as Element)
+  while (el && el !== root && (INLINE.has(tagOf(el)) || declOf(el, 'display') === 'inline')) el = el.parentElement
+  if (!el || el === root || el.closest('svg')) return null
+  return el
+}
+
+/** 从文字所在的块向外，第一个明确设置的对齐；没有设置时为 null（跟随外层，页面上多半是左对齐） */
+function alignOf(host: Element, root: Element): Align | null {
+  for (let el: Element | null = host; el && el !== root; el = el.parentElement) {
+    const a = declOf(el, 'text-align')
+    if (a === 'center') return 'center'
+    if (a === 'right' || a === 'end') return 'right'
+    if (a === 'left' || a === 'start') return 'left'
+    if (a === 'justify') return null
+    const j = /flex/.test(declOf(el, 'display')) ? declOf(el, 'justify-content') : ''
+    if (j === 'center') return 'center'
+    if (j === 'flex-end' || j === 'end' || j === 'right') return 'right'
+  }
+  return null
+}
+
+/** 每个文字槽位的对齐状态：alignable 为 false 的（SVG 图形内的文字）不能调整 */
+export function slotAligns(html: string, parse: Parse = defaultParse): Record<string, { alignable: boolean; align: Align | null }> {
+  const root = rootOf(html, parse)
+  const out: Record<string, { alignable: boolean; align: Align | null }> = {}
+  for (const { slot, node } of scan(root)) {
+    if (slot.kind !== 'text') continue
+    const host = alignHost(node, root)
+    out[slot.id] = { alignable: !!host, align: host ? alignOf(host, root) : null }
+  }
+  return out
+}
+
+const isRowFlex = (el: Element) => /flex/.test(declOf(el, 'display')) && !/column/.test(declOf(el, 'flex-direction'))
+const fixedWidth = (el: Element) => /^\d+(\.\d+)?px$/.test(declOf(el, 'width')) || /fit-content|max-content/.test(declOf(el, 'width'))
+/** 宽度由内容或固定尺寸决定的盒子：它在外层里靠左靠右，要由外层来摆 */
+const shrinkBox = (el: Element) => /inline-(block|flex)/.test(declOf(el, 'display')) || fixedWidth(el)
+
+/**
+ * 设置文字槽位的对齐：写在文字所在的块上（text-align）。
+ * 文字外面如果是宽度被内容撑开的盒子（行内块、固定宽度、弹性布局里的一项），只改文字所在的块看不出变化，
+ * 所以沿着只装着这块文字的外层逐层向外设置：文字的 text-align、弹性容器的 justify-content，固定宽度的块级盒子用左右外边距摆放。
+ */
+export function setSlotAlign(html: string, id: string, align: Align, parse: Parse = defaultParse): string {
+  const root = rootOf(html, parse)
+  const hit = scan(root).find((h) => h.slot.id === id)
+  const host = hit && hit.slot.kind === 'text' ? alignHost(hit.node, root) : null
+  if (!host) return html
+  const apply = (el: Element) => {
+    setDecl(el, 'text-align', align)
+    if (isRowFlex(el)) setDecl(el, 'justify-content', FLEX_ALIGN[align])
+  }
+  const loneIn = (parent: Element) => Array.from(parent.children).filter((c) => hasText(c) || c.querySelector('img')).length === 1
+  apply(host)
+  let child = host
+  for (;;) {
+    const parent = child.parentElement
+    if (!parent || parent === root || parent.closest('svg') || !loneIn(parent)) break
+    const wrapped = shrinkBox(child) || isRowFlex(parent)
+    if (!wrapped && !shrinkBox(parent)) break
+    // 固定宽度的块级盒子：靠外边距摆在外层里
+    if (fixedWidth(child) && !/inline|flex/.test(declOf(child, 'display')) && !isRowFlex(parent)) {
+      setDecl(child, 'margin-left', align === 'left' ? '0' : 'auto')
+      setDecl(child, 'margin-right', align === 'right' ? '0' : 'auto')
+    }
+    apply(parent)
+    child = parent
+  }
   return root.innerHTML
 }

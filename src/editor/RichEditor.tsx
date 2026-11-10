@@ -71,7 +71,9 @@ export function RichEditor({ value, theme, onChange, onDone, fontSize }: Props) 
         <span className="sep" />
         {btn('• 列表', st?.bullet ?? false, () => chain().toggleBulletList().run(), '无序列表')}
         {btn('1. 列表', st?.ordered ?? false, () => chain().toggleOrderedList().run(), '有序列表')}
-        {btn('居中', false, () => chain().setTextAlign(editor.isActive({ textAlign: 'center' }) ? 'justify' : 'center').run(), '居中/两端对齐')}
+        {btn('居左', editor.isActive({ textAlign: 'left' }), () => chain().setTextAlign('left').run(), '居左')}
+        {btn('居中', editor.isActive({ textAlign: 'center' }), () => chain().setTextAlign(editor.isActive({ textAlign: 'center' }) ? 'justify' : 'center').run(), '居中（再点一次恢复两端对齐）')}
+        {btn('居右', editor.isActive({ textAlign: 'right' }), () => chain().setTextAlign('right').run(), '居右')}
         {btn('链接', st?.link ?? false, () => {
           if (editor.isActive('link')) return chain().unsetLink().run()
           const href = prompt('链接地址（非公众号文章链接在微信中会转为文字）')

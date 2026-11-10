@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { blockLabel, blockMeta } from '../core/blocks'
 import { BOX_GAP, blockGap, compileBlock, rootStyle } from '../core/compiler'
 import { expandPick, fragmentHtml, insertionAnchor, pickElement, placeFragment } from '../core/fragments'
@@ -14,6 +14,7 @@ import { resolveTheme } from '../core/themes'
 import { findBlock } from '../core/tree'
 import type { Block, Theme } from '../core/types'
 import { api } from './api'
+import { clampZoom, wheelFactor, ZOOM_MAX, ZOOM_MIN } from './zoom'
 import { openCollect, setInlineTarget } from './componentActions'
 import { ErrorBoundary } from './ErrorBoundary'
 import { useStore } from './store'
@@ -449,6 +450,55 @@ function usePhotoDrag(scroller: React.RefObject<HTMLDivElement | null>) {
   }
 }
 
+const ZOOM_KEY = 'xiumi-canvas-zoom'
+/**
+ * 只缩放中间的文章：Ctrl + 滚轮 / 触控板捏合、Ctrl + 加减号和 0 都改画布的缩放，不再缩放整个界面。
+ * 缩放比例记在本机浏览器里。
+ */
+function useCanvasZoom() {
+  const [zoom, setZoomState] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem(ZOOM_KEY))
+      return v ? clampZoom(v) : 1
+    } catch {
+      return 1
+    }
+  })
+  const setZoom = useCallback((to: number | ((z: number) => number)) => {
+    setZoomState((z) => {
+      const next = clampZoom(typeof to === 'function' ? to(z) : to)
+      try {
+        localStorage.setItem(ZOOM_KEY, String(next))
+      } catch {
+        /* 拿不到本地存储时只是不记住 */
+      }
+      return next
+    })
+  }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return
+      if (e.key === '=' || e.key === '+') setZoom((z) => z + 0.1)
+      else if (e.key === '-' || e.key === '_') setZoom((z) => z - 0.1)
+      else if (e.key === '0') setZoom(1)
+      else return
+      e.preventDefault()
+    }
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      setZoom((z) => z * wheelFactor(e.deltaY))
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('wheel', onWheel)
+    }
+  }, [setZoom])
+  return [zoom, setZoom] as const
+}
+
 export function Canvas() {
   const doc = useStore((s) => s.doc)
   const theme = useMemo(() => resolveTheme(doc), [doc.themeId, doc.themeOverrides]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -456,23 +506,31 @@ export function Canvas() {
   const { setNodeRef, isOver } = useDroppable({ id: 'canvas-end' })
   const scroller = useRef<HTMLDivElement>(null)
   const photoDrag = usePhotoDrag(scroller)
+  const [zoom, setZoom] = useCanvasZoom()
   return (
-    <div className="canvas-scroll" ref={scroller} onClick={() => select(null)} {...photoDrag}>
-      <div className="phone">
-        <div className="phone-head">
-          <div className="wx-title">{doc.title || '未命名推文'}</div>
-          <div className="wx-meta">{doc.author || '公众号名称'} · 刚刚</div>
-        </div>
-        <div className="article" style={styleObj(rootStyle(theme))} data-testid="canvas">
-          <SortableContext items={doc.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
-            {doc.blocks.map((b, i) => (
-              <BlockView key={b.id} block={b} theme={theme} gap={blockGap(b, doc.blocks[i + 1], theme)} />
-            ))}
-          </SortableContext>
-          <div ref={setNodeRef} className={`drop-end ${isOver ? 'over' : ''}`}>
-            {doc.blocks.length ? '拖入模块到此处，或在左侧点击添加' : '从左侧拖入模块，或使用「AI 一键排版」导入文稿'}
+    <div className="canvas-wrap">
+      <div className="canvas-scroll" ref={scroller} onClick={() => select(null)} {...photoDrag}>
+        <div className="phone" style={zoom === 1 ? undefined : { zoom }} data-zoom={zoom}>
+          <div className="phone-head">
+            <div className="wx-title">{doc.title || '未命名推文'}</div>
+            <div className="wx-meta">{doc.author || '公众号名称'} · 刚刚</div>
+          </div>
+          <div className="article" style={styleObj(rootStyle(theme))} data-testid="canvas">
+            <SortableContext items={doc.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
+              {doc.blocks.map((b, i) => (
+                <BlockView key={b.id} block={b} theme={theme} gap={blockGap(b, doc.blocks[i + 1], theme)} />
+              ))}
+            </SortableContext>
+            <div ref={setNodeRef} className={`drop-end ${isOver ? 'over' : ''}`}>
+              {doc.blocks.length ? '拖入模块到此处，或在左侧点击添加' : '从左侧拖入模块，或使用「AI 一键排版」导入文稿'}
+            </div>
           </div>
         </div>
+      </div>
+      <div className={`zoom-bar ${zoom === 1 ? '' : 'on'}`} role="group" aria-label="文章缩放">
+        <button title="缩小（Ctrl + 滚轮向下 / Ctrl + -）" onClick={() => setZoom((z) => z - 0.1)} disabled={zoom <= ZOOM_MIN} data-testid="zoom-out">−</button>
+        <button className="zoom-val" title="恢复 100%（Ctrl + 0）" onClick={() => setZoom(1)} data-testid="zoom-reset">{Math.round(zoom * 100)}%</button>
+        <button title="放大（Ctrl + 滚轮向上 / Ctrl + +）" onClick={() => setZoom((z) => z + 0.1)} disabled={zoom >= ZOOM_MAX} data-testid="zoom-in">＋</button>
       </div>
     </div>
   )

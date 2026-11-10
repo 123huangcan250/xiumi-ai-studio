@@ -13,6 +13,7 @@ import { LeftPanel } from './editor/LeftPanel'
 import { RightPanel } from './editor/RightPanel'
 import { emptyDoc, loadCustomThemes, saveNow, useStore } from './editor/store'
 import { Toolbar } from './editor/Toolbar'
+import { Workspace } from './editor/Workspace'
 
 type Hit = { data?: { droppableContainer?: { data?: { current?: { parentId?: string | null } } } } }
 const parentOf = (h: Hit) => h.data?.droppableContainer?.data?.current?.parentId ?? null
@@ -194,11 +195,11 @@ export default function App() {
     >
       <div className={`app ${dragLabel !== null ? 'dragging' : ''}`}>
         <Toolbar />
-        <main className="workspace">
+        <Workspace>
           <LeftPanel />
           {ready ? <Canvas /> : <div className="canvas-scroll loading">加载中…</div>}
           <RightPanel />
-        </main>
+        </Workspace>
         {toast && <div className={`toast ${toast.kind}`} role="status">{toast.text}</div>}
         <CollectHost />
       </div>

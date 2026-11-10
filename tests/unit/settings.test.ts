@@ -39,4 +39,22 @@ describe('ai settings', () => {
     expect((await settings.getProfile())?.name).toBe('B')
     expect((await settings.getProfile('a'))?.name).toBe('A')
   })
+  it('stores effort, context window, output limit and extra parameters, and cleans untrusted values', async () => {
+    const saved = await settings.saveAiSettings({
+      activeId: 'e',
+      profiles: [
+        { id: 'e', name: 'E', provider: 'openai', baseUrl: 'http://e', apiKey: 'k', model: 'm', jsonMode: true, reasoningEffort: 'High', efforts: ['low', 'high', 'low', 'x y', '', 'Medium'], contextWindow: 128000.7, maxOutputTokens: -5, extraBody: '{"enable_thinking": false}' },
+        { id: 'f', name: 'F', provider: 'openai', baseUrl: 'http://f', apiKey: 'k', model: 'm', jsonMode: true, reasoningEffort: 'drop table;', extraBody: '[1,2]' },
+        { id: 'g', name: 'G', provider: 'openai', baseUrl: 'http://g', apiKey: 'k', model: 'm', jsonMode: true, extraBody: 'not json' },
+      ],
+    })
+    const [e, f, g] = saved.profiles
+    expect(e).toMatchObject({ reasoningEffort: 'high', efforts: ['low', 'high', 'medium'], contextWindow: 128000, maxOutputTokens: 0, extraBody: '{"enable_thinking":false}' })
+    expect(f).toMatchObject({ reasoningEffort: '', extraBody: '' })
+    expect(g.extraBody).toBe('')
+    // 临时测试的配置：没传的字段沿用已保存的
+    const draft = await settings.resolveDraftProfile({ id: 'e', baseUrl: 'http://e', model: 'm2' })
+    expect(draft).toMatchObject({ reasoningEffort: 'high', contextWindow: 128000, efforts: ['low', 'high', 'medium'] })
+    expect(await settings.resolveDraftProfile({ id: 'e', reasoningEffort: '' })).toMatchObject({ reasoningEffort: '' })
+  })
 })

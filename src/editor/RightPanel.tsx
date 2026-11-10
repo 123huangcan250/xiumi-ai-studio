@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { compileDoc, variantUrl } from '../core/compiler'
-import { applyOps, describeOp } from '../core/ops'
+import { blockMeta } from '../core/blocks'
+import { applyOps, describeOp, summarize } from '../core/ops'
 import { QUICK_ACTIONS, aiContext } from '../core/quickActions'
 import { analyzeStyle, themeFromReport, type StyleReport } from '../core/styleExtract'
 import { getTheme, registerTheme, resolveTheme } from '../core/themes'
@@ -113,6 +114,10 @@ function AiPanel() {
   const [instruction, setInstruction] = useState('')
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
+  // 选中了模块时默认只让 AI 改这个模块；也可以切回整篇文章
+  const selected = useStore(selectedBlock)
+  const [wholeDoc, setWholeDoc] = useState(false)
+  const focusId = selected && !wholeDoc ? selected.id : null
   useEffect(() => {
     const load = () => api.aiStatus().then(setAi).catch(() => setAi(null))
     load()
@@ -123,8 +128,8 @@ function AiPanel() {
     if (!instruction.trim()) return
     setBusy(true)
     try {
-      const r = await api.aiEdit(aiContext(doc), instruction)
-      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [])
+      const r = await api.aiEdit(aiContext(doc, focusId), instruction)
+      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [], focusId)
     } catch (e: any) {
       notify(e.message, 'error')
     } finally {
@@ -139,9 +144,23 @@ function AiPanel() {
         {ai?.enabled ? `当前模型：${ai.name} / ${ai.model}` : '尚未配置 AI 模型。以下规则动作可离线使用。'}{' '}
         <button className="link" onClick={() => window.dispatchEvent(new Event('open-ai-settings'))}>{ai?.enabled ? '切换' : '去配置'}</button>
       </p>
+      {selected ? (
+        <div className="ai-scope" role="radiogroup" aria-label="修改范围" data-testid="ai-scope">
+          <label className="check">
+            <input type="radio" name="ai-scope" checked={!wholeDoc} onChange={() => setWholeDoc(false)} data-testid="ai-scope-selected" />
+            <span>只改选中的模块：{blockMeta(selected.type).label}「{(selected.type === 'html' ? selected.props.label : summarize(selected)).replace(/\s+/g, ' ').slice(0, 14) || '无文字'}」</span>
+          </label>
+          <label className="check">
+            <input type="radio" name="ai-scope" checked={wholeDoc} onChange={() => setWholeDoc(true)} data-testid="ai-scope-all" />
+            <span>整篇文章</span>
+          </label>
+        </div>
+      ) : (
+        <p className="hint">没有选中模块，AI 会面向整篇文章。在画布上点选一个模块，就可以只让 AI 改它。</p>
+      )}
       <textarea
         rows={3}
-        placeholder={ai?.enabled ? '例如：把第二章改成时间轴；给开头加一张数据卡片；整体语气更活泼但不改事实' : '配置大模型后可输入自然语言指令'}
+        placeholder={ai?.enabled ? (focusId ? '例如：把这一段改得更简洁；补一句时间地点；换成更活泼的语气' : '例如：把第二章改成时间轴；给开头加一张数据卡片；整体语气更活泼但不改事实') : '配置大模型后可输入自然语言指令'}
         value={instruction}
         disabled={!ai?.enabled}
         onChange={(e) => setInstruction(e.target.value)}

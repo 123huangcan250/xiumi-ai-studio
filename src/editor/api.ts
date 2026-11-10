@@ -32,8 +32,31 @@ export interface AiProfile {
   apiKey: string
   model: string
   jsonMode: boolean
+  /** 思考强度；空 = 不发送，用模型默认值 */
+  reasoningEffort?: string
+  /** 检测或上游返回的、这个模型接受的思考强度 */
+  efforts?: string[]
+  /** 上下文窗口（token，0 = 未知） */
+  contextWindow?: number
+  /** 单次最大输出（token，0 = 未知） */
+  maxOutputTokens?: number
+  /** 额外的请求参数（JSON 对象） */
+  extraBody?: string
   hasKey?: boolean
   readonly?: boolean
+}
+export interface ModelInfo {
+  id: string
+  name?: string
+  contextWindow?: number
+  maxOutput?: number
+  efforts?: string[]
+}
+export interface EffortProbe {
+  baseError?: string
+  supported: string[]
+  rejected: { effort: string; message: string }[]
+  ignored: boolean
 }
 export interface AiSettings {
   activeId: string
@@ -113,6 +136,8 @@ export const api = {
   aiSettings: () => req<AiSettings>('GET', '/api/settings/ai'),
   saveAiSettings: (s: { activeId: string; profiles: AiProfile[] }) => req<AiSettings>('PUT', '/api/settings/ai', s),
   testAi: (p: AiProfile) => req<{ ok: boolean; reply: unknown; ms: number }>('POST', '/api/settings/ai/test', p),
+  aiModels: (p: AiProfile) => req<{ models: ModelInfo[] }>('POST', '/api/settings/ai/models', p),
+  probeEffort: (p: AiProfile) => req<EffortProbe>('POST', '/api/settings/ai/probe-effort', p),
   aiOutline: (text: string, imageNames: string[], imageNotes: string[] = [], profileId?: string) => req<any>('POST', '/api/ai/outline', { text, imageNames, imageNotes, profileId }),
   aiDesign: (brief: unknown, hint: string, profileId?: string) => req<{ designs: any[] }>('POST', '/api/ai/design', { brief, hint, profileId }),
   aiCopywrite: (body: { brief: string; style: string; length: string; levels: number; extra: string; previous?: string; revise?: string; profileId?: string }) => req<{ markdown?: string }>('POST', '/api/ai/copywrite', body),

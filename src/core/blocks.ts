@@ -144,7 +144,7 @@ const ENUMS: Record<string, string[]> = {
   'quote.variant': ['auto', 'mark', 'line', 'center'],
   'divider.variant': ['auto', 'line', 'dots', 'ornament', 'space'],
   'image.variant': ['full', 'framed', 'rounded'],
-  'paragraph.align': ['left', 'justify', 'center'],
+  'paragraph.align': ['left', 'justify', 'center', 'right'],
   'imageText.imagePosition': ['left', 'right'],
   'box.variant': ['plate', 'rule', 'paper'],
   'carousel.ratio': ['4:3', '3:2', '16:9', '1:1', '3:4'],

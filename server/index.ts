@@ -6,6 +6,7 @@ import { nanoid } from 'nanoid'
 import { cropAsset, deleteAsset, listAssets, saveAsset, variantPath } from './assets'
 import { listComponents, removeComponent, saveComponent, updateComponent } from './components'
 import { IMAGE_HOST, safeFetch, WECHAT_IMAGE_HOST } from './net'
+import { fetchModels, probeEfforts } from './aiModels'
 import { aiStatus, chatJson, COPY_SYSTEM, DESIGN_SYSTEM, EDIT_SYSTEM, ENRICH_SYSTEM, OUTLINE_SYSTEM, PLACE_SYSTEM } from './ai'
 import { isRoleId } from '../src/core/roles'
 import { publicAiSettings, resolveDraftProfile, saveAiSettings } from './settings'
@@ -175,6 +176,17 @@ app.post('/api/settings/ai/test', h(async (req, res) => {
   const r = await chatJson('只输出 JSON。', '请输出 {"ok":true,"model":"你的模型名称"}', { profile, maxTokens: 100, temperature: 0 })
   res.json({ ok: r?.ok === true, reply: r, ms: Date.now() - t0 })
 }))
+/** 读取上游的模型列表（id、上下文、输出上限、思考强度）；密钥打码时取已保存的 */
+app.post('/api/settings/ai/models', h(async (req, res) => {
+  const profile = await resolveDraftProfile(req.body ?? {})
+  res.json({ models: await fetchModels(profile) })
+}))
+/** 检测这个模型接受哪些思考强度：每个强度发一条极短的请求，会产生少量调用费用 */
+app.post('/api/settings/ai/probe-effort', h(async (req, res) => {
+  const profile = await resolveDraftProfile(req.body ?? {})
+  if (!profile.baseUrl || !profile.model) throw Object.assign(new Error('请先填写接口地址和模型名称'), { status: 400 })
+  res.json(await probeEfforts(profile))
+}))
 const pid = (req: Request) => (typeof req.body?.profileId === 'string' ? req.body.profileId : undefined)
 app.post('/api/ai/outline', h(async (req, res) => {
   const text = String(req.body.text ?? '').slice(0, 30000)
@@ -252,8 +264,13 @@ ${JSON.stringify(b.layouts ?? {})}`
 }))
 app.post('/api/ai/edit', h(async (req, res) => {
   const { context, instruction } = req.body
+  // 用户在画布上选中了一个模块：只处理它，其余模块只是位置参考
+  const focus = context?.focus && typeof context.focus.id === 'string' ? context.focus : null
+  const scope = focus
+    ? `\n\n【范围限制】用户选中了模块 id=${focus.id}（类型 ${focus.type}）。本次只处理这个模块：只能修改它（文本框则含框内子模块），不要修改、删除、移动其他模块，不要改主题和文章信息；其他模块只有一行摘要，仅作位置参考；确实需要补充内容时，新模块只能紧挨着它插入（紧前或紧后）。`
+    : ''
   const user = `当前文档（模块按顺序排列）：
-${JSON.stringify(context)}
+${JSON.stringify(context)}${scope}
 
 用户指令：${String(instruction).slice(0, 2000)}`
   res.json(await chatJson(EDIT_SYSTEM, user, { maxTokens: 6000, profileId: pid(req) }))
