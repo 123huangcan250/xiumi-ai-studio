@@ -83,7 +83,7 @@ class Ctx implements KitCtx {
 function renderInline(n: RichNode, ctx: Ctx): string {
   if (n.type === 'hardBreak') return '<br>'
   if (n.type !== 'text') return (n.content ?? []).map((x) => renderInline(x, ctx)).join('')
-  let html = esc(n.text ?? '')
+  let html = esc(n.text ?? '').replace(/(^ +| {2,}| +$)/g, (spaces) => '&nbsp;'.repeat(spaces.length))
   let linkHref: string | undefined
   for (const m of n.marks ?? []) {
     switch (m.type) {
@@ -136,7 +136,7 @@ export function renderRich(rich: RichText | undefined, ctx: Ctx, align = 'justif
       out.push(ctx.p(inner || '<br>', { 'margin-bottom': mb, 'text-align': nodeAlign }))
     } else if (n.type === 'heading') {
       const inner = (n.content ?? []).map((x) => renderInline(x, ctx)).join('')
-      out.push(ctx.p(inner, { 'margin-bottom': mb, 'font-weight': 700, 'font-size': ctx.t.h2Size - 1, color: ctx.c.primary }))
+      out.push(ctx.p(inner, { 'margin-bottom': mb, 'text-align': nodeAlign, 'font-weight': 700, 'font-size': ctx.t.h2Size - 1, color: ctx.c.primary }))
     } else if (n.type === 'bulletList' || n.type === 'orderedList') {
       // 微信对 ul/ol 的缩进处理不稳定，统一渲染为带符号的段落
       ;(n.content ?? []).forEach((li, j) => {
@@ -146,7 +146,7 @@ export function renderRich(rich: RichText | undefined, ctx: Ctx, align = 'justif
         out.push(
           ctx.p(
             `<span style="${css({ color: ctx.c.primary, 'font-size': n.type === 'bulletList' ? 9 : ctx.t.fontSize, 'margin-right': 8, 'vertical-align': n.type === 'bulletList' ? 'middle' : false })}">${marker}</span>${inner}`,
-            { 'margin-bottom': isLast ? mb : 6, 'padding-left': 4 },
+            { 'margin-bottom': isLast ? mb : 6, 'padding-left': 4, 'text-align': li.content?.[0]?.attrs?.textAlign ?? nodeAlign },
           ),
         )
       })
@@ -171,7 +171,7 @@ const R: Renderers = {
     const v = p.variant === 'auto' ? t.coverVariant : p.variant
     const img = p.image ? `<img src="${esc(ctx.img(p.image, '16:10'))}" alt="" style="${css({ width: '100%', display: 'block', 'border-radius': v === 'band' ? 0 : t.imageRadius })}">` : ''
     const title = (extra: Record<string, any> = {}) =>
-      ctx.p(esc(p.title), { 'font-size': t.h1Size, 'font-weight': 700, 'line-height': 1.4, 'font-family': ctx.headingFont, 'letter-spacing': 1, ...extra })
+      ctx.p(esc(p.title), { 'font-size': t.h1Size, 'font-weight': 700, 'line-height': 1.4, 'font-family': ctx.headingFont, 'letter-spacing': 1, ...extra, 'text-align': p.titleAlign && p.titleAlign !== 'auto' ? p.titleAlign : undefined })
     const sub = (extra: Record<string, any> = {}) => (p.subtitle ? ctx.p(esc(p.subtitle), { color: c.muted, 'font-size': t.fontSize - 1, ...extra }) : '')
     const meta = (extra: Record<string, any> = {}) => (p.meta ? ctx.p(esc(p.meta), { color: c.muted, 'font-size': t.smallSize, 'letter-spacing': 1, ...extra }) : '')
     const kicker = (extra: Record<string, any> = {}) => (p.kicker ? ctx.p(esc(p.kicker), { 'font-size': t.smallSize, 'letter-spacing': 2, 'font-weight': 700, ...extra }) : '')

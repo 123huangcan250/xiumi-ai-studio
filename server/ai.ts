@@ -1,6 +1,7 @@
 // AI 提供方抽象：OpenAI 兼容接口（DeepSeek / 通义 / Kimi / 智谱 / MiniMax / MiMo / 豆包 / OpenAI / Gemini / Ollama…）或 Anthropic。
 // 密钥只在服务端读取；所有输出都要求是 JSON，再由调用方校验。
 import { getProfile, type AiProfile } from './settings'
+import { fetchModels, type ModelInfo } from './aiModels'
 
 export interface AiStatus {
   enabled: boolean
@@ -36,6 +37,8 @@ interface ChatOpts {
   effort?: string
   /** 服务拒绝思考强度时不要悄悄去掉它，直接报错（检测时需要知道哪些强度被拒绝） */
   keepEffort?: boolean
+  /** Capability probes only need an accepted request, not a complete answer. */
+  allowTruncated?: boolean
   timeoutMs?: number
 }
 
@@ -50,14 +53,14 @@ async function readError(res: Response) {
 }
 
 /** 请求里这些字段不能被“额外参数”改掉 */
-const PROTECTED = new Set(['model', 'messages', 'system', 'stream', 'tools', 'tool_choice'])
+const PROTECTED = new Set(['model', 'messages', 'system', 'stream', 'tools', 'tool_choice', 'max_tokens', 'max_completion_tokens', 'temperature', 'reasoning_effort', 'output_config', 'response_format'])
 
 /** 配置里的额外请求参数（JSON 对象），去掉不允许覆盖的字段 */
 export function extraBodyOf(p: AiProfile): Record<string, unknown> {
   if (!p.extraBody) return {}
   try {
     const o = JSON.parse(p.extraBody)
-    return Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).filter(([k]) => !PROTECTED.has(k)))
+    return Object.fromEntries(Object.entries(o && typeof o === 'object' && !Array.isArray(o) ? o : {}).filter(([k]) => !PROTECTED.has(k)))
   } catch {
     return {}
   }
@@ -73,7 +76,7 @@ interface Wire {
 }
 
 /** 400 报错里点名了哪个参数，就去掉（或改写）哪个；没有可调整的返回 null */
-export function adjustWire(w: Wire, message: string, keepEffort = false): Wire | null {
+export function adjustWire(w: Wire, message: string, keepEffort = true): Wire | null {
   const m = message.toLowerCase()
   if (w.tokenField === 'max_tokens' && /max_completion_tokens/.test(m)) return { ...w, tokenField: 'max_completion_tokens' }
   if (w.temperature && /temperature/.test(m)) return { ...w, temperature: false }
@@ -113,8 +116,8 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
   const wanted = opts.maxTokens ?? 8000
   const start: Wire = {
     json: p.jsonMode && p.provider !== 'anthropic',
-    tokenField: 'max_tokens',
-    temperature: true,
+    tokenField: effort && p.provider !== 'anthropic' ? 'max_completion_tokens' : 'max_tokens',
+    temperature: !effort,
     effort: Boolean(effort),
     maxTokens: p.maxOutputTokens ? Math.min(wanted, p.maxOutputTokens) : wanted,
   }
@@ -123,8 +126,9 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
     if (p.provider === 'anthropic') {
       const res = await sendAdaptive(
         (w) =>
-          fetch(`${p.baseUrl}/v1/messages`, {
+          fetch(`${anthropicBase(p.baseUrl)}/messages`, {
             method: 'POST',
+          redirect: 'error',
             signal: ctrl.signal,
             headers: { 'content-type': 'application/json', 'x-api-key': p.apiKey, 'anthropic-version': '2023-06-01' },
             body: JSON.stringify({
@@ -138,15 +142,17 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
             }),
           }),
         start,
-        Boolean(opts.keepEffort),
+        Boolean(effort) || Boolean(opts.keepEffort),
       )
       const data: any = await res.json()
+      if (!opts.allowTruncated && data.stop_reason === 'max_tokens') throw new Error('AI 已响应，但输出达到 token 上限；请降低思考强度或减少输入后重试')
       return data.content?.map((c: any) => c.text ?? '').join('') ?? ''
     }
     const res = await sendAdaptive(
       (w) =>
-        fetch(`${p.baseUrl}/chat/completions`, {
+        fetch(`${p.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
           method: 'POST',
+          redirect: 'error',
           signal: ctrl.signal,
           headers: { 'content-type': 'application/json', ...(p.apiKey ? { authorization: `Bearer ${p.apiKey}` } : {}) },
           body: JSON.stringify({
@@ -163,9 +169,10 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
           }),
         }),
       start,
-      Boolean(opts.keepEffort),
+      Boolean(effort) || Boolean(opts.keepEffort),
     )
     const data: any = await res.json()
+    if (!opts.allowTruncated && data.choices?.[0]?.finish_reason === 'length') throw new Error('AI 已响应，但输出达到 token 上限；请降低思考强度或减少输入后重试')
     return data.choices?.[0]?.message?.content ?? ''
   } catch (e: any) {
     if (e.name === 'AbortError') throw Object.assign(new Error(`AI 请求超时（${Math.round(timeout / 1000)} 秒）`), { status: 504 })
@@ -177,6 +184,25 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
 
 export async function chatJson(system: string, user: string, opts: ChatOpts = {}): Promise<any> {
   return extractJson(await chatText(system, user, opts))
+}
+
+export interface DiscoveredModel extends ModelInfo {
+  /** Compatibility with existing clients. */
+  reasoningEfforts?: string[]
+}
+
+function anthropicBase(base: string) {
+  return base.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1'
+}
+
+export async function discoverModels(p: AiProfile): Promise<DiscoveredModel[]> {
+  return (await fetchModels(p)).map((m) => ({ ...m, ...(m.efforts ? { reasoningEfforts: m.efforts } : {}) }))
+}
+
+export function testConnection(profile: AiProfile): Promise<any> {
+  return chatJson('只输出 JSON。', '请输出 {"ok":true,"model":"你的模型名称"}', {
+    profile, maxTokens: profile.reasoningEffort ? 4096 : 100, temperature: 0,
+  })
 }
 
 export const OUTLINE_SYSTEM = `你是资深的微信公众号主编。把用户提供的文稿整理为结构化大纲，用于自动排版。
@@ -232,7 +258,7 @@ export const EDIT_SYSTEM =`你是微信公众号排版助手。你只能通过�
 - {"op":"setTheme","themeId":主题id,"reason":"原因"}
 - {"op":"setMeta","title":"","digest":"","reason":"原因"}
 模块类型与字段：
-cover{kicker,title,subtitle,meta,variant:auto|hero|band|minimal}
+cover{kicker,title,subtitle,meta,titleAlign:auto|left|center|right,variant:auto|hero|band|minimal}（仅将封面标题居中时，update props.titleAlign 为 center，不改文案、图片或 variant）
 heading{index,title,subtitle,variant:auto|number|bar|pill|underline}
 paragraph{content:"文本，可用 **加粗**，换行分段",align:left|justify|center}
 card{title,content:"文本",variant:auto|border|fill|accent}

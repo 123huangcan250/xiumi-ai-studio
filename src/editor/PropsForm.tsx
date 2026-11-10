@@ -1,3 +1,4 @@
+import { CoverTitleAlignment } from './CoverTitleAlignment'
 import { useEffect, useMemo, useState } from 'react'
 import { blockLabel, blockMeta } from '../core/blocks'
 import { displayUrl } from '../core/images'
@@ -6,7 +7,7 @@ import { setPhoto } from '../core/photos'
 import { collectColors, docMainColors, fixedDecorCount, harmonize, recolorHtml } from '../core/recolor'
 import { backgroundPhotos, editableText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, setBackgroundPhoto, setSlotAlign, slotAligns, slotRawTexts, type Align, type SlotRole, type TextSlot } from '../core/slots'
 import { resolveTheme } from '../core/themes'
-import { richToPlain, textToRich } from '../core/richtext'
+import { richToPlain, setRichAlignment, textToRich } from '../core/richtext'
 import type { Block, ImageRef, PicItem } from '../core/types'
 import { api, type Asset } from './api'
 import { shownRatio } from './Canvas'
@@ -61,11 +62,11 @@ function RichField({ label, value, onChange }: { label: string; value: any; onCh
       <span>{label}<small>（双击画布可富文本编辑）</small></span>
       <BufferedArea
         rows={6}
-        value={richToPlain(value)}
+        value={richToPlain(value, { preserveWhitespace: true })}
         onCommit={(t) => {
-          const rich = textToRich(t)
+          const rich = textToRich(t, { preserveWhitespace: true })
           onChange(rich)
-          return richToPlain(rich)
+          return richToPlain(rich, { preserveWhitespace: true })
         }}
       />
     </label>
@@ -162,17 +163,18 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
               <div className="slot-head">
                 <small>{ROLE_LABEL[s.role]}{s.tight ? ' · 图形内' : ''}</small>
                 <span className="align-btns" role="group" aria-label="对齐">
-                  {(['left', 'center', 'right'] as Align[]).map((a) => (
+                  {(['left', 'center', 'right', 'justify'] as Align[]).map((a) => (
                     <button
                       key={a}
                       type="button"
                       className={aligns[s.id]?.align === a ? 'on' : ''}
+                      aria-pressed={aligns[s.id]?.align === a}
                       disabled={!aligns[s.id]?.alignable}
-                      title={aligns[s.id]?.alignable ? { left: '居左', center: '居中', right: '居右' }[a] : '图形里的文字位置是固定的，不能调整对齐'}
+                      title={aligns[s.id]?.alignable ? { left: '居左', center: '居中', right: '居右', justify: '两端对齐' }[a] : '图形里的文字位置是固定的，不能调整对齐'}
                       onClick={() => upd({ html: setSlotAlign(html, s.id, a, parseDoc) }, `align-${s.id}`)}
                       data-testid={`align-${s.id}-${a}`}
                     >
-                      {{ left: '居左', center: '居中', right: '居右' }[a]}
+                      {{ left: '居左', center: '居中', right: '居右', justify: '两端对齐' }[a]}
                     </button>
                   ))}
                 </span>
@@ -184,8 +186,8 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
                   // 清空会让这一行连同样式一起消失，表单里不允许，需要删除时编辑源码
                   if (!t.trim()) return t
                   // 保留输入的空格：行首、行尾、连续空格写成不换行空格，页面上才看得到
-                  upd({ html: fillSlots(html, { [s.id]: t }, { parse: parseDoc, split: false, bold: false, keepSpaces: true }) }, `slot-${s.id}`)
-                  return editableText(t)
+                  upd({ html: fillSlots(html, { [s.id]: t }, { parse: parseDoc, split: false, bold: false, preserveWhitespace: true }) }, `slot-${s.id}`)
+                  return editableText(t, true)
                 }}
               />
             </div>
@@ -333,7 +335,7 @@ export function PropsForm({ block }: { block: Block }) {
   let body: React.ReactNode = null
   switch (block.type) {
     case 'cover':
-      body = <>{t('小标签', 'kicker')}{t('标题', 'title', true)}{t('副标题', 'subtitle', true)}{t('时间/地点', 'meta')}{img('封面图')}{variant('cover')}</>
+      body = <>{t('小标签', 'kicker')}{t('标题', 'title', true)}<CoverTitleAlignment value={p.titleAlign} onChange={(v) => upd({ titleAlign: v }, 'titleAlign')} />{t('副标题', 'subtitle', true)}{t('时间/地点', 'meta')}{img('封面图')}{variant('cover')}</>
       break
     case 'heading':
       body = <>{t('序号', 'index')}{t('标题', 'title')}{t('副标题', 'subtitle')}{variant('heading')}</>
@@ -342,7 +344,7 @@ export function PropsForm({ block }: { block: Block }) {
       body = (
         <>
           <RichField label="正文" value={p.content} onChange={(v) => upd({ content: v }, 'content')} />
-          <Select label="对齐" value={p.align} options={[['justify', '两端'], ['left', '左对齐'], ['center', '居中'], ['right', '右对齐']]} onChange={(v) => upd({ align: v }, 'align')} />
+          <Select label="对齐" value={p.align} options={[['justify', '两端'], ['left', '左对齐'], ['center', '居中'], ['right', '右对齐']]} onChange={(v) => upd({ align: v, content: setRichAlignment(p.content, v) }, 'align')} />
         </>
       )
       break

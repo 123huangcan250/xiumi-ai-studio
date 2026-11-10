@@ -6,8 +6,10 @@ import { nanoid } from 'nanoid'
 import { cropAsset, deleteAsset, listAssets, saveAsset, variantPath } from './assets'
 import { listComponents, removeComponent, saveComponent, updateComponent } from './components'
 import { IMAGE_HOST, safeFetch, WECHAT_IMAGE_HOST } from './net'
-import { fetchModels, probeEfforts } from './aiModels'
-import { aiStatus, chatJson, COPY_SYSTEM, DESIGN_SYSTEM, EDIT_SYSTEM, ENRICH_SYSTEM, OUTLINE_SYSTEM, PLACE_SYSTEM } from './ai'
+import { aiStatus, chatJson, discoverModels, testConnection, COPY_SYSTEM, DESIGN_SYSTEM, EDIT_SYSTEM, ENRICH_SYSTEM, OUTLINE_SYSTEM, PLACE_SYSTEM } from './ai'
+import { probeEfforts } from './aiModels'
+import { editPrompt, scopeEditResult } from './aiEdit'
+import { suggestionPrompt, readSuggestion, SUGGESTION_SYSTEM } from './aiSuggestion'
 import { isRoleId } from '../src/core/roles'
 import { publicAiSettings, resolveDraftProfile, saveAiSettings } from './settings'
 import { importFile } from './importer'
@@ -170,16 +172,15 @@ app.get('/api/ai/status', h(async (req, res) => res.json(await aiStatus(req.quer
 app.get('/api/settings/ai', h(async (_req, res) => res.json(await publicAiSettings())))
 app.put('/api/settings/ai', h(async (req, res) => res.json(await saveAiSettings(req.body))))
 /** 测试连接：让模型返回一个最小 JSON */
+app.post('/api/settings/ai/models', h(async (req, res) => {
+  res.json(await discoverModels(await resolveDraftProfile(req.body ?? {})))
+}))
+
 app.post('/api/settings/ai/test', h(async (req, res) => {
   const profile = await resolveDraftProfile(req.body ?? {})
   const t0 = Date.now()
-  const r = await chatJson('只输出 JSON。', '请输出 {"ok":true,"model":"你的模型名称"}', { profile, maxTokens: 100, temperature: 0 })
+  const r = await testConnection(profile)
   res.json({ ok: r?.ok === true, reply: r, ms: Date.now() - t0 })
-}))
-/** 读取上游的模型列表（id、上下文、输出上限、思考强度）；密钥打码时取已保存的 */
-app.post('/api/settings/ai/models', h(async (req, res) => {
-  const profile = await resolveDraftProfile(req.body ?? {})
-  res.json({ models: await fetchModels(profile) })
 }))
 /** 检测这个模型接受哪些思考强度：每个强度发一条极短的请求，会产生少量调用费用 */
 app.post('/api/settings/ai/probe-effort', h(async (req, res) => {
@@ -262,18 +263,22 @@ ${JSON.stringify(b.units ?? []).slice(0, 8000)}
 ${JSON.stringify(b.layouts ?? {})}`
   res.json(await chatJson(PLACE_SYSTEM, user, { maxTokens: 3000, temperature: 0.3, profileId: pid(req) }))
 }))
+app.post('/api/ai/suggest-instruction', h(async (req, res) => {
+  const { context, selectedId } = req.body
+  if (selectedId !== undefined && (typeof selectedId !== 'string' || !selectedId)) {
+    throw Object.assign(new Error('无效的选中模块'), { status: 400 })
+  }
+  const prompt = suggestionPrompt(context, selectedId)
+  res.json(readSuggestion(await chatJson(SUGGESTION_SYSTEM, prompt, { maxTokens: 2000, profileId: pid(req) })))
+}))
 app.post('/api/ai/edit', h(async (req, res) => {
   const { context, instruction } = req.body
-  // 用户在画布上选中了一个模块：只处理它，其余模块只是位置参考
-  const focus = context?.focus && typeof context.focus.id === 'string' ? context.focus : null
-  const scope = focus
-    ? `\n\n【范围限制】用户选中了模块 id=${focus.id}（类型 ${focus.type}）。本次只处理这个模块：只能修改它（文本框则含框内子模块），不要修改、删除、移动其他模块，不要改主题和文章信息；其他模块只有一行摘要，仅作位置参考；确实需要补充内容时，新模块只能紧挨着它插入（紧前或紧后）。`
-    : ''
-  const user = `当前文档（模块按顺序排列）：
-${JSON.stringify(context)}${scope}
-
-用户指令：${String(instruction).slice(0, 2000)}`
-  res.json(await chatJson(EDIT_SYSTEM, user, { maxTokens: 6000, profileId: pid(req) }))
+  const selectedId = req.body.selectedId ?? context?.focus?.id
+  if (selectedId !== undefined && (typeof selectedId !== 'string' || !selectedId)) {
+    throw Object.assign(new Error('无效的选中模块'), { status: 400 })
+  }
+  const user = editPrompt(context, instruction, selectedId)
+  res.json(scopeEditResult(await chatJson(EDIT_SYSTEM, user, { maxTokens: 6000, profileId: pid(req) }), selectedId))
 }))
 
 // ---------- 文章抓取（导入公众号推文 / 参考风格） ----------
@@ -281,15 +286,16 @@ async function fetchPage(raw: string) {
   const r = await safeFetch(raw, {
     headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36', 'accept-language': 'zh-CN,zh;q=0.9' },
     maxRedirects: 5,
+    maxBytes: 5_000_000,
   })
   if (!r.ok) throw Object.assign(new Error(`抓取失败 HTTP ${r.status}`), { status: 502 })
   return r.text()
 }
-app.post('/api/article/fetch', h(async (req, res) => res.json({ html: (await fetchPage(String(req.body.url))).slice(0, 5_000_000) })))
-app.post('/api/reference/fetch', h(async (req, res) => res.json({ html: (await fetchPage(String(req.body.url))).slice(0, 5_000_000) })))
+app.post('/api/article/fetch', h(async (req, res) => res.json({ html: await fetchPage(String(req.body.url)) })))
+app.post('/api/reference/fetch', h(async (req, res) => res.json({ html: await fetchPage(String(req.body.url)) })))
 /** 编辑器显示微信背景图用：只读转发，只放行微信图床，不保存 */
 app.get('/api/wx-image', h(async (req, res) => {
-  const r = await safeFetch(String(req.query.u ?? ''), { headers: { 'user-agent': 'Mozilla/5.0' }, allowHost: (host) => WECHAT_IMAGE_HOST.test(host) }).catch(() => null)
+  const r = await safeFetch(String(req.query.u ?? ''), { headers: { 'user-agent': 'Mozilla/5.0' }, allowHost: (host) => WECHAT_IMAGE_HOST.test(host), maxBytes: MAX_IMPORT_IMAGE }).catch(() => null)
   if (!r?.ok) return res.status(502).end()
   res.setHeader('Content-Type', r.headers.get('content-type') ?? 'image/jpeg')
   res.setHeader('Cache-Control', 'public, max-age=86400')
@@ -303,7 +309,7 @@ app.post('/api/assets/fetch', h(async (req, res) => {
   const worker = async () => {
     for (let u = queue.shift(); u; u = queue.shift()) {
       try {
-        const r = await safeFetch(u, { headers: { 'user-agent': 'Mozilla/5.0' }, allowHost: (host) => IMAGE_HOST.test(host) })
+        const r = await safeFetch(u, { headers: { 'user-agent': 'Mozilla/5.0' }, allowHost: (host) => IMAGE_HOST.test(host), maxBytes: MAX_IMPORT_IMAGE })
         if (!r.ok) continue
         const buf = Buffer.from(await r.arrayBuffer())
         if (buf.length > MAX_IMPORT_IMAGE) continue

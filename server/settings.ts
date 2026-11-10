@@ -26,9 +26,13 @@ export interface AiProfile {
   extraBody?: string
 }
 
-/** 思考强度只接受字母、数字和短横线，不信任前端传来的任意字符串 */
-const EFFORT = /^[a-z][a-z0-9-]{0,15}$/
-export const cleanEffort = (v: unknown) => (typeof v === 'string' && EFFORT.test(v.trim().toLowerCase()) ? v.trim().toLowerCase() : '')
+/** 思考强度只接受字母、数字、下划线和短横线，不信任前端传来的任意字符串 */
+const EFFORT = /^[a-zA-Z0-9_-]{1,40}$/
+export const cleanEffort = (v: unknown): string => {
+  if (typeof v !== 'string' || !EFFORT.test(v.trim())) return ''
+  const value = v.trim()
+  return ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(value.toLowerCase()) ? value.toLowerCase() : value
+}
 const cleanCount = (v: unknown) => {
   const n = Math.floor(Number(v))
   return Number.isFinite(n) && n > 0 ? Math.min(n, 100_000_000) : 0
@@ -60,7 +64,20 @@ interface Settings {
 }
 
 const FILE = join(DATA, 'settings.json')
+
 const MASK = '••••••'
+
+function draftKey(p: Partial<AiProfile>, saved?: AiProfile): string {
+  if (typeof p.apiKey === 'string' && p.apiKey.trim() && !p.apiKey.includes(MASK)) return p.apiKey.trim()
+  if (saved?.apiKey) {
+    let sameOrigin = false
+    try { sameOrigin = new URL(p.baseUrl ?? saved.baseUrl).origin === new URL(saved.baseUrl).origin } catch { /* invalid URL */ }
+    if (!sameOrigin || (p.provider ?? saved.provider) !== saved.provider) {
+      throw Object.assign(new Error('更换服务商地址或接口类型后，请重新输入 API Key'), { status: 400 })
+    }
+  }
+  return saved?.apiKey ?? ''
+}
 
 async function load(): Promise<Settings> {
   const s = await readJson<Settings>(FILE, { ai: { activeId: '', profiles: [] } })
@@ -115,7 +132,7 @@ export async function saveAiSettings(input: { activeId: string; profiles: Partia
     .filter((p) => p.id !== 'env')
     .map((p) => {
       const prev = p.id ? old.get(p.id) : undefined
-      const key = typeof p.apiKey === 'string' && p.apiKey && !p.apiKey.includes(MASK) ? p.apiKey.trim() : (prev?.apiKey ?? '')
+      const key = draftKey({ ...p, provider: p.provider === 'anthropic' ? 'anthropic' : 'openai', baseUrl: String(p.baseUrl ?? '').trim() }, prev)
       return {
         id: p.id && /^[\w-]{1,40}$/.test(p.id) ? p.id : nanoid(8).replace(/[^\w]/g, 'x'),
         name: String(p.name ?? '未命名模型').slice(0, 40),
@@ -135,15 +152,17 @@ export async function saveAiSettings(input: { activeId: string; profiles: Partia
 /** 测试用：未保存的配置（密钥打码时取已保存的） */
 export async function resolveDraftProfile(p: Partial<AiProfile>): Promise<AiProfile> {
   const saved = p.id ? (await allProfiles()).find((x) => x.id === p.id) : undefined
-  const key = typeof p.apiKey === 'string' && p.apiKey && !p.apiKey.includes(MASK) ? p.apiKey.trim() : (saved?.apiKey ?? '')
+  const provider = (p.provider ?? saved?.provider) === 'anthropic' ? 'anthropic' : 'openai'
+  const key = draftKey({ ...p, provider }, saved)
+  const sameModel = saved && (p.model ?? saved.model) === saved.model && (p.baseUrl ?? saved.baseUrl) === saved.baseUrl && provider === saved.provider
   return {
     id: p.id ?? 'draft',
     name: p.name ?? '',
-    provider: p.provider === 'anthropic' ? 'anthropic' : 'openai',
+    provider,
     baseUrl: String(p.baseUrl ?? saved?.baseUrl ?? '').replace(/\/+$/, ''),
     apiKey: key,
     model: String(p.model ?? saved?.model ?? ''),
     jsonMode: p.jsonMode !== false,
-    ...tuning(p, saved),
+    ...tuning(p, sameModel ? saved : undefined),
   }
 }

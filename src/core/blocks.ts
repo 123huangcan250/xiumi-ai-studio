@@ -15,7 +15,7 @@ const emptyPics = (n: number) => Array.from({ length: n }, () => ({ caption: '' 
 const META: { [K in BlockType]: BlockMeta<K> } = {
   cover: {
     type: 'cover', label: '封面', icon: '▣', group: '结构',
-    defaults: () => ({ kicker: 'EVENT · 活动回顾', title: '在这里输入推文标题', subtitle: '一句话副标题，说明这篇推文讲了什么', meta: '2026 年 10 月', variant: 'auto' }),
+    defaults: () => ({ titleAlign: 'auto', kicker: 'EVENT · 活动回顾', title: '在这里输入推文标题', subtitle: '一句话副标题，说明这篇推文讲了什么', meta: '2026 年 10 月', variant: 'auto' }),
   },
   heading: {
     type: 'heading', label: '章节标题', icon: 'H', group: '结构',
@@ -138,6 +138,7 @@ export function isBlockType(t: string): t is BlockType {
 // ---------- 属性校验：AI 输出与历史数据都要经过这里，保证类型正确 ----------
 
 const ENUMS: Record<string, string[]> = {
+  'cover.titleAlign': ['auto', 'left', 'center', 'right'],
   'cover.variant': ['auto', 'hero', 'band', 'minimal'],
   'heading.variant': ['auto', 'number', 'bar', 'pill', 'underline'],
   'card.variant': ['auto', 'border', 'fill', 'accent'],

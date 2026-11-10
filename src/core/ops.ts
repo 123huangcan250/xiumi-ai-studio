@@ -102,27 +102,11 @@ export function selectionScope(doc: Doc, selectedId: string | null | undefined):
   return { ids, top: doc.blocks.findIndex((b) => b.id === outer.id) }
 }
 
-/**
- * 用户选中了一个模块时，AI 的修改只能落在这个模块上：改它、删它、在它紧前或紧后插入新模块。
- * 改别的模块、挪动顺序、换主题、改文章信息的操作不属于这次的范围，直接丢弃（模型偶尔会无视提示词）。
- */
+/** Match the server's exact-module update boundary; fail closed on stale or mixed scope. */
 export function limitToSelection(doc: Doc, selectedId: string | null | undefined, rawOps: any[]): { ops: any[]; dropped: any[] } {
-  const scope = selectionScope(doc, selectedId)
-  if (!scope) return { ops: rawOps, dropped: [] }
-  const keep = (op: any) => {
-    switch (op?.op) {
-      case 'update':
-      case 'remove':
-        return scope.ids.has(op.id)
-      case 'insert': {
-        const i = Number(op.index)
-        return Number.isFinite(i) && (i === scope.top || i === scope.top + 1)
-      }
-      default:
-        return false
-    }
-  }
-  return { ops: rawOps.filter(keep), dropped: rawOps.filter((op) => !keep(op)) }
+  if (selectedId == null) return { ops: rawOps, dropped: [] }
+  const valid = findBlock(doc.blocks, selectedId) && rawOps.every(op => op?.op === 'update' && op.id === selectedId)
+  return valid ? { ops: rawOps, dropped: [] } : { ops: [], dropped: rawOps }
 }
 
 /** 人类可读的改动说明，用于差异面板 */

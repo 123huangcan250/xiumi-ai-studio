@@ -126,13 +126,12 @@ test('选中模块后，AI 只改选中的模块', async ({ page }) => {
   await page.reload()
   await page.locator('[data-block-id="p2"]').click({ position: { x: 3, y: 3 } })
   await page.getByTestId('tab-ai').click()
-  await expect(page.getByTestId('ai-scope')).toContainText('只改选中的模块')
-  await expect(page.getByTestId('ai-scope')).toContainText('第二段内容')
-  await page.getByPlaceholder(/把这一段改得更简洁/).fill('改简洁')
+  await expect(page.getByLabel('修改范围')).toHaveValue('selection')
+  await page.getByPlaceholder(/例如：把第二章/).fill('改简洁')
   await page.getByRole('button', { name: '生成修改建议' }).click()
   await expect(page.getByTestId('proposal')).toBeVisible()
-  await expect(page.locator('.proposal .op')).toHaveCount(1)
-  await expect(page.getByTestId('proposal')).toContainText('已忽略 2 条')
+  await expect(page.locator('.proposal .op')).toHaveCount(0)
+  await expect(page.getByTestId('proposal')).toContainText('已忽略 3 条')
   await expect(page.getByTestId('proposal')).toContainText('修改其他模块不在选中的模块上')
   expect(bodies[0].context.focus).toEqual({ id: 'p2', type: 'paragraph' })
   // 其他模块只给一行摘要，选中的才给完整内容
@@ -141,7 +140,7 @@ test('选中模块后，AI 只改选中的模块', async ({ page }) => {
   expect(bodies[0].context.blocks[1]).toHaveProperty('props')
 
   // 切回整篇文章：所有修改都接受
-  await page.getByTestId('ai-scope-all').check()
+  await page.getByLabel('修改范围').selectOption('document')
   await page.getByRole('button', { name: '生成修改建议' }).click()
   await expect(page.locator('.proposal .op')).toHaveCount(3)
   expect(bodies[1].context.focus).toBeUndefined()
@@ -162,19 +161,17 @@ test('AI 模型设置：从上游取模型列表和参数，检测思考强度�
   await page.getByTestId('ai-add-preset').selectOption('custom')
   await page.getByPlaceholder('https://…/v1').fill('http://127.0.0.1:5999/v1')
   await page.getByPlaceholder('粘贴密钥').fill('test-key-123456')
-  await page.getByPlaceholder('粘贴密钥').press('Tab') // 密钥填完离开输入框就自动读取模型列表
-  await expect(page.getByTestId('ai-model-note')).toContainText('已从上游获取 2 个模型')
-  await expect(page.locator('datalist option')).toHaveCount(2)
+  await page.getByTestId('ai-load-models').click()
+  await expect(page.getByTestId('ai-model-note')).toContainText('2 个模型')
+  await expect(page.getByRole('listbox', { name: '可用模型' })).toBeVisible()
 
-  await page.getByTestId('ai-model').fill('big-model')
+  await page.getByRole('listbox', { name: '可用模型' }).selectOption('big-model')
   await expect(page.getByTestId('ai-context')).toHaveValue('262144')
   await expect(page.getByTestId('ai-max-output')).toHaveValue('32768')
   // 还没检测时给常见值；检测后只剩模型接受的
-  await expect(page.getByTestId('ai-effort').locator('option')).toHaveCount(5)
   await page.getByTestId('ai-probe-effort').click()
   await expect(page.getByTestId('ai-effort-note')).toContainText('接受：low、high')
-  await expect(page.getByTestId('ai-effort').locator('option')).toHaveText(['默认（不发送，用模型自己的设置）', 'low（低）', 'high（高）'])
-  await page.getByTestId('ai-effort').selectOption('high')
+  await page.getByTestId('ai-effort').fill('high')
   // 额外参数不是 JSON 对象时提示
   await page.getByText('高级：额外的请求参数').click()
   await page.getByTestId('ai-extra-body').fill('[1]')

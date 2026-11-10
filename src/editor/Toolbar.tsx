@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { compileDoc, variantUrl } from '../core/compiler'
 import { docToMarkdown } from '../core/exporters'
 import { displayHtml } from '../core/images'
-import { splitForXiumi, xiumiReport, xiumiSvgBoxes } from '../core/xiumiExport'
+import { checkedXiumiParts, splitForXiumi, xiumiReport, xiumiSvgBoxes } from '../core/xiumiExport'
 import { AiSettingsModal } from './AiSettingsModal'
 import { api, type VersionSummary } from './api'
 import { Modal } from './Modal'
@@ -87,7 +87,7 @@ function ExportModal({ onClose }: { onClose: () => void }) {
   const xiumiParts = splitForXiumi(xiumiSvgBoxes(base.html)).length
   /** 超出秀米一次导入的上限时先提示会导出多份文件；用户取消就不下载 */
   const confirmParts = (parts: number) =>
-    parts <= 1 || confirm(`这篇超出秀米一次导入的上限（约 13 万字符，超出部分会被秀米丢掉），将导出 ${parts} 份文件（打包为 zip）。\n\n请下载后解压，按「导入秀米-1.txt」到「导入秀米-${parts}.txt」的顺序依次导入秀米。\n\n点“确定”下载。`)
+    parts <= 1 || confirm(`这篇超出秀米一次导入的上限（约 13 万字符，超出部分会被秀米丢掉），将导出 ${parts} 份文件（打包为 zip）。\n\n请下载后解压，按「导入秀米-1.txt」到「导入秀米-${parts}.txt」的顺序依次导入秀米。\n\n点“确定”继续导出（上传模式会先上传图片）。`)
   const runXiumi = async (fn: () => Promise<void>) => {
     try {
       await fn()
@@ -156,9 +156,9 @@ function ExportModal({ onClose }: { onClose: () => void }) {
               data-testid="xiumi-upload"
               onClick={() =>
                 runXiumi(async () => {
+                  if (!confirmParts(checkedXiumiParts(base.html).length)) return
                   setBusy('上传图片…')
                   const r = await xiumiUploaded(doc, setBusy)
-                  if (!confirmParts(r.parts)) return
                   download(`${safeName}-${r.name}`, r.blob)
                   notify(r.parts > 1 ? `已下载，解压后按「说明.txt」依次导入 ${r.parts} 个文件` : '已下载，在秀米“导入 HTML 代码”里使用')
                 })

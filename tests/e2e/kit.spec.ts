@@ -10,11 +10,17 @@ async function drag(page: Page, from: Locator, to: Locator, yRatio = 0.8) {
   // 共享的测试文档可能很长：目标滚到画布中间（贴着边缘会触发拖动时的自动滚动）
   await to.evaluate((el) => el.scrollIntoView({ block: 'center' }))
   const a = (await from.boundingBox())!
-  const b = (await to.boundingBox())!
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
   await page.mouse.down()
   await page.mouse.move(a.x + a.width / 2 + 12, a.y + a.height / 2 + 12, { steps: 4 })
+  // Activating a drag expands the box drop zone and may scroll the canvas.
+  // Measure the live target after that layout change, not before activation.
+  await to.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  let b = (await to.boundingBox())!
   await page.mouse.move(b.x + b.width / 2, b.y + b.height * yRatio, { steps: 12 })
+  await to.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  b = (await to.boundingBox())!
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height * yRatio, { steps: 4 })
   await page.mouse.up()
 }
 

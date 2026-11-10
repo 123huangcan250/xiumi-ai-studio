@@ -38,6 +38,7 @@
     "react-dom": "^19.3.1",
     "react-easy-crop": "^6.2.4",
     "sharp": "^0.35.5",
+    "undici": "^8.12.4",
     "zustand": "^5.0.16"
   },
   "devDependencies": {
@@ -61,5 +62,8 @@
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",
     "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

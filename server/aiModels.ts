@@ -1,7 +1,7 @@
 // 从上游读取可用模型（id、上下文、输出上限、思考强度），并检测一个模型接受哪些思考强度。
 // 只访问用户在「AI 模型设置」里填写的地址，带用户自己的密钥；不跟随重定向，避免把密钥带到别处。
 import { chatText } from './ai'
-import type { AiProfile } from './settings'
+import { cleanEffort, type AiProfile } from './settings'
 
 export interface ModelInfo {
   id: string
@@ -36,25 +36,26 @@ export function parseModels(json: any): ModelInfo[] {
   const seen = new Set<string>()
   const out: ModelInfo[] = []
   for (const m of list) {
+    if (out.length >= 500) break
     const id = typeof m === 'string' ? m : typeof m?.id === 'string' ? m.id : typeof m?.name === 'string' ? m.name : ''
-    if (!id || id.length > 200 || seen.has(id)) continue
+    if (!id.trim() || id.length > 200 || seen.has(id)) continue
     seen.add(id)
     if (typeof m === 'string') {
       out.push({ id })
       continue
     }
     const effort = m.capabilities?.effort
-    const efforts =
+    const declared =
       effort?.supported === true
         ? Object.entries(effort)
             .filter(([k, v]: [string, any]) => k !== 'supported' && v?.supported === true)
             .map(([k]) => k)
-        : undefined
+        : Array.isArray(m.reasoning_efforts) ? m.reasoning_efforts : undefined
+    const efforts = declared ? [...new Set<string>(declared.map(cleanEffort).filter(Boolean))] : undefined
     const name = typeof m.display_name === 'string' ? m.display_name : typeof m.name === 'string' && m.name !== id ? m.name : undefined
     const contextWindow = firstNum(m, CONTEXT_KEYS) ?? num(m.top_provider?.context_length)
     const maxOutput = firstNum(m, OUTPUT_KEYS) ?? num(m.top_provider?.max_completion_tokens)
     out.push({ id, ...(name && { name: name.slice(0, 80) }), ...(contextWindow && { contextWindow }), ...(maxOutput && { maxOutput }), ...(efforts?.length && { efforts }) })
-    if (out.length >= 500) break
   }
   return out
 }
@@ -74,7 +75,8 @@ export async function fetchModels(p: AiProfile, fetcher: typeof fetch = fetch): 
   const all: ModelInfo[] = []
   let after = ''
   for (let page = 0; page < 5; page++) {
-    const url = anthropic ? `${p.baseUrl}/v1/models?limit=1000${after ? `&after_id=${encodeURIComponent(after)}` : ''}` : `${p.baseUrl}/models`
+    const base = p.baseUrl.replace(/\/+$/, '')
+    const url = anthropic ? `${base.replace(/\/v1$/, '')}/v1/models?limit=1000${after ? `&after_id=${encodeURIComponent(after)}` : ''}` : `${base}/models`
     const res = await fetcher(url, { headers: headersOf(p), redirect: 'error', signal: AbortSignal.timeout(15_000) }).catch((e: any) => {
       throw httpError(`连不上 ${new URL(url).host}：${e?.cause?.code ?? e?.message ?? '网络错误'}`)
     })
@@ -123,7 +125,7 @@ export const ANTHROPIC_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
 export async function probeEfforts(p: AiProfile, send: typeof chatText = chatText): Promise<EffortProbe> {
   // 不带 JSON 模式：被拒绝的强度不必再换一种方式重试一遍，省一半请求
   const probeProfile = { ...p, jsonMode: false }
-  const ask = (effort: string) => send('只回答 ok。', '你好', { profile: probeProfile, maxTokens: 64, temperature: 0, effort, keepEffort: true, timeoutMs: 45_000 })
+  const ask = (effort: string) => send('只回答 ok。', '你好', { profile: probeProfile, maxTokens: 64, temperature: 0, effort, keepEffort: true, allowTruncated: true, timeoutMs: 45_000 })
   try {
     await ask('')
   } catch (e: any) {

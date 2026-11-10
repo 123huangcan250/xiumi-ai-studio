@@ -1,4 +1,5 @@
 // 本地文件存储：项目、历史版本、模板收藏、自定义主题、素材。
+import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
 import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
@@ -30,11 +31,31 @@ export async function readJson<T>(file: string, fallback: T): Promise<T> {
   }
 }
 
+// Windows 不允许对同一目标并发替换；不同文件仍可独立保存。
+const pendingWrites = new Map<string, Promise<void>>()
+
 /** 原子写入，避免保存中断导致项目损坏 */
 export async function writeJson(file: string, data: unknown) {
-  const tmp = `${file}.${process.pid}.tmp`
-  await writeFile(tmp, JSON.stringify(data), 'utf8')
-  await rename(tmp, file)
+  const target = resolve(file)
+  // 在排队前捕获数据，避免调用方后续修改对象影响本次保存。
+  const json = JSON.stringify(data)
+  const write = (pendingWrites.get(target) ?? Promise.resolve()).then(async () => {
+    const tmp = `${target}.${process.pid}.${randomUUID()}.tmp`
+    try {
+      await writeFile(tmp, json, 'utf8')
+      await rename(tmp, target)
+    } finally {
+      await rm(tmp, { force: true })
+    }
+  })
+  // 失败只报告给当前调用者，不阻止已排队的后续保存。
+  const settled = write.then(() => {}, () => {})
+  pendingWrites.set(target, settled)
+  try {
+    await write
+  } finally {
+    if (pendingWrites.get(target) === settled) pendingWrites.delete(target)
+  }
 }
 
 export function collection<T extends { id: string }>(dir: string) {

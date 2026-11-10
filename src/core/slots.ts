@@ -35,6 +35,8 @@ export interface FillOptions {
   ratios?: Record<string, number>
   /** 正文槽位的多行文字是否复制段落元素（false 时用换行） */
   split?: boolean
+  /** 表单编辑时保留空格和空行；模板填充默认归一化。 */
+  preserveWhitespace?: boolean
   /** 是否把 **文字** 转为加粗 */
   bold?: boolean
   /** 保留用户输入的空格（行首、行尾、连续空格写成不换行空格）；表单改字用，其余场景仍然去掉多余空白 */
@@ -63,7 +65,7 @@ export function cleanText(s: string): string {
     .trim()
 }
 
-function readText(el: Element): string {
+function readText(el: Element, preserveWhitespace = false): string {
   let s = ''
   const walk = (n: Node) => {
     if (n.nodeType === 3) s += n.textContent ?? ''
@@ -73,7 +75,7 @@ function readText(el: Element): string {
     }
   }
   walk(el)
-  return cleanText(s)
+  return preserveWhitespace ? s.replace(/\u00a0/g, ' ') : cleanText(s)
 }
 
 const NBSP_MARK = '\u0001'
@@ -99,13 +101,13 @@ function readRaw(node: Node): string {
     .join('\n')
 }
 
-/** 表单里的文字写回后读出来的样子（空行去掉、制表符当空格），用来判断表单内容是否已同步 */
-export function editableText(s: string): string {
+/** 表单写回后的文字：制表符当空格；完整编辑模式还保留空行。 */
+export function editableText(s: string, preserveWhitespace = false): string {
   return s
     .replace(/\r/g, '')
     .replace(/[\t\f\v]/g, ' ')
     .split('\n')
-    .filter((l) => l.trim())
+    .filter((l) => preserveWhitespace || l.trim())
     .join('\n')
 }
 
@@ -225,8 +227,15 @@ function rootOf(html: string, parse: Parse): Element {
   return parse(`<!doctype html><html><body><section id="__slots">${html}</section></body></html>`).getElementById('__slots')!
 }
 
-export function extractSlots(html: string, parse: Parse = defaultParse): Slot[] {
-  return scan(rootOf(html, parse)).map((h) => h.slot)
+export function extractSlots(html: string, parse: Parse = defaultParse, preserveWhitespace = false): Slot[] {
+  return scan(rootOf(html, parse)).map(({ slot, node }) => slot.kind === 'text' && preserveWhitespace
+    ? { ...slot, text: node.nodeType === 3 ? (node.textContent ?? '').replace(/\u00a0/g, ' ') : readText(node as Element, true) }
+    : slot)
+}
+
+/** 兼容已有调用方；与 setSlotAlign 共用槽位隔离和外层布局处理。 */
+export function setSlotAlignment(html: string, id: string, align: Align, parse: Parse = defaultParse): string {
+  return setSlotAlign(html, id, align, parse)
 }
 
 /** 原图比例：优先用测得的比例，其次用 width/height 属性 */
@@ -280,11 +289,16 @@ function setLine(el: Element, line: string, doc: Document, bold: boolean) {
   for (const e of hadText.reverse()) if (e.isConnected && !hasText(e) && !e.querySelector('img, svg, br')) e.remove()
 }
 
-function writeText(node: Node, value: string, role: SlotRole, doc: Document, split: boolean, bold: boolean, keep = false) {
-  const v = keep ? value.replace(/\r/g, '') : value.replace(/\r/g, '').trim()
+function writeText(node: Node, value: string, role: SlotRole, doc: Document, split: boolean, bold: boolean, keep = false, preserveWhitespace = false) {
+  keep ||= preserveWhitespace
+  const v = keep ? editableText(value, preserveWhitespace) : value.replace(/\r/g, '').trim()
   const tidy = (line: string) => (keep ? keepSpace(line) : line)
   if (node.nodeType === 3) {
-    node.textContent = tidy(v.replace(/\*\*/g, '').replace(/\s*\n+\s*/g, ' '))
+    if (preserveWhitespace && !node.parentElement?.closest('svg')) {
+      const span = doc.createElement('span')
+      node.parentNode!.replaceChild(span, node)
+      span.append(...inlineNodes(v.split('\n').map(tidy).join('\n'), doc, false, bold))
+    } else node.textContent = tidy(v.replace(/\*\*/g, '').replace(/\s*\n+\s*/g, ' '))
     return
   }
   const el = node as Element
@@ -292,7 +306,7 @@ function writeText(node: Node, value: string, role: SlotRole, doc: Document, spl
     el.remove()
     return
   }
-  const lines = v.split(/\n+/).map((x) => (keep ? x : x.trim())).filter((x) => x.trim()).map(tidy)
+  const lines = preserveWhitespace ? v.split('\n').map(tidy) : v.split(/\n+/).map((x) => (keep ? x : x.trim())).filter((x) => x.trim()).map(tidy)
   // 正文多段：复制段落元素，每段沿用相同样式
   if (split && lines.length > 1 && role === 'body' && tagOf(el) === 'p') {
     let prev = el
@@ -363,7 +377,7 @@ export function fillSlots(html: string, values: SlotValues, opts: FillOptions = 
     if (typeof v === 'string') {
       // 删掉的图注、标题行：它的外框（引号装饰、色条）可能也随之变空
       if (!v.trim() && node.parentElement && slot.role !== 'body') emptied.push(node.parentElement)
-      writeText(node, v, slot.role, doc, split, bold, keepSpaces)
+      writeText(node, v, slot.role, doc, split, bold, keepSpaces, opts.preserveWhitespace)
     }
   }
   // 照片位、图注移除后，只剩编号标签（IMG 01）、图标和空框的区域一并移除：向外找到不含中文、不含照片的最外层
@@ -502,8 +516,8 @@ export function skeleton(html: string, parse: Parse = defaultParse): string {
   return root.innerHTML
 }
 
-export type Align = 'left' | 'center' | 'right'
-const FLEX_ALIGN: Record<Align, string> = { left: 'flex-start', center: 'center', right: 'flex-end' }
+export type Align = 'left' | 'center' | 'right' | 'justify'
+const FLEX_ALIGN: Record<Align, string> = { left: 'flex-start', center: 'center', right: 'flex-end', justify: 'flex-start' }
 
 const styleOf = (el: Element) => el.getAttribute('style') ?? ''
 const declOf = (el: Element, prop: string) => {
@@ -518,12 +532,11 @@ function setDecl(el: Element, prop: string, value: string) {
   el.setAttribute('style', [...rest.map((d) => d.trim()), `${prop}: ${value}`].join('; '))
 }
 
-/** 文字所在的块：行内元素向外找到第一个块级容器；SVG 图形里的文字位置是固定的，不能调整 */
-function alignHost(node: Node, root: Element): Element | null {
-  let el: Element | null = node.nodeType === 3 ? node.parentElement : (node as Element)
-  while (el && el !== root && (INLINE.has(tagOf(el)) || declOf(el, 'display') === 'inline')) el = el.parentElement
-  if (!el || el === root || el.closest('svg')) return null
-  return el
+/** 槽位本身是块时直接使用；裸文字和行内槽位另加容器，不能改到兄弟段落。 */
+function alignHost(node: Node): Element | null {
+  if (node.nodeType !== 1) return null
+  const el = node as Element
+  return INLINE.has(tagOf(el)) || declOf(el, 'display') === 'inline' ? null : el
 }
 
 /** 从文字所在的块向外，第一个明确设置的对齐；没有设置时为 null（跟随外层，页面上多半是左对齐） */
@@ -533,7 +546,7 @@ function alignOf(host: Element, root: Element): Align | null {
     if (a === 'center') return 'center'
     if (a === 'right' || a === 'end') return 'right'
     if (a === 'left' || a === 'start') return 'left'
-    if (a === 'justify') return null
+    if (a === 'justify') return 'justify'
     const j = /flex/.test(declOf(el, 'display')) ? declOf(el, 'justify-content') : ''
     if (j === 'center') return 'center'
     if (j === 'flex-end' || j === 'end' || j === 'right') return 'right'
@@ -547,8 +560,8 @@ export function slotAligns(html: string, parse: Parse = defaultParse): Record<st
   const out: Record<string, { alignable: boolean; align: Align | null }> = {}
   for (const { slot, node } of scan(root)) {
     if (slot.kind !== 'text') continue
-    const host = alignHost(node, root)
-    out[slot.id] = { alignable: !!host, align: host ? alignOf(host, root) : null }
+    const host = node.nodeType === 1 ? node as Element : node.parentElement
+    out[slot.id] = { alignable: !slot.tight, align: !slot.tight && host ? alignOf(host, root) : null }
   }
   return out
 }
@@ -565,24 +578,30 @@ const shrinkBox = (el: Element) => /inline-(block|flex)/.test(declOf(el, 'displa
  */
 export function setSlotAlign(html: string, id: string, align: Align, parse: Parse = defaultParse): string {
   const root = rootOf(html, parse)
-  const hit = scan(root).find((h) => h.slot.id === id)
-  const host = hit && hit.slot.kind === 'text' ? alignHost(hit.node, root) : null
-  if (!host) return html
+  const hit = scan(root).find(({ slot }) => slot.id === id && slot.kind === 'text' && !slot.tight)
+  if (!hit) return html
+  let host = alignHost(hit.node)
+  if (!host) {
+    host = root.ownerDocument.createElement('section')
+    hit.node.parentNode!.insertBefore(host, hit.node)
+    host.append(hit.node)
+  }
   const apply = (el: Element) => {
     setDecl(el, 'text-align', align)
     if (isRowFlex(el)) setDecl(el, 'justify-content', FLEX_ALIGN[align])
   }
-  const loneIn = (parent: Element) => Array.from(parent.children).filter((c) => hasText(c) || c.querySelector('img')).length === 1
+  // 装饰图、空盒子和裸文字同样是兄弟内容，不应随当前槽位移动。
+  const loneIn = (parent: Element, child: Element) => Array.from(parent.childNodes).every((n) => n === child || (n.nodeType !== 1 && !hasText(n)))
   apply(host)
   let child = host
   for (;;) {
     const parent = child.parentElement
-    if (!parent || parent === root || parent.closest('svg') || !loneIn(parent)) break
+    if (!parent || parent === root || parent.closest('svg') || !loneIn(parent, child)) break
     const wrapped = shrinkBox(child) || isRowFlex(parent)
     if (!wrapped && !shrinkBox(parent)) break
     // 固定宽度的块级盒子：靠外边距摆在外层里
     if (fixedWidth(child) && !/inline|flex/.test(declOf(child, 'display')) && !isRowFlex(parent)) {
-      setDecl(child, 'margin-left', align === 'left' ? '0' : 'auto')
+      setDecl(child, 'margin-left', align === 'left' || align === 'justify' ? '0' : 'auto')
       setDecl(child, 'margin-right', align === 'right' ? '0' : 'auto')
     }
     apply(parent)

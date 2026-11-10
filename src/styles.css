@@ -450,3 +450,6 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .enrich-box h5 { margin: 0; font-size: 13px; }
 .enrich-box ul { margin: 0; padding-left: 18px; font-size: 13px; }
 .enrich-box .row { justify-content: flex-end; }
+
+.ai-suggestion-input textarea { width: 100%; }
+.ai-suggestion-input textarea::placeholder { color: #778196; opacity: 1; }

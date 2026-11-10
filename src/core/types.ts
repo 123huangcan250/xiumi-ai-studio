@@ -45,7 +45,7 @@ export interface PicItem {
 }
 
 export interface BlockPropsMap {
-  cover: { kicker: string; title: string; subtitle: string; meta: string; image?: ImageRef; variant: 'auto' | 'hero' | 'band' | 'minimal' }
+  cover: { titleAlign?: 'auto' | 'left' | 'center' | 'right'; kicker: string; title: string; subtitle: string; meta: string; image?: ImageRef; variant: 'auto' | 'hero' | 'band' | 'minimal' }
   heading: { index: string; title: string; subtitle: string; variant: 'auto' | 'number' | 'bar' | 'pill' | 'underline' }
   paragraph: { content: RichText; align: 'left' | 'justify' | 'center' | 'right' }
   card: { title: string; content: RichText; variant: 'auto' | 'border' | 'fill' | 'accent' }

@@ -51,6 +51,7 @@ export interface ModelInfo {
   contextWindow?: number
   maxOutput?: number
   efforts?: string[]
+  reasoningEfforts?: string[]
 }
 export interface EffortProbe {
   baseError?: string
@@ -136,14 +137,20 @@ export const api = {
   aiSettings: () => req<AiSettings>('GET', '/api/settings/ai'),
   saveAiSettings: (s: { activeId: string; profiles: AiProfile[] }) => req<AiSettings>('PUT', '/api/settings/ai', s),
   testAi: (p: AiProfile) => req<{ ok: boolean; reply: unknown; ms: number }>('POST', '/api/settings/ai/test', p),
-  aiModels: (p: AiProfile) => req<{ models: ModelInfo[] }>('POST', '/api/settings/ai/models', p),
+  aiModels: async (p: AiProfile): Promise<ModelInfo[]> => {
+    const r = await req<ModelInfo[] | { models: ModelInfo[] }>('POST', '/api/settings/ai/models', p)
+    const models = Array.isArray(r) ? r : r?.models
+    if (!Array.isArray(models)) throw new Error('服务未返回有效的模型列表')
+    return models
+  },
   probeEffort: (p: AiProfile) => req<EffortProbe>('POST', '/api/settings/ai/probe-effort', p),
   aiOutline: (text: string, imageNames: string[], imageNotes: string[] = [], profileId?: string) => req<any>('POST', '/api/ai/outline', { text, imageNames, imageNotes, profileId }),
   aiDesign: (brief: unknown, hint: string, profileId?: string) => req<{ designs: any[] }>('POST', '/api/ai/design', { brief, hint, profileId }),
   aiCopywrite: (body: { brief: string; style: string; length: string; levels: number; extra: string; previous?: string; revise?: string; profileId?: string }) => req<{ markdown?: string }>('POST', '/api/ai/copywrite', body),
   aiEnrichCopy: (body: { text: string; photos: unknown[]; keep: string[]; profileId?: string }) => req<{ markdown?: string; changes?: string[] }>('POST', '/api/ai/enrich-copy', body),
   aiPlacePhotos: (body: unknown) => req<{ placements?: unknown[] }>('POST', '/api/ai/place-photos', body),
-  aiEdit: (context: unknown, instruction: string, profileId?: string) => req<{ summary: string; ops: any[] }>('POST', '/api/ai/edit', { context, instruction, profileId }),
+  aiSuggestInstruction: (context: unknown, profileId?: string, selectedId?: string) => req<{ suggestion: string }>('POST', '/api/ai/suggest-instruction', { context, profileId, selectedId }),
+  aiEdit: (context: unknown, instruction: string, profileId?: string, selectedId?: string) => req<{ summary: string; ops: any[] }>('POST', '/api/ai/edit', { context, instruction, profileId, selectedId }),
   fetchReference: (url: string) => req<{ html: string }>('POST', '/api/reference/fetch', { url }),
   fetchArticle: (url: string) => req<{ html: string }>('POST', '/api/article/fetch', { url }),
   fetchAssets: (urls: string[]) => req<Record<string, Asset>>('POST', '/api/assets/fetch', { urls }),

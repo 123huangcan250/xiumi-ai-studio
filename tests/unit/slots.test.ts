@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
-import { cleanText, editableText, extractFrames, extractSlots, fillSlots, isPhotoSlot, removeBackgroundPhotos, removeImage, setSlotAlign, skeleton, slotAligns, slotRawTexts, type ImageSlot, type TextSlot } from '../../src/core/slots'
+import { cleanText, editableText, extractFrames, extractSlots, fillSlots, isPhotoSlot, removeBackgroundPhotos, removeImage, setSlotAlign, setSlotAlignment, skeleton, slotAligns, slotRawTexts, type ImageSlot, type TextSlot } from '../../src/core/slots'
 
 const parse = (s: string) => new JSDOM(s).window.document
 const texts = (html: string) => extractSlots(html, parse).filter((s): s is TextSlot => s.kind === 'text')
@@ -218,5 +218,74 @@ describe('spaces and alignment in the side-panel editor', () => {
     const svg = '<svg viewBox="0 0 300 40"><text font-size="18">活动回顾</text></svg>'
     expect(slotAligns(svg, parse).t0.alignable).toBe(false)
     expect(setSlotAlign(svg, 't0', 'center', parse)).toBe(svg)
+  })
+})
+
+
+describe('merged imported-slot editing behavior', () => {
+  it('round-trips blank lines and breakable word spaces through form values', () => {
+    const input = '  hello world  again \n\n last line \n'
+    for (const html of ['<p>原文</p>', '<section>原文<p>其他段落</p></section>']) {
+      const out = fillSlots(html, { t0: input }, { parse, split: false, bold: false, preserveWhitespace: true })
+      expect(slotRawTexts(out, parse).t0).toBe(input)
+      expect(out).toContain('hello world')
+      expect(out).not.toContain('hello&nbsp;world')
+    }
+  })
+
+  it('reports all four alignments and retains both helper names', () => {
+    const html = '<p style="color: red; text-align: center !important">正文</p><p>其他段落</p>'
+    for (const align of ['left', 'center', 'right', 'justify'] as const) {
+      const out = setSlotAlignment(html, 't0', align, parse)
+      expect(out).toBe(setSlotAlign(html, 't0', align, parse))
+      expect(slotAligns(out, parse).t0).toEqual({ alignable: true, align })
+      const p = parse(out).querySelector('p')!
+      expect(p.style.color).toBe('red')
+      expect(p.style.getPropertyPriority('text-align')).toBe('')
+      expect(parse(out).querySelectorAll('p')[1].getAttribute('style')).toBeNull()
+    }
+  })
+
+  it('aligns bare and inline text in isolation and enables their controls', () => {
+    for (const html of [
+      '<section>原文<p>其他段落</p></section>',
+      '<section><span>原文</span><p>其他段落</p></section>',
+      '<span>原文</span><p>其他段落</p>',
+      '原文<p>其他段落</p>',
+    ]) {
+      expect(slotAligns(html, parse).t0.alignable).toBe(true)
+      const out = setSlotAlign(html, 't0', 'right', parse)
+      const dom = parse(out)
+      const sibling = [...dom.querySelectorAll('p')].find(p => p.textContent === '其他段落')!
+      expect(sibling.closest('[style*="text-align"]')).toBeNull()
+      expect(slotAligns(out, parse).t0.align).toBe('right')
+      expect(texts(out).map(s => s.text)).toEqual(['原文', '其他段落'])
+    }
+  })
+
+  it('never propagates alignment across bare-text, image, or decoration siblings', () => {
+    for (const sibling of ['旁边文字', '<img src="/media/photo.jpg">', '<svg><path d="M0 0"></path></svg>', '<span style="display:inline-block;width:10px"></span>']) {
+      const html = `<section data-parent style="display: flex; justify-content: flex-start">${sibling}<section style="width:100px"><p>目标段落</p></section></section>`
+      const slot = texts(html).find(s => s.text === '目标段落')!
+      const out = setSlotAlign(html, slot.id, 'right', parse)
+      const parent = parse(out).querySelector('[data-parent]') as HTMLElement
+      expect(parent.style.justifyContent).toBe('flex-start')
+      expect(parent.style.textAlign).toBe('')
+      expect(slotAligns(out, parse)[slot.id].align).toBe('right')
+    }
+  })
+
+  it('positions fixed-width boxes without duplicating margins on repeated alignment', () => {
+    const html = '<section><section data-box style="width: 120px; margin: 4px 6px; color: red"><p>正文段落</p></section></section>'
+    let out = html
+    for (const align of ['center', 'right', 'left', 'justify'] as const) {
+      out = setSlotAlign(out, 't0', align, parse)
+      const box = parse(out).querySelector('[data-box]') as HTMLElement
+      expect(box.getAttribute('style')).toContain(`margin-left: ${align === 'left' || align === 'justify' ? '0' : 'auto'}`)
+      expect(box.getAttribute('style')).toContain(`margin-right: ${align === 'right' ? '0' : 'auto'}`)
+      expect(box.style.marginTop).toBe('4px')
+      expect(box.style.color).toBe('red')
+      expect(slotAligns(out, parse).t0.align).toBe(align)
+    }
   })
 })

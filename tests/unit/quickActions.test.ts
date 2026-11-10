@@ -50,21 +50,22 @@ describe('ai edits limited to the selected module', () => {
     { op: 'setTheme', themeId: 'x' },
     { op: 'setMeta', title: '新标题' },
   ]
-  it('keeps only changes on the selected module and its neighbours-in-place inserts', () => {
+  it('rejects an entire mixed-scope result and never permits insert/remove', () => {
     const r = limitToSelection(doc, 'b', raw)
-    expect(r.ops).toEqual([raw[0], raw[3], raw[4]])
-    expect(r.dropped).toEqual([raw[1], raw[2], raw[5], raw[6], raw[7], raw[8]])
+    expect(r.ops).toEqual([])
+    expect(limitToSelection(doc, 'b', [raw[0]]).ops).toEqual([raw[0]])
+    expect(r.dropped).toEqual(raw)
   })
   it('treats a text box and its children as one scope; children insert around the box', () => {
     expect([...selectionScope(doc, 'box')!.ids]).toEqual(['box', 'c1'])
     const inChild = selectionScope(doc, 'c1')!
     expect([...inChild.ids]).toEqual(['c1'])
     expect(inChild.top).toBe(2)
-    expect(limitToSelection(doc, 'c1', [{ op: 'update', id: 'c1', props: {} }, { op: 'update', id: 'box', props: {} }, { op: 'insert', index: 3 }, { op: 'insert', index: 0 }]).ops).toHaveLength(2)
+    expect(limitToSelection(doc, 'c1', [{ op: 'update', id: 'c1', props: {} }, { op: 'update', id: 'box', props: {} }, { op: 'insert', index: 3 }, { op: 'insert', index: 0 }]).ops).toHaveLength(0)
   })
   it('passes everything through when nothing is selected', () => {
     expect(limitToSelection(doc, null, raw)).toEqual({ ops: raw, dropped: [] })
-    expect(limitToSelection(doc, 'missing', raw).dropped).toEqual([])
+    expect(limitToSelection(doc, 'missing', raw)).toEqual({ ops: [], dropped: raw })
   })
   it('sends the whole selected module and only one-line summaries of the rest', () => {
     const ctx: any = aiContext(doc, 'b')

@@ -2,7 +2,7 @@
 // 剪贴板写入方式参考 doocs/md（WTFPL）：ClipboardItem 优先，execCommand 兜底；首尾加零高度段落。
 import { compileDoc, css, type CompileResult } from '../core/compiler'
 import { fitRatio } from '../core/photos'
-import { asciiHtml, makeZip, replaceLocalImages, splitForXiumi, xiumiSvgBoxes } from '../core/xiumiExport'
+import { asciiHtml, makeZip, replaceLocalImages, checkedXiumiParts } from '../core/xiumiExport'
 import type { Doc } from '../core/types'
 import { api } from './api'
 
@@ -150,7 +150,7 @@ const XIUMI_NOTES = (images: number, parts: number) =>
 /** 秀米导入文件：SVG 加盒子、按长度上限分段、写成纯 ASCII；一个文件直接给 txt，多个打成 zip 并附说明 */
 function xiumiFiles(html: string): { name: string; data: Uint8Array }[] {
   const enc = new TextEncoder()
-  const parts = splitForXiumi(xiumiSvgBoxes(html))
+  const parts = checkedXiumiParts(html)
   return parts.map((p, i) => ({ name: partName(i, parts.length), data: enc.encode(asciiHtml(p)) }))
 }
 
@@ -172,6 +172,7 @@ function xiumiZip(files: { name: string; data: Uint8Array }[], images: number): 
 
 /** 导出给秀米（不需要公众号接口）：本地图片换成占位图，另附按出现顺序编号的图片包 */
 export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void): Promise<XiumiDownload> {
+  checkedXiumiParts(compileDoc(doc).html)
   const replaced = replaceLocalImages(compileDoc(doc).html, (url, i) => placeholder(i + 1, fitRatio(url)))
   const { urls } = replaced
   const files = xiumiFiles(replaced.html)
@@ -187,6 +188,7 @@ export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void)
 
 /** 导出给秀米（已配置公众号接口）：本地图片先传到微信图床，全部变成秀米能接受的地址 */
 export async function xiumiUploaded(doc: Doc, onProgress?: (msg: string) => void): Promise<XiumiDownload> {
+  checkedXiumiParts(compileDoc(doc).html)
   const { html } = await compileForWechat(doc, 'wechat', onProgress)
   if (/(?:src="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
   return xiumiZip(xiumiFiles(html), 0)
