@@ -10,6 +10,9 @@ async function openExport(page: import('@playwright/test').Page, html: string) {
     { id: 'image', type: 'image', props: { image: { src: '/media/preflight-only.jpg' }, caption: '', variant: 'full' } },
   ] } })
   await page.reload()
+  // Wait for the requested project, not the initial shell/previous document.
+  await expect(page.locator('[data-testid=canvas] [data-block-id=long]')).toBeVisible()
+  await expect(page.getByTestId('save-status')).toHaveText('已保存')
   await page.getByTestId('open-export').click()
 }
 
@@ -36,7 +39,7 @@ test('indivisible oversized content blocks both Xiumi paths before upload or dow
   await openExport(page, `<p>${'字'.repeat(140000)}</p>`)
   for (const action of ['xiumi-package', 'xiumi-upload']) {
     await page.getByTestId(action).click()
-    await expect(page.locator('.toast')).toContainText('请手动拆分')
+    await expect(page.locator('.toast').filter({ hasText: '请手动拆分' })).toBeVisible()
     await expect(page.getByTestId(action)).toBeEnabled()
   }
   expect(uploads).toBe(0)

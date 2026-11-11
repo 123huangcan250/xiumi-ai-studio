@@ -78,6 +78,9 @@ interface Wire {
 /** 400 报错里点名了哪个参数，就去掉（或改写）哪个；没有可调整的返回 null */
 export function adjustWire(w: Wire, message: string, keepEffort = true): Wire | null {
   const m = message.toLowerCase()
+  // Compatible providers may support reasoning_effort with the older token field.
+  // Only rewrite on an explicit parameter rejection, not an output-budget error.
+  if (w.tokenField === 'max_completion_tokens' && /max_completion_tokens/.test(m) && /unsupported|unknown|unrecognized|unexpected|not supported|not allowed|not permitted/.test(m)) return { ...w, tokenField: 'max_tokens' }
   if (w.tokenField === 'max_tokens' && /max_completion_tokens/.test(m)) return { ...w, tokenField: 'max_completion_tokens' }
   if (w.temperature && /temperature/.test(m)) return { ...w, temperature: false }
   if (w.effort && !keepEffort && /reasoning|effort|thinking/.test(m)) return { ...w, effort: false }
@@ -94,12 +97,14 @@ export function adjustWire(w: Wire, message: string, keepEffort = true): Wire | 
 
 async function sendAdaptive(send: (w: Wire) => Promise<Response>, start: Wire, keepEffort: boolean): Promise<Response> {
   let w = start
+  const attempted = new Set<string>()
   for (let i = 0; i < 6; i++) {
+    attempted.add(JSON.stringify(w))
     const res = await send(w)
     if (res.ok) return res
     const message = await readError(res)
     const next = res.status === 400 || res.status === 422 ? adjustWire(w, message, keepEffort) : null
-    if (!next) throw Object.assign(new Error(`AI 请求失败 ${res.status}: ${message}`), { status: 502 })
+    if (!next || attempted.has(JSON.stringify(next))) throw Object.assign(new Error(`AI 请求失败 ${res.status}: ${message}`), { status: 502 })
     w = next
   }
   throw Object.assign(new Error('AI 请求失败：参数被服务反复拒绝'), { status: 502 })

@@ -9,7 +9,10 @@ async function waitSaved(page: Page) {
 }
 
 async function waitImages(page: Page) {
-  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid=canvas] img')].every((i) => (i as HTMLImageElement).complete))
+  await page.locator('[data-testid=canvas] img').evaluateAll(async (images) => {
+    await Promise.all(images.map((image) => (image as HTMLImageElement).decode()))
+    await document.fonts.ready
+  })
 }
 
 async function importSample(page: Page) {
@@ -26,8 +29,7 @@ test('三种排版结构不同，且都使用了全部 10 张图', async ({ page
   const signatures: string[] = []
   for (const id of ['narrative', 'cards', 'photo']) {
     const card = page.getByTestId(`variant-${id}`)
-    const imgs = await card.locator('.mini-inner img').evaluateAll((els) => new Set(els.map((e) => (e as HTMLImageElement).getAttribute('src')!.split('?')[0])).size)
-    expect(imgs, id).toBe(10)
+    await expect.poll(() => card.locator('.mini-inner img').evaluateAll((els) => new Set(els.map((e) => (e as HTMLImageElement).getAttribute('src')!.split('?')[0])).size), { message: id }).toBe(10)
   }
   for (const id of ['narrative', 'cards', 'photo']) {
     if (id !== 'narrative') {

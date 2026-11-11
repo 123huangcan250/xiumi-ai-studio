@@ -1,9 +1,9 @@
-let enabled = true
+let enabled = false
 let storageFailed = false
 const key = 'xiumi:auto-input-suggestions'
 export function readSuggestionPreference(): boolean {
   if (storageFailed) return enabled
-  try { enabled = localStorage.getItem(key) !== 'off' } catch { /* Keep the page preference when storage is unavailable. */ }
+  try { enabled = localStorage.getItem(key) === 'on' } catch { /* Keep the page preference when storage is unavailable. */ }
   return enabled
 }
 export function saveSuggestionPreference(value: boolean): void {

@@ -8,7 +8,7 @@ import { listComponents, removeComponent, saveComponent, updateComponent } from 
 import { IMAGE_HOST, safeFetch, WECHAT_IMAGE_HOST } from './net'
 import { aiStatus, chatJson, discoverModels, testConnection, COPY_SYSTEM, DESIGN_SYSTEM, EDIT_SYSTEM, ENRICH_SYSTEM, OUTLINE_SYSTEM, PLACE_SYSTEM } from './ai'
 import { probeEfforts } from './aiModels'
-import { editPrompt, scopeEditResult } from './aiEdit'
+import { editPrompt, resolveEditSelection, scopeEditResult, selectionPolicy } from './aiEdit'
 import { suggestionPrompt, readSuggestion, SUGGESTION_SYSTEM } from './aiSuggestion'
 import { isRoleId } from '../src/core/roles'
 import { publicAiSettings, resolveDraftProfile, saveAiSettings } from './settings'
@@ -273,12 +273,10 @@ app.post('/api/ai/suggest-instruction', h(async (req, res) => {
 }))
 app.post('/api/ai/edit', h(async (req, res) => {
   const { context, instruction } = req.body
-  const selectedId = req.body.selectedId ?? context?.focus?.id
-  if (selectedId !== undefined && (typeof selectedId !== 'string' || !selectedId)) {
-    throw Object.assign(new Error('无效的选中模块'), { status: 400 })
-  }
-  const user = editPrompt(context, instruction, selectedId)
-  res.json(scopeEditResult(await chatJson(EDIT_SYSTEM, user, { maxTokens: 6000, profileId: pid(req) }), selectedId))
+  const selectedId = resolveEditSelection(context, req.body.selectedId)
+  const policy = selectionPolicy()
+  const user = editPrompt(context, instruction, selectedId, policy)
+  res.json(scopeEditResult(await chatJson(EDIT_SYSTEM, user, { maxTokens: 6000, profileId: pid(req) }), selectedId, context, policy))
 }))
 
 // ---------- 文章抓取（导入公众号推文 / 参考风格） ----------

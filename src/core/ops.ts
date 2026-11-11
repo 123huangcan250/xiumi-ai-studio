@@ -1,20 +1,48 @@
-import { coerceProps, createBlock, isBlockType, newId } from './blocks'
+import { BLOCK_TYPES, coerceProps, createBlock, newId } from './blocks'
 import { richToPlain } from './richtext'
 import { extractSlots, fillSlots } from './slots'
 import { findBlock, flatBlocks, removeBlockById, updateBlock } from './tree'
-import type { Block, Doc, DocOp } from './types'
+import type { Block, Doc, DocOp, InsertAnchor, SelectionPolicy } from './types'
+
+/** Insert payloads are new content, never references to existing block identities. */
+function freshInsertBlock(raw: any): Block | null {
+  const type = raw?.type
+  if (!BLOCK_TYPES.includes(type) || type === 'html') return null
+  let children: Block[] | undefined
+  if (type === 'box' && raw.props?.children !== undefined) {
+    if (!Array.isArray(raw.props.children)) return null
+    children = []
+    for (const child of raw.props.children) {
+      // Boxes cannot nest, and HTML cannot bypass the top-level insert restriction.
+      if (child?.type === 'box') return null
+      const block = freshInsertBlock(child)
+      if (!block) return null
+      children.push(block)
+    }
+  }
+  return createBlock(type, coerceProps(type, { ...raw.props, ...(children && { children }) }) as any)
+}
+
+/** An invalid or deleted anchor must not fall back to an unrelated numeric position. */
+function anchoredIndex(doc: Pick<Doc, 'blocks'>, anchor: any): number | null {
+  if (!anchor || typeof anchor.id !== 'string' || !['before', 'after'].includes(anchor.side)) return null
+  const matches = doc.blocks.filter(b => b.id === anchor.id)
+  if (matches.length !== 1) return null
+  return doc.blocks.indexOf(matches[0]) + (anchor.side === 'after' ? 1 : 0)
+}
 
 /** 校验并修复一条 op；非法时返回错误信息 */
 export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
   if (!op || typeof op !== 'object') return { error: 'op 不是对象' }
   switch (op.op) {
     case 'insert': {
-      const type = op.block?.type
-      if (!isBlockType(type) || type === 'html') return { error: `不支持插入模块类型 ${type}` }
-      // AI 返回的字段类型不可信（如 index 给数字）：按模块结构强制转换
-      const block = createBlock(type, coerceProps(type, op.block.props) as any)
-      const index = Math.max(0, Math.min(doc.blocks.length, Number(op.index ?? doc.blocks.length)))
-      return { op: { op: 'insert', index, block, reason: op.reason } }
+      const block = freshInsertBlock(op.block)
+      if (!block) return { error: '插入模块或子模块的类型无效' }
+      const anchored = 'anchor' in op
+      const index = anchored ? anchoredIndex(doc, op.anchor) : Math.max(0, Math.min(doc.blocks.length, Number(op.index ?? doc.blocks.length)))
+      if (index === null || !Number.isInteger(index)) return { error: '插入位置或锚点无效，请重新生成修改建议' }
+      const anchor: InsertAnchor | undefined = anchored ? { id: op.anchor.id, side: op.anchor.side } : undefined
+      return { op: { op: 'insert', index, block, ...(anchor && { anchor }), reason: op.reason } }
     }
     case 'update': {
       // 大型文本框里的模块也可以按 id 修改
@@ -34,9 +62,10 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
         if (!Object.keys(slots).length) return { error: `修改 ${op.id} 没有有效的文字槽位` }
         return { op: { op: 'update', id: op.id, props: { html: fillSlots(b.props.html, slots, { split: false }) }, slots, reason: op.reason } }
       }
-      const props: Record<string, any> = coerceProps(b.type, op.props, true)
-      // 文本框的子模块只能逐个修改，不能整体替换（避免丢内容）
-      delete props.children
+      // Never normalize untrusted replacement children: updates cannot replace identities or content trees.
+      const fields = op.props && typeof op.props === 'object' ? { ...op.props } : {}
+      delete fields.children
+      const props: Record<string, any> = coerceProps(b.type, fields, true)
       // 图片位：AI 只能改图注，图片和位置保持不变
       if (props.pics && 'pics' in b.props) {
         const given = props.pics as { caption: string }[]
@@ -61,9 +90,12 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
 export function applyOp(doc: Doc, op: DocOp): Doc {
   const blocks = [...doc.blocks]
   switch (op.op) {
-    case 'insert':
-      blocks.splice(op.index, 0, { ...op.block, id: op.block.id || newId() })
+    case 'insert': {
+      const index = 'anchor' in op ? anchoredIndex(doc, op.anchor) : op.index
+      if (index === null) return doc
+      blocks.splice(index, 0, { ...op.block, id: op.block.id || newId() })
       return { ...doc, blocks }
+    }
     case 'update':
       return { ...doc, blocks: updateBlock(blocks, op.id, (b) => ({ ...b, props: { ...b.props, ...op.props } }) as Block) }
     case 'remove':
@@ -84,29 +116,76 @@ export function applyOp(doc: Doc, op: DocOp): Doc {
   }
 }
 
+/** Keep sibling inserts in proposal order, including when suggestions are accepted out of order. */
+export function orderInsert(doc: Doc, op: DocOp, earlier: DocOp[], later: DocOp[] = []): DocOp {
+  if (op.op !== 'insert' || !op.anchor || anchoredIndex(doc, op.anchor) === null) return op
+  const sameAnchor = (other: DocOp): other is Extract<DocOp, { op: 'insert' }> =>
+    other.op === 'insert' && other.anchor?.id === op.anchor!.id && other.anchor.side === op.anchor!.side
+  const group = new Set([...earlier, ...later].filter(sameAnchor).map(other => other.block.id))
+  // A previously accepted insert may have been manually moved elsewhere. Never follow it out of scope.
+  const adjacent = new Set<string>()
+  const step = op.anchor.side === 'after' ? 1 : -1
+  for (let i = doc.blocks.findIndex(b => b.id === op.anchor!.id) + step; group.has(doc.blocks[i]?.id); i += step) adjacent.add(doc.blocks[i].id)
+  const neighbor = (other: DocOp): other is Extract<DocOp, { op: 'insert' }> => sameAnchor(other) && adjacent.has(other.block.id)
+  const following = later.find(neighbor)
+  const previous = earlier.findLast(neighbor)
+  const anchor: InsertAnchor | undefined = following ? { id: following.block.id, side: 'before' }
+    : previous ? { id: previous.block.id, side: 'after' } : undefined
+  return anchor ? { ...op, anchor } : op
+}
+
 export function applyOps(doc: Doc, ops: DocOp[]): Doc {
-  return ops.reduce(applyOp, doc)
+  return ops.reduce((next, op, index) => applyOp(next, orderInsert(next, op, ops.slice(0, index))), doc)
 }
 
-/** 选中模块的范围：它自己、里面的子模块，以及它所在的顶层位置（文本框里的子模块以文本框为准） */
-export function selectionScope(doc: Doc, selectedId: string | null | undefined): { ids: Set<string>; top: number } | null {
-  const at = findBlock(doc.blocks, selectedId)
-  if (!at) return null
-  const outer = at.parent ?? at.block
-  const ids = new Set<string>()
-  const add = (b: Block) => {
-    ids.add(b.id)
-    if (b.type === 'box') b.props.children.forEach(add)
+// Server AI context contains summary-only neighbors, not necessarily full Block props.
+type ScopeDocument = { blocks: { id: string; type: string; props?: any }[] }
+
+/** 选中模块自身和子模块；框内模块的前后插入以所在的顶层文本框为锚点。 */
+export function selectionScope(doc: ScopeDocument, selectedId: string | null | undefined): { ids: Set<string>; top: number } | null {
+  if (!selectedId || !Array.isArray(doc?.blocks)) return null
+  const seen = new Set<string>()
+  let selected: ScopeDocument['blocks'][number] | undefined
+  let top = -1
+  let valid = true
+  const children = (b: ScopeDocument['blocks'][number]) => b.type === 'box' && Array.isArray(b.props?.children) ? b.props.children : []
+  const visit = (b: ScopeDocument['blocks'][number], index: number) => {
+    if (!b || typeof b.id !== 'string' || !b.id || seen.has(b.id)) { valid = false; return }
+    seen.add(b.id)
+    if (b.id === selectedId) { selected = b; top = index }
+    children(b).forEach((child: ScopeDocument['blocks'][number]) => visit(child, index))
   }
-  add(at.block)
-  return { ids, top: doc.blocks.findIndex((b) => b.id === outer.id) }
+  doc.blocks.forEach(visit)
+  if (!valid || !selected) return null
+  const ids = new Set<string>()
+  const add = (b: ScopeDocument['blocks'][number]) => {
+    ids.add(b.id)
+    children(b).forEach(add)
+  }
+  add(selected)
+  return { ids, top }
 }
 
-/** Match the server's exact-module update boundary; fail closed on stale or mixed scope. */
-export function limitToSelection(doc: Doc, selectedId: string | null | undefined, rawOps: any[]): { ops: any[]; dropped: any[] } {
+/** Strict stays atomic and update-only. Filtering is an explicit server-owned opt-in. */
+export function limitToSelection(doc: ScopeDocument, selectedId: string | null | undefined, rawOps: any[], policy: SelectionPolicy = 'strict'): { ops: any[]; dropped: any[] } {
   if (selectedId == null) return { ops: rawOps, dropped: [] }
-  const valid = findBlock(doc.blocks, selectedId) && rawOps.every(op => op?.op === 'update' && op.id === selectedId)
-  return valid ? { ops: rawOps, dropped: [] } : { ops: [], dropped: rawOps }
+  const scope = selectionScope(doc, selectedId)
+  if (!scope) return { ops: [], dropped: rawOps }
+  if (policy !== 'filter') {
+    const valid = rawOps.every(op => op?.op === 'update' && op.id === selectedId)
+    return valid ? { ops: rawOps, dropped: [] } : { ops: [], dropped: rawOps }
+  }
+  const ops: any[] = [], dropped: any[] = []
+  for (const op of rawOps) {
+    if ((op?.op === 'update' || op?.op === 'remove') && scope.ids.has(op.id)) {
+      ops.push(op)
+    } else if (op?.op === 'insert' && Number.isInteger(op.index) && (op.index === scope.top || op.index === scope.top + 1)) {
+      const anchor: InsertAnchor = { id: doc.blocks[scope.top].id, side: op.index === scope.top ? 'before' : 'after' }
+      if ('anchor' in op && (!op.anchor || op.anchor.id !== anchor.id || op.anchor.side !== anchor.side)) dropped.push(op)
+      else ops.push({ ...op, anchor })
+    } else dropped.push(op)
+  }
+  return { ops, dropped }
 }
 
 /** 人类可读的改动说明，用于差异面板 */

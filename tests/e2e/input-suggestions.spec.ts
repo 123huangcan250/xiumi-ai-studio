@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-test('contextual ghost text is opt-out, editable, and never auto-submitted', async ({ page }) => {
+test('contextual ghost text requires opt-in, stays editable, and never auto-submits', async ({ page }) => {
   const requests: any[] = []
   let edits = 0
   await page.route('**/api/ai/status', route => route.fulfill({ json: { enabled: true, name: 'Mock', model: 'mock', profileId: 'test' } }))
@@ -19,11 +19,24 @@ test('contextual ghost text is opt-out, editable, and never auto-submitted', asy
   await page.locator('[data-testid=canvas] [data-block-type=paragraph]').first().click()
   await page.getByTestId('tab-ai').click()
   const input = page.getByRole('textbox', { name: 'AI 修改指令' })
+  const autoSuggest = page.getByLabel('自动生成输入建议')
+  await expect(autoSuggest).not.toBeChecked()
+  await expect(autoSuggest).toHaveAccessibleDescription(/发送.*模型.*API 费用/)
+  await page.waitForTimeout(1800)
+  expect(requests).toHaveLength(0)
+  const selectedText = (await page.locator('[data-testid=canvas] [data-block-type=paragraph] .block-html').first().innerText()).replace(/\s+/g, ' ').trim()
+  await expect(page.getByLabel('修改范围').locator('option:checked')).toContainText(selectedText.slice(0, 20))
+  await autoSuggest.check()
   await expect(input).toHaveAttribute('placeholder', '精简这段开头，保留活动事实')
   expect(requests).toHaveLength(1)
   expect(requests[0].context.blocks).toHaveLength(1)
   expect(requests[0].context.blocks[0].id).toBe(requests[0].selectedId)
   await expect(input).toHaveValue('')
+  await page.getByTestId('tab-theme').click()
+  await page.getByTestId('tab-ai').click()
+  await expect(autoSuggest).toBeChecked()
+  await expect(input).toHaveAttribute('placeholder', '精简这段开头，保留活动事实')
+  expect(requests).toHaveLength(1)
   await input.focus()
   await input.press('Tab')
   await expect(input).toHaveValue('精简这段开头，保留活动事实')
@@ -62,6 +75,7 @@ test('model settings changes outside AI tab invalidate a failed suggestion', asy
   await page.getByTestId('generate').click()
   await page.getByTestId('choose-narrative').click()
   await page.getByTestId('tab-ai').click()
+  await page.getByLabel('自动生成输入建议').check()
   await expect(page.getByRole('status').filter({ hasText: '自动建议暂不可用' })).toBeVisible()
   await page.getByTestId('tab-theme').click()
   // AiSettingsModal dispatches this after saving, including from non-AI tabs.

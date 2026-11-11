@@ -139,9 +139,13 @@ export interface Theme extends ThemeTokens {
   description: string
 }
 
+/** Selected AI edits are strict unless the server explicitly enables filtering. */
+export type SelectionPolicy = 'strict' | 'filter'
+export interface InsertAnchor { id: string; side: 'before' | 'after' }
+
 /** AI 与程序化修改统一使用的操作；AI 永远不直接产出 HTML */
 export type DocOp =
-  | { op: 'insert'; index: number; block: Block; reason?: string }
+  | { op: 'insert'; index: number; block: Block; anchor?: InsertAnchor; reason?: string }
   /** 原文片段只能按文字槽位修改：slots 为槽位 id → 新文字，props.html 由 slots 计算 */
   | { op: 'update'; id: string; props: Record<string, any>; slots?: Record<string, string>; reason?: string }
   | { op: 'remove'; id: string; reason?: string }

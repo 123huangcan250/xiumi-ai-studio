@@ -11,6 +11,12 @@ const validExtra = (text = '') => {
 const COMMON_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
 const blank = (): AiProfile => ({ id: '', name: '', provider: 'openai', baseUrl: '', apiKey: '', model: '', jsonMode: true })
+const endpointOf = (p: AiProfile) => {
+  try {
+    const url = new URL(p.baseUrl)
+    return /^https?:$/.test(url.protocol) ? `${p.provider}:${url.origin}` : ''
+  } catch { return '' }
+}
 
 /** AI 模型设置：可保存多套配置并选择当前使用的一套。密钥只保存在本机。 */
 export function AiSettingsModal({ onClose }: { onClose: () => void }) {
@@ -25,7 +31,8 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   const [modelList, setModelList] = useState<Awaited<ReturnType<typeof api.aiModels>>>([])
   const [modelStatus, setModelStatus] = useState('')
   const [fetchingModels, setFetchingModels] = useState(false)
-  const modelRequest = useRef({ generation: 0 })
+  const modelRequest = useRef({ generation: 0, pending: false })
+  const credentialScopes = useRef(new Map<string, string>())
   const [busy, setBusy] = useState(false)
   // 设置读取完成前不能新增：否则读取结果会覆盖刚选的预设
   const [loaded, setLoaded] = useState(false)
@@ -36,6 +43,9 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
       .aiSettings()
       .then((s) => {
         if (!alive) return
+        for (const p of s.profiles) {
+          if ((p.apiKey || p.hasKey) && endpointOf(p)) credentialScopes.current.set(p.id, endpointOf(p))
+        }
         setProfiles(s.profiles)
         setActiveId(s.activeId)
         if (!s.profiles.length) setEditing(-2)
@@ -54,7 +64,22 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
     const requestState = modelRequest.current
     return () => { requestState.generation++ }
   }, [cur?.id, cur?.baseUrl, cur?.provider, cur?.apiKey])
+  const checkCredentials = (p: AiProfile) => {
+    const target = endpointOf(p)
+    const bound = credentialScopes.current.get(p.id)
+    if (target && bound && target !== bound) {
+      // Compare the completed URL, not partially typed hostnames. Saved keys are
+      // also checked by the server; this protects newly entered draft keys.
+      if (p.apiKey || p.hasKey) setProfiles((list) => list.map((x) => x.id === p.id ? { ...x, apiKey: '', hasKey: false } : x))
+      setModelStatus('更换服务商地址或接口类型后，请重新输入 API Key。')
+      return false
+    }
+    if (target && (p.apiKey.trim() || p.hasKey)) credentialScopes.current.set(p.id, target)
+    return true
+  }
   const fetchModels = async (p: AiProfile) => {
+    if (!checkCredentials(p)) return
+    modelRequest.current.pending = false
     const request = ++modelRequest.current.generation
     setFetchingModels(true)
     setModelList([])
@@ -71,6 +96,15 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
     } finally {
       if (request === modelRequest.current.generation) setFetchingModels(false)
     }
+  }
+  const discoverAfterEdit = (p: AiProfile, next: EventTarget | null) => {
+    // Moving between credentials means the endpoint is still being edited.
+    // A button (refresh/test/save/cancel/provider) handles its own explicit action.
+    if (next instanceof Element && next.matches('button, input[type="password"], [data-testid="ai-base-url"], [data-testid="ai-add-preset"]')) return
+    if (!modelRequest.current.pending || !endpointOf(p) || !checkCredentials(p)) return
+    const local = ['localhost', '127.0.0.1', '[::1]'].includes(new URL(p.baseUrl).hostname)
+    if (!p.apiKey.trim() && !p.hasKey && !local) return
+    void fetchModels(p)
   }
   useEffect(() => {
     const state = actionRequest.current
@@ -89,6 +123,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
     setEffortNote('')
     setTesting('')
     modelRequest.current.generation++
+    modelRequest.current.pending = false
     actionRequest.current.probe++
     actionRequest.current.test++
   }
@@ -96,7 +131,17 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   const patch = (p: Partial<AiProfile>) => {
     // Invalidate synchronously, before a queued response can land after an edit.
     const endpoint = ['baseUrl', 'provider', 'apiKey'].some((key) => key in p)
-    if (endpoint) modelRequest.current.generation++
+    if (endpoint) {
+      modelRequest.current.generation++
+      modelRequest.current.pending = true
+    }
+    if (cur && 'apiKey' in p && p.apiKey?.trim()) {
+      const target = endpointOf(cur)
+      if (target) credentialScopes.current.set(cur.id, target)
+      else credentialScopes.current.delete(cur.id)
+    }
+    const changedProvider = cur && p.provider && p.provider !== cur.provider
+    if (changedProvider) credentialScopes.current.delete(cur.id)
     actionRequest.current.probe++
     actionRequest.current.test++
     setProbing(false)
@@ -106,6 +151,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
       ...x,
       ...(endpoint ? { contextWindow: 0, maxOutputTokens: 0, efforts: [], reasoningEffort: '' } : {}),
       ...p,
+      ...(changedProvider ? { apiKey: '', hasKey: false } : {}),
     } : x))
   }
   const selectModel = (id: string) => {
@@ -114,6 +160,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   const probe = async (p: AiProfile) => {
+    if (!checkCredentials(p)) return
     const request = ++actionRequest.current.probe
     setProbing(true)
     setEffortNote('检测中…每个强度发一条请求，可能需要几分钟。')
@@ -147,6 +194,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   const save = async () => {
     setBusy(true)
     try {
+      if (profiles.some((p) => !checkCredentials(p))) throw new Error('更换服务商地址或接口类型后，请重新输入 API Key')
       const s = await api.saveAiSettings({ activeId, profiles: profiles.filter((p) => !p.readonly) })
       setProfiles(s.profiles)
       setActiveId(s.activeId)
@@ -161,6 +209,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   const test = async (p: AiProfile) => {
+    if (!checkCredentials(p)) return
     const request = ++actionRequest.current.test
     setTesting('测试中…')
     try {
@@ -207,13 +256,14 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
                   <button className={cur.provider === 'anthropic' ? 'on' : ''} disabled={cur.readonly} onClick={() => patch({ provider: 'anthropic' })}>Anthropic Claude</button>
                 </div>
               </label>
-              <label className="field"><span>接口地址 Base URL</span><input value={cur.baseUrl} disabled={cur.readonly} placeholder="https://…/v1" onChange={(e) => patch({ baseUrl: e.target.value })} /></label>
+              <label className="field"><span>接口地址 Base URL</span><input data-testid="ai-base-url" value={cur.baseUrl} disabled={cur.readonly} placeholder="https://…/v1" onChange={(e) => patch({ baseUrl: e.target.value })} onBlur={(e) => discoverAfterEdit(cur, e.relatedTarget)} /></label>
               <label className="field">
                 <span>API Key{preset?.keyUrl && <a href={preset.keyUrl} target="_blank" rel="noreferrer">获取密钥 ↗</a>}</span>
-                <input type="password" value={cur.apiKey} disabled={cur.readonly} placeholder={cur.hasKey ? '已保存（留空则不修改）' : '粘贴密钥'} autoComplete="off" onChange={(e) => patch({ apiKey: e.target.value })} />
+                <input type="password" value={cur.apiKey} disabled={cur.readonly} placeholder={cur.hasKey ? '已保存（留空则不修改）' : '粘贴密钥'} autoComplete="off" onChange={(e) => patch({ apiKey: e.target.value })} onBlur={(e) => discoverAfterEdit(cur, e.relatedTarget)} />
               </label>
               <label className="field"><span>模型名称</span><input data-testid="ai-model" value={cur.model} disabled={cur.readonly} placeholder="例如 deepseek-chat / qwen-plus / claude-sonnet-5-5" onChange={(e) => selectModel(e.target.value)} /></label>
               <button data-testid="ai-load-models" disabled={!cur.baseUrl || fetchingModels} onClick={() => fetchModels(cur)}>{fetchingModels ? '获取中…' : '从服务商获取模型列表'}</button>
+              <p className="hint">填好地址和密钥后，离开输入框会自动获取模型列表；不会在打开设置或逐字输入时请求，也可点击按钮刷新。本地服务可不填密钥；更换服务商域名或接口类型后需重新输入密钥。</p>
               {modelStatus && <p className="hint" role="status" data-testid="ai-model-note">{modelStatus}</p>}
               {modelList.length > 0 && (
                 <label className="field"><span>可用模型（点击选择，也可在上方手动填写）</span>
@@ -232,7 +282,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
               <label className="field"><span>上下文窗口（tokens，仅记录，不自动截断）</span><input data-testid="ai-context" type="number" min="0" step="1" value={cur.contextWindow || ''} disabled={cur.readonly} placeholder="上游未提供，可手动填写" onChange={(e) => patch({ contextWindow: Number(e.target.value) || 0 })} /></label>
               <label className="field"><span>思考强度（留空使用服务商默认）</span><input data-testid="ai-effort" list="ai-reasoning-efforts" value={cur.reasoningEffort ?? ''} disabled={cur.readonly} placeholder="例如 low / medium / high" onChange={(e) => patch({ reasoningEffort: e.target.value })} /></label>
               <datalist id="ai-reasoning-efforts">{(cur.efforts?.length ? cur.efforts : COMMON_EFFORTS).map((effort) => <option key={effort} value={effort} />)}</datalist>
-              <p className="hint">仅填写服务商支持的强度；OpenAI 兼容接口发送 reasoning_effort / max_completion_tokens，Claude 发送 output_config.effort。设置强度时不发送 temperature；不支持的参数会显示错误。</p>
+              <p className="hint">仅填写服务商支持的强度；OpenAI 兼容接口发送 reasoning_effort，优先使用 max_completion_tokens，服务明确拒绝时尝试 max_tokens；Claude 发送 output_config.effort。设置强度时不发送 temperature；被拒绝的强度会显示错误，不会静默去掉。请求被接受不代表强度一定生效，请查阅服务商文档。</p>
               <label className="field"><span>单次最大输出（tokens）</span><input data-testid="ai-max-output" type="number" min="0" step="1" value={cur.maxOutputTokens || ''} disabled={cur.readonly} placeholder="未知" onChange={(e) => patch({ maxOutputTokens: Number(e.target.value) || 0 })} /></label>
               <p className="hint">请求的输出上限不会超过此值；留空使用任务默认值。</p>
               <button data-testid="ai-probe-effort" disabled={!cur.baseUrl || !cur.model || probing} onClick={() => probe(cur)}>{probing ? '检测中…' : '检测支持的强度'}</button>

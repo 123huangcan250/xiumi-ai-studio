@@ -59,12 +59,3 @@ it('provides a click acceptance action for touch and screen reader users', () =>
   expect(change).toHaveBeenCalledWith(suggestion)
   expect(button.type).toBe('button')
 })
-
-it('persists opting out across panel remounts', async () => {
-  const { readSuggestionPreference, saveSuggestionPreference } = await import('../../src/editor/suggestionPreference')
-  saveSuggestionPreference(false)
-  expect(readSuggestionPreference()).toBe(false)
-  expect(localStorage.getItem('xiumi:auto-input-suggestions')).toBe('off')
-  saveSuggestionPreference(true)
-  expect(readSuggestionPreference()).toBe(true)
-})

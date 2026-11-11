@@ -64,3 +64,78 @@ it('does not let extra parameters override the invalid-effort control probe, and
 it('bounds bare-string provider model lists just like object model lists', () => {
   expect(parseModels(Array.from({ length: 600 }, (_, i) => `m${i}`))).toHaveLength(500)
 })
+
+it.each([
+  "Unsupported parameter: 'max_completion_tokens'. Use 'max_tokens' instead.",
+  "Unknown parameter: max_completion_tokens",
+])('adapts reasoning to a legacy token field without dropping effort: %s', async (message) => {
+  const bodies: any[] = []
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+    expect(url).toBe('https://api.example/v1/chat/completions')
+    expect(init.redirect).toBe('error')
+    const body = JSON.parse(String(init.body)); bodies.push(body)
+    return 'max_completion_tokens' in body
+      ? Response.json({ error: { message } }, { status: 400 })
+      : Response.json({ choices: [{ message: { content: '{"ok":true}' } }] })
+  })
+  await expect(chatJson('s', 'u', { profile: p({ reasoningEffort: 'high', maxOutputTokens: 2048 }) })).resolves.toEqual({ ok: true })
+  expect(bodies).toHaveLength(2)
+  expect(bodies[0].max_completion_tokens).toBe(2048)
+  expect(bodies[1].max_tokens).toBe(2048)
+  expect(bodies[1].max_completion_tokens).toBeUndefined()
+  expect(bodies.every((b) => b.reasoning_effort === 'high' && b.temperature === undefined)).toBe(true)
+})
+
+it('does not switch token field when the provider only asks for a smaller completion budget', async () => {
+  const bodies: any[] = []
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)); bodies.push(body)
+    return body.max_completion_tokens > 4096
+      ? Response.json({ error: { message: 'max_completion_tokens is too large: 8000. Maximum output tokens: 4096' } }, { status: 400 })
+      : Response.json({ choices: [{ message: { content: 'ok' } }] })
+  })
+  await expect(chatText('s', 'u', { profile: p({ reasoningEffort: 'high' }) })).resolves.toBe('ok')
+  expect(bodies).toHaveLength(2)
+  expect(bodies[1]).toMatchObject({ max_completion_tokens: 4096, reasoning_effort: 'high' })
+  expect(bodies[1].max_tokens).toBeUndefined()
+})
+
+it('still reports rejected effort after adapting the token field', async () => {
+  const bodies: any[] = []
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)); bodies.push(body)
+    return Response.json({ error: { message: 'max_completion_tokens' in body ? 'Unsupported parameter: max_completion_tokens. Use max_tokens instead.' : 'Unsupported reasoning_effort' } }, { status: 400 })
+  })
+  await expect(chatText('s', 'u', { profile: p({ reasoningEffort: 'high' }) })).rejects.toThrow(/reasoning_effort/)
+  expect(bodies.some((b) => b.max_tokens)).toBe(true)
+  expect(bodies.every((b) => b.reasoning_effort === 'high')).toBe(true)
+})
+
+it('stops with the provider error if both token fields are rejected instead of cycling', async () => {
+  const fields: string[] = []
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body))
+    const field = 'max_completion_tokens' in body ? 'max_completion_tokens' : 'max_tokens'
+    fields.push(field)
+    return Response.json({ error: { message: `Unknown parameter: ${field}` } }, { status: 400 })
+  })
+  await expect(chatText('s', 'u', { profile: p({ reasoningEffort: 'high', jsonMode: false }) })).rejects.toThrow(/Unknown parameter: max_tokens/)
+  expect(fields).toEqual(['max_completion_tokens', 'max_tokens'])
+})
+
+it('probes legacy-token providers without misreporting accepted or rejected effort levels', async () => {
+  const bodies: any[] = []
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body)); bodies.push(body)
+    if ('max_completion_tokens' in body) return Response.json({ error: { message: 'Unsupported parameter: max_completion_tokens. Use max_tokens instead.' } }, { status: 422 })
+    if (body.reasoning_effort && !['low', 'high'].includes(body.reasoning_effort)) return Response.json({ error: { message: 'Invalid reasoning_effort' } }, { status: 400 })
+    return Response.json({ choices: [{ message: { content: 'ok' } }] })
+  })
+  const result = await probeEfforts(p())
+  expect(result.baseError).toBeUndefined()
+  expect(result.ignored).toBe(false)
+  expect(result.supported).toEqual(['low', 'high'])
+  expect(result.rejected.map((entry) => entry.effort)).toEqual(['none', 'minimal', 'medium', 'xhigh', 'max'])
+  expect(bodies.filter((body) => body.reasoning_effort === 'not-a-level')).toHaveLength(2)
+  expect(bodies.filter((body) => !body.reasoning_effort)).toHaveLength(1)
+})
