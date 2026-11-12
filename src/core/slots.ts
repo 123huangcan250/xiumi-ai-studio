@@ -3,6 +3,7 @@
 // 表单改字换图、AI 修改导入内容、套用模板生成新推文，都只替换槽位里的文字和图片地址，结构与样式保持原样。
 import { variantUrl } from './compiler'
 import { splitDecls } from './sanitize'
+import { safeColor } from './style'
 import type { ImageRef } from './types'
 
 export type SlotRole = 'title' | 'body' | 'caption' | 'label' | 'number'
@@ -588,5 +589,84 @@ export function setSlotAlign(html: string, id: string, align: Align, parse: Pars
     apply(parent)
     child = parent
   }
+  return root.innerHTML
+}
+
+// ---------- 文字颜色 ----------
+
+const SVG_NS = 'http://www.w3.org/2000/svg'
+/** SVG 图形里的文字用 fill 上色；foreignObject 里的内容是普通 HTML，仍用 color */
+const isSvgEl = (el: Element | null) => el?.namespaceURI === SVG_NS
+
+function removeDecl(el: Element, prop: string) {
+  if (!el.hasAttribute('style')) return
+  const rest = splitDecls(styleOf(el))
+    .filter((d) => d.slice(0, Math.max(0, d.indexOf(':'))).trim().toLowerCase() !== prop)
+    .map((d) => d.trim())
+    .filter(Boolean)
+  if (rest.length) el.setAttribute('style', rest.join('; '))
+  else el.removeAttribute('style')
+}
+
+/** 元素自身明确设置的文字颜色：HTML 是 color（含 <font color>），SVG 文字是 fill */
+function ownColor(el: Element): string {
+  if (isSvgEl(el)) return declOf(el, 'fill') || (el.getAttribute('fill') ?? '').trim().toLowerCase()
+  return declOf(el, 'color') || (tagOf(el) === 'font' ? (el.getAttribute('color') ?? '').trim().toLowerCase() : '')
+}
+
+/** 文字显示的颜色：从最长的一段文字向外找第一个明确设置的颜色；都没有时为 null（跟随外层） */
+function colorOf(node: Node, root: Element): string | null {
+  const texts = node.nodeType === 3 ? [node as Text] : textNodes(node)
+  if (!texts.length) return null
+  for (let el = longest(texts).parentElement; el && el !== root; el = el.parentElement) {
+    const c = ownColor(el)
+    if (c && c !== 'inherit' && c !== 'currentcolor') return c
+  }
+  return null
+}
+
+/** 每个文字槽位当前的颜色（原样返回样式里的写法，如 rgb(…)；null 为跟随外层） */
+export function slotColors(html: string, parse: Parse = defaultParse): Record<string, string | null> {
+  const root = rootOf(html, parse)
+  const out: Record<string, string | null> = {}
+  for (const { slot, node } of scan(root)) if (slot.kind === 'text') out[slot.id] = colorOf(node, root)
+  return out
+}
+
+/**
+ * 设置文字槽位的颜色；color 为 null 时去掉这处文字自带的颜色，跟随外层。
+ * 颜色写在槽位元素上，并去掉里面各段文字自己的颜色（否则内层颜色会盖住新颜色）；
+ * 与其他内容混排的散落文字先包一层行内 span，不影响旁边的内容；SVG 图形里的文字改 fill。
+ */
+export function setSlotColor(html: string, id: string, color: string | null, parse: Parse = defaultParse): string {
+  const value = color === null ? null : safeColor(color)
+  if (value === undefined) return html
+  const root = rootOf(html, parse)
+  const hit = scan(root).find((h) => h.slot.id === id && h.slot.kind === 'text')
+  if (!hit) return html
+  let host: Element
+  if (hit.node.nodeType === 3) {
+    // 散落文字自己没有颜色可去
+    if (value === null) return html
+    const doc = root.ownerDocument
+    host = isSvgEl(hit.node.parentElement) ? doc.createElementNS(SVG_NS, 'tspan') : doc.createElement('span')
+    hit.node.parentNode!.insertBefore(host, hit.node)
+    host.append(hit.node)
+  } else host = hit.node as Element
+  const svg = isSvgEl(host)
+  const clear = (el: Element) => {
+    if (svg) {
+      removeDecl(el, 'fill')
+      el.removeAttribute('fill')
+    } else {
+      removeDecl(el, 'color')
+      // 渐变字等写法会用它盖住 color
+      removeDecl(el, '-webkit-text-fill-color')
+      if (tagOf(el) === 'font') el.removeAttribute('color')
+    }
+  }
+  host.querySelectorAll('*').forEach(clear)
+  clear(host)
+  if (value) setDecl(host, svg ? 'fill' : 'color', value)
   return root.innerHTML
 }

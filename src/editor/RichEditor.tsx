@@ -5,6 +5,7 @@ import { EditorContent, useEditor, useEditorState } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect } from 'react'
 import type { RichText, Theme } from '../core/types'
+import { ColorPicker } from './ColorPicker'
 
 interface Props {
   value: RichText
@@ -47,6 +48,7 @@ export function RichEditor({ value, theme, onChange, onDone, fontSize }: Props) 
       bullet: e?.isActive('bulletList') ?? false,
       ordered: e?.isActive('orderedList') ?? false,
       link: e?.isActive('link') ?? false,
+      color: (e?.getAttributes('textStyle').color as string | undefined) ?? null,
     }),
   })
   useEffect(() => () => editor?.destroy(), [editor])
@@ -65,8 +67,12 @@ export function RichEditor({ value, theme, onChange, onDone, fontSize }: Props) 
         {btn('I', st?.italic ?? false, () => chain().toggleItalic().run(), '斜体')}
         {btn('U', st?.underline ?? false, () => chain().toggleUnderline().run(), '下划线')}
         {btn('高亮', st?.highlight ?? false, () => chain().toggleHighlight({ color: c.primarySoft }).run(), '背景高亮')}
-        {btn('主色', false, () => chain().setColor(c.primary).run(), '文字设为主题色')}
-        {btn('强调色', false, () => chain().setColor(c.accent).run(), '文字设为强调色')}
+        <ColorPicker
+          value={st?.color}
+          groups={[{ label: '主题色', colors: [{ color: c.primary, label: '主色' }, { color: c.accent, label: '强调色' }, { color: c.text, label: '正文色' }, { color: c.muted, label: '次要文字色' }] }]}
+          onPick={(color) => (color ? chain().setColor(color).run() : chain().unsetColor().run())}
+          testId="rich-color"
+        />
         {btn('清除', false, () => chain().unsetAllMarks().run(), '清除格式')}
         <span className="sep" />
         {btn('• 列表', st?.bullet ?? false, () => chain().toggleBulletList().run(), '无序列表')}
