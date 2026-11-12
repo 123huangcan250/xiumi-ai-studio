@@ -30,7 +30,7 @@ let token: { value: string; expires: number } | null = null
 async function accessToken(force = false): Promise<string> {
   if (!force && token && token.expires > Date.now() + 60_000) return token.value
   const { WECHAT_APPID: appid, WECHAT_APPSECRET: secret } = process.env
-  if (!appid || !secret) throw Object.assign(new Error('未在 .env 中配置 WECHAT_APPID / WECHAT_APPSECRET'), { status: 503 })
+  if (!appid || !secret) throw Object.assign(new Error('未配置公众号接口：请在「💾 数据 → 公众号接口」的配置文件中填写 WECHAT_APPID / WECHAT_APPSECRET 后重启程序'), { status: 503 })
   // stable_token：多处调用不会互相使旧 token 失效
   const res = await fetch(`${API}/stable_token`, {
     method: 'POST',

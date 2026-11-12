@@ -18,5 +18,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['tests/unit/**/*.test.ts'],
+    // 单元测试不读取仓库 .env，避免本机配置（含密钥）影响结果
+    env: { XIUMI_SKIP_ENV_FILES: '1' },
   },
 })

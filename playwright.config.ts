@@ -1,6 +1,36 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig, devices } from '@playwright/test'
 
 // E2E 使用独立端口与数据目录，不影响日常使用的 data/
+// E2E_TARGET=packaged（pnpm e2e:package）时改为测试打包好的 XIUMI AI Studio.exe
+const packaged = process.env.E2E_TARGET === 'packaged'
+const version = JSON.parse(readFileSync('package.json', 'utf8')).version
+const exe = `release/XIUMI-AI-Studio-${version}-win-x64/XIUMI AI Studio.exe`
+
+const devServers = [
+  {
+    // 每次运行前清空 E2E 数据目录
+    command: `node -e "require('fs').rmSync('data-e2e',{recursive:true,force:true})" && npx tsx server/index.ts`,
+    env: { API_PORT: '5274', DATA_DIR: 'data-e2e' },
+    port: 5274,
+    reuseExistingServer: false,
+  },
+  {
+    command: 'npx vite --port 5273 --strictPort',
+    env: { API_PORT: '5274', VITE_CACHE_DIR: 'node_modules/.vite-e2e' },
+    port: 5273,
+    reuseExistingServer: false,
+  },
+]
+const packagedServer = [
+  {
+    command: `node -e "require('fs').rmSync('data-e2e-pkg',{recursive:true,force:true})" && "${exe}"`,
+    env: { XIUMI_DATA_DIR: 'data-e2e-pkg', XIUMI_PORT: '5284', XIUMI_NO_BROWSER: '1', XIUMI_NO_PAUSE: '1' },
+    url: 'http://127.0.0.1:5284/api/app/info',
+    reuseExistingServer: false,
+  },
+]
+
 export default defineConfig({
   testDir: 'tests/e2e',
   timeout: 90_000,
@@ -12,24 +42,10 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     ...devices['Desktop Chrome'],
-    baseURL: 'http://localhost:5273',
+    baseURL: packaged ? 'http://127.0.0.1:5284' : 'http://localhost:5273',
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
     permissions: ['clipboard-read', 'clipboard-write'],
   },
-  webServer: [
-    {
-      // 每次运行前清空 E2E 数据目录
-      command: `node -e "require('fs').rmSync('data-e2e',{recursive:true,force:true})" && npx tsx server/index.ts`,
-      env: { API_PORT: '5274', DATA_DIR: 'data-e2e' },
-      port: 5274,
-      reuseExistingServer: false,
-    },
-    {
-      command: 'npx vite --port 5273 --strictPort',
-      env: { API_PORT: '5274', VITE_CACHE_DIR: 'node_modules/.vite-e2e' },
-      port: 5273,
-      reuseExistingServer: false,
-    },
-  ],
+  webServer: packaged ? packagedServer : devServers,
 })

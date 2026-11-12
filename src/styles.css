@@ -450,3 +450,11 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .enrich-box h5 { margin: 0; font-size: 13px; }
 .enrich-box ul { margin: 0; padding-left: 18px; font-size: 13px; }
 .enrich-box .row { justify-content: flex-end; }
+
+/* 数据与备份 */
+.data-modal h4 { margin: 18px 0 4px; }
+.data-modal h4:first-child { margin-top: 0; }
+.data-modal code { word-break: break-all; font-size: 12px; background: #f6f7f9; padding: 1px 4px; border-radius: 4px; }
+.quit-screen { position: fixed; inset: 0; z-index: 1000; background: #f6f7f9; display: flex; align-items: center; justify-content: center; }
+.quit-screen > div { background: #fff; border-radius: 12px; padding: 28px 32px; box-shadow: 0 10px 40px rgba(0,0,0,.08); max-width: 460px; line-height: 1.7; }
+.quit-screen h2 { margin: 0 0 8px; }

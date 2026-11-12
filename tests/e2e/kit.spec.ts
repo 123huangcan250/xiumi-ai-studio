@@ -8,14 +8,23 @@ const upload = (page: Page, n: number) =>
 /** 用鼠标拖动（dnd-kit 需要先移动几像素才开始拖） */
 async function drag(page: Page, from: Locator, to: Locator, yRatio = 0.8) {
   // 共享的测试文档可能很长：目标滚到画布中间（贴着边缘会触发拖动时的自动滚动）
+  // 目标里的图片加载完之前高度很小（加载后会变高）：等图片加载完再量位置，否则落点会偏到上半部分
+  await expect.poll(() => to.evaluate((el) => [...el.querySelectorAll('img')].every((i) => i.complete && i.naturalWidth > 0))).toBe(true)
   await to.evaluate((el) => el.scrollIntoView({ block: 'center' }))
   const a = (await from.boundingBox())!
-  const b = (await to.boundingBox())!
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
   await page.mouse.down()
   await page.mouse.move(a.x + a.width / 2 + 12, a.y + a.height / 2 + 12, { steps: 4 })
+  // 开始拖动后文本框的落点区会展开：拖动开始后再量目标位置（和用户看到的一致）
+  await expect(page.locator('.app.dragging')).toHaveCount(1)
+  const b = (await to.boundingBox())!
   await page.mouse.move(b.x + b.width / 2, b.y + b.height * yRatio, { steps: 12 })
+  // 像用户一样在落点停一下再松手
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
   await page.mouse.up()
+  // dnd-kit 在拖动结束后 50 毫秒内会吞掉点击（防止松手被当成点击）：等过这段时间再做下一步
+  await expect(page.locator('.app.dragging')).toHaveCount(0)
+  await page.waitForTimeout(100)
 }
 
 test('kit modules: text box adapts to inserted modules, photos fill slots, layout persists', async ({ page }) => {
@@ -28,6 +37,8 @@ test('kit modules: text box adapts to inserted modules, photos fill slots, layou
     files.push((await res.json())[0].file)
   }
   await page.reload()
+  // 等启动时加载上次的项目完成（画布出现），否则它可能在“新建”之后才到，覆盖新建的空白项目
+  await expect(page.getByTestId('canvas')).toBeVisible()
   // 新建空白项目，不受其他用例留下的内容影响
   await page.getByTestId('tab-projects').click()
   await page.getByRole('button', { name: '新建空白项目' }).click()

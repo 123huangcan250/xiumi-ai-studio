@@ -266,7 +266,32 @@ useStore.subscribe((s, prev) => {
   timer = setTimeout(saveNow, 1200)
 })
 
-export async function saveNow() {
+// 保存请求排队依次执行，避免两次保存同时进行时旧内容后写入
+let queue: Promise<void> = Promise.resolve()
+
+/** 立即保存当前文档。失败时不抛出，状态变为「保存失败」。 */
+export function saveNow(): Promise<void> {
+  clearTimeout(timer)
+  const run = queue.then(saveOnce)
+  queue = run
+  return run
+}
+
+/**
+ * 确认当前内容已经写入本地服务：等待进行中的保存，保存期间又有修改就继续保存。
+ * 保存失败时抛出错误。用于退出、下载备份、刷新页面等需要“已保存”为前提的操作。
+ */
+export async function flushSave(): Promise<void> {
+  for (let i = 0; i < 5; i++) {
+    await saveNow()
+    const { saveStatus, saveError } = useStore.getState()
+    if (saveStatus === 'saved') return
+    if (saveStatus === 'error') throw new Error(saveError || '保存失败')
+  }
+  throw new Error('内容仍在变化，请停止编辑后再试')
+}
+
+async function saveOnce() {
   clearTimeout(timer)
   const { doc } = useStore.getState()
   useStore.setState({ saveStatus: 'saving' })
@@ -274,7 +299,10 @@ export async function saveNow() {
     await api.saveProject(doc)
     // 保存期间若有新改动，保持 dirty 以便下一轮保存
     if (useStore.getState().doc === doc) useStore.setState({ saveStatus: 'saved', saveError: '' })
-    else timer = setTimeout(saveNow, 800)
+    else {
+      clearTimeout(timer)
+      timer = setTimeout(saveNow, 800)
+    }
   } catch (e: any) {
     useStore.setState({ saveStatus: 'error', saveError: e.message })
   }

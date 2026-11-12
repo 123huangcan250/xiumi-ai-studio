@@ -22,4 +22,11 @@ MIT License (wechat-draft-publisher) — Copyright (c) andrewlaredo. Permission 
 
 ## npm 依赖
 
-运行时依赖均为 MIT / BSD / Apache-2.0 许可：react、zustand、@dnd-kit、@tiptap（MIT）、marked（MIT）、mammoth（BSD-2-Clause）、sharp（Apache-2.0，内含 libvips LGPL-3.0 动态库）、express、multer、nanoid、react-easy-crop（MIT）。
+运行时依赖均为 MIT / BSD / Apache-2.0 许可：react、zustand、@dnd-kit、@tiptap（MIT）、marked（MIT）、mammoth（BSD-2-Clause）、sharp（Apache-2.0，内含 libvips LGPL-3.0 动态库）、express、multer、nanoid、react-easy-crop、fflate（MIT）。
+
+## Windows 打包产物
+
+- 内置 [Node.js](https://nodejs.org/) 运行时（MIT，其自带依赖的许可见 Node.js 的 LICENSE），作为 `XIUMI AI Studio.exe` 的主体。
+- sharp 的 Windows 预编译库 `@img/sharp-win32-x64` 以独立文件随包分发，其中 libvips 为 LGPL-3.0 动态库，可自行替换。
+- 产物 `app/licenses/` 内含 `Node.js-LICENSE.txt` 和 `THIRD_PARTY_LICENSES.txt`（打包时由 `pnpm licenses list --prod` 收集全部生产依赖的许可文本）。
+- 仅在构建时使用、不随产物分发：esbuild、postject、rcedit（均为 MIT）。
