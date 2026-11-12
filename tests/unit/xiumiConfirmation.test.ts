@@ -8,7 +8,7 @@ import { emptyDoc, useStore } from '../../src/editor/store'
 import { Toolbar } from '../../src/editor/Toolbar'
 import { download } from '../../src/editor/wechatOutput'
 
-vi.mock('../../src/editor/api', () => ({ api: { wechatStatus: vi.fn(), wechatUploadImages: vi.fn() } }))
+vi.mock('../../src/editor/api', () => ({ api: { appInfo: vi.fn(async () => ({ canQuit: false })), wechatStatus: vi.fn(), wechatUploadImages: vi.fn() } }))
 vi.mock('../../src/editor/wechatOutput', async importOriginal => ({ ...await importOriginal<any>(), download: vi.fn() }))
 let host: HTMLDivElement
 let root: Root

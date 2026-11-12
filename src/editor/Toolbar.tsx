@@ -4,9 +4,10 @@ import { docToMarkdown } from '../core/exporters'
 import { displayHtml } from '../core/images'
 import { checkedXiumiParts, splitForXiumi, xiumiReport, xiumiSvgBoxes } from '../core/xiumiExport'
 import { AiSettingsModal } from './AiSettingsModal'
-import { api, type VersionSummary } from './api'
+import { api, type AppInfo, type VersionSummary } from './api'
+import { DataModal } from './DataModal'
 import { Modal } from './Modal'
-import { normalizeDoc, saveNow, useStore } from './store'
+import { flushSave, normalizeDoc, saveNow, useStore } from './store'
 import { compileForWechat, copyRichText, download, standaloneHtml, xiumiPackage, xiumiUploaded, type ImageMode } from './wechatOutput'
 
 const ArticleImportModal = lazy(() => import('./ArticleImport').then((m) => ({ default: m.ArticleImportModal })))
@@ -117,7 +118,7 @@ function ExportModal({ onClose }: { onClose: () => void }) {
         <h4>复制到公众号后台</h4>
         <div className="seg">
           <button className={mode === 'embed' ? 'on' : ''} onClick={() => setMode('embed')}>内嵌图片</button>
-          <button className={mode === 'wechat' ? 'on' : ''} disabled={!wx?.configured} onClick={() => setMode('wechat')} title={wx?.configured ? '' : '需在 .env 配置公众号 AppID/AppSecret'}>上传到微信图床</button>
+          <button className={mode === 'wechat' ? 'on' : ''} disabled={!wx?.configured} onClick={() => setMode('wechat')} title={wx?.configured ? '' : '需配置公众号 AppID/AppSecret：见工具栏「💾 数据」'}>上传到微信图床</button>
           <button className={mode === 'absolute' ? 'on' : ''} onClick={() => setMode('absolute')}>原图链接</button>
         </div>
         <p className="hint">
@@ -136,7 +137,7 @@ function ExportModal({ onClose }: { onClose: () => void }) {
 
       <section className="export-section">
         <h4>推送到草稿箱</h4>
-        <p className="hint">{wx?.configured ? '已配置公众号接口。推送前会再次确认，只会创建草稿，不会群发。' : '未配置：在项目根目录 .env 中填写 WECHAT_APPID / WECHAT_APPSECRET 并在公众号后台添加 IP 白名单后重启服务。'}</p>
+        <p className="hint">{wx?.configured ? '已配置公众号接口。推送前会再次确认，只会创建草稿，不会群发。' : '未配置：在工具栏「💾 数据」中打开公众号配置文件，填写 WECHAT_APPID / WECHAT_APPSECRET，在公众号后台添加 IP 白名单后重启程序。'}</p>
         <button className="wide" disabled={!wx?.configured} onClick={() => setDraftOpen(true)}>推送到草稿箱…</button>
       </section>
 
@@ -152,7 +153,7 @@ function ExportModal({ onClose }: { onClose: () => void }) {
             <button
               className="primary"
               disabled={!!busy || !wx?.configured}
-              title={wx?.configured ? '' : '需在 .env 配置公众号 AppID/AppSecret'}
+              title={wx?.configured ? '' : '需配置公众号 AppID/AppSecret：见工具栏「💾 数据」'}
               data-testid="xiumi-upload"
               onClick={() =>
                 runXiumi(async () => {
@@ -269,7 +270,28 @@ export function Toolbar() {
   const canUndo = useStore((s) => s.past.length > 0)
   const canRedo = useStore((s) => s.future.length > 0)
   const { undo, redo, setDocFields } = useStore.getState()
-  const [modal, setModal] = useState<'' | 'preview' | 'versions' | 'export' | 'import' | 'ai' | 'article'>('')
+  const [modal, setModal] = useState<'' | 'preview' | 'versions' | 'export' | 'import' | 'ai' | 'article' | 'data'>('')
+  const [info, setInfo] = useState<AppInfo | null>(null)
+  const [quit, setQuit] = useState<'' | 'quitting' | 'done' | 'unsaved'>('')
+  useEffect(() => {
+    api.appInfo().then(setInfo).catch(() => {})
+  }, [])
+  const doQuit = async () => {
+    if (!confirm('退出 XIUMI AI Studio？当前内容会先保存。')) return
+    setQuit('quitting')
+    let saved = true
+    try {
+      await flushSave()
+    } catch (e) {
+      // 保存失败时默认不退出，让用户留在编辑器里重试或备份
+      setQuit('')
+      if (!confirm(`保存失败：${(e as Error).message}\n\n最近的修改还没有保存。仍要退出吗？退出后这些修改会丢失。\n选择“取消”回到编辑器。`)) return
+      saved = false
+      setQuit('quitting')
+    }
+    await api.quit().catch(() => {})
+    setQuit(saved ? 'done' : 'unsaved')
+  }
   const [wizardTemplates, setWizardTemplates] = useState<string[] | undefined>()
   useEffect(() => {
     // 从「模板」面板打开时带上预选的模板
@@ -301,6 +323,18 @@ export function Toolbar() {
       <button onClick={() => setModal('article')} data-testid="open-article-import">⤓ 导入推文</button>
       <button className="accent" onClick={() => (setWizardTemplates(undefined), setModal('import'))} data-testid="open-import">✨ AI 一键排版</button>
       <button className="primary" onClick={() => setModal('export')} data-testid="open-export">导出 / 发布</button>
+      <button onClick={() => setModal('data')} data-testid="open-data" title="数据保存位置、备份与恢复、从旧版本迁移">💾 数据</button>
+      {info?.canQuit && <button onClick={doQuit} data-testid="quit-app" title="关闭 XIUMI AI Studio">⏻ 退出</button>}
+      {modal === 'data' && <DataModal info={info} onClose={() => setModal('')} />}
+      {quit && (
+        <div className="quit-screen" data-testid="quit-screen">
+          <div>
+            <h2>{quit === 'quitting' ? '正在保存并退出…' : 'XIUMI AI Studio 已退出'}</h2>
+            {quit === 'done' && <p>内容已保存。现在可以关闭这个浏览器标签页。下次使用时再双击「XIUMI AI Studio.exe」。</p>}
+            {quit === 'unsaved' && <p>退出前最近的修改没有保存成功，已按你的选择退出。下次使用时再双击「XIUMI AI Studio.exe」。</p>}
+          </div>
+        </div>
+      )}
       {modal === 'preview' && <PhonePreview html={compileDoc(doc).html} title="手机预览" onClose={() => setModal('')} />}
       {modal === 'versions' && <VersionsModal onClose={() => setModal('')} />}
       {modal === 'export' && <ExportModal onClose={() => setModal('')} />}

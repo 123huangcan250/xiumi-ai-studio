@@ -1,11 +1,11 @@
 // 本地文件存储：项目、历史版本、模板收藏、自定义主题、素材。
 import { randomUUID } from 'node:crypto'
 import { existsSync, mkdirSync } from 'node:fs'
-import { readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
+import { DATA, ROOT } from './paths'
 
-export const ROOT = resolve(import.meta.dirname, '..')
-export const DATA = resolve(process.env.DATA_DIR ?? join(ROOT, 'data'))
+export { DATA, ROOT }
 export const DIRS = {
   projects: join(DATA, 'projects'),
   versions: join(DATA, 'versions'),
@@ -61,11 +61,17 @@ export async function writeJson(file: string, data: unknown) {
 export function collection<T extends { id: string }>(dir: string) {
   return {
     async list(): Promise<T[]> {
+      // 历史版本按项目分目录，项目还没有版本时目录不存在
+      if (!existsSync(dir)) return []
       const files = (await readdir(dir)).filter((f) => f.endsWith('.json'))
       return Promise.all(files.map((f) => readJson<T>(join(dir, f), null as unknown as T))).then((xs) => xs.filter(Boolean))
     },
     get: (id: string) => readJson<T | null>(join(dir, `${safeId(id)}.json`), null),
-    put: (item: T) => writeJson(join(dir, `${safeId(item.id)}.json`), item),
+    async put(item: T) {
+      const file = join(dir, `${safeId(item.id)}.json`)
+      await mkdir(dir, { recursive: true })
+      await writeJson(file, item)
+    },
     remove: (id: string) => rm(join(dir, `${safeId(id)}.json`), { force: true }),
     exists: (id: string) => existsSync(join(dir, `${safeId(id)}.json`)),
   }

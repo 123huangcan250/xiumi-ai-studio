@@ -80,6 +80,34 @@ export interface Template {
   createdAt: number
 }
 
+export interface AppInfo {
+  app: string
+  version: string
+  /** 是否为打包版（XIUMI AI Studio.exe） */
+  packaged: boolean
+  port: number | null
+  dataDir: string
+  envFile: string
+  envExists: boolean
+  logDir: string
+  canQuit: boolean
+  canOpenFolder: boolean
+}
+export interface MergePlanView {
+  source: string
+  target: string
+  counts: Record<string, { add: number; skip: number; label: string }>
+  ignored: number
+  ai: { add: string[]; skip: string[]; withKeys: boolean }
+  env: { source: string; target: string; action: 'copy' | 'exists' } | null
+}
+export interface MergeResult {
+  copied: number
+  skipped: number
+  aiAdded: number
+  envCopied: boolean
+}
+
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const init: RequestInit = { method }
   if (body instanceof FormData) init.body = body
@@ -153,6 +181,18 @@ export const api = {
   fetchReference: (url: string) => req<{ html: string }>('POST', '/api/reference/fetch', { url }),
   fetchArticle: (url: string) => req<{ html: string }>('POST', '/api/article/fetch', { url }),
   fetchAssets: (urls: string[]) => req<Record<string, Asset>>('POST', '/api/assets/fetch', { urls }),
+
+  appInfo: () => req<AppInfo>('GET', '/api/app/info'),
+  openFolder: (target: 'data' | 'logs' | 'env') => req<{ opened: boolean; path: string }>('POST', '/api/app/open', { target }),
+  quit: () => req<{ ok: boolean }>('POST', '/api/app/quit', {}),
+  restoreUpload(file: File) {
+    const fd = new FormData()
+    fd.append('file', file)
+    return req<{ token: string; plan: MergePlanView }>('POST', '/api/data/restore', fd)
+  },
+  restoreApply: (token: string) => req<MergeResult>('POST', `/api/data/restore/${token}/apply`, {}),
+  migratePreview: (path: string) => req<{ plan: MergePlanView }>('POST', '/api/data/migrate/preview', { path }),
+  migrateApply: (path: string) => req<MergeResult>('POST', '/api/data/migrate/apply', { path }),
 
   wechatStatus: () => req<{ configured: boolean; appid: string }>('GET', '/api/wechat/status'),
   wechatUploadImages: (urls: string[]) => req<Record<string, string>>('POST', '/api/wechat/upload-images', { urls }),

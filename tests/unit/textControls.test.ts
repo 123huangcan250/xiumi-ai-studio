@@ -72,7 +72,11 @@ it('imported-text controls show four alignment choices and the selected state', 
     act(() => button!.click())
     expect(button!.getAttribute('aria-pressed')).toBe('true')
   }
-  expect([...host.querySelectorAll<HTMLButtonElement>('[data-testid="slot-t1"] button')].every(b => b.disabled)).toBe(true)
+  const svgAlignment = [...host.querySelectorAll<HTMLButtonElement>('[data-testid="slot-t1"] [data-testid^="align-t1-"]')]
+  expect(svgAlignment).toHaveLength(4)
+  expect(svgAlignment.every(b => b.disabled)).toBe(true)
+  // Upstream added supported SVG text color editing; only alignment is disabled.
+  expect(host.querySelector<HTMLButtonElement>('[data-testid="color-t1"]')!.disabled).toBe(false)
 })
 
 it('keeps cover title alignment separate from image and subtitle fields', () => {

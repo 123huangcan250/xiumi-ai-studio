@@ -7,3 +7,6 @@ playwright-report
 *.log
 data-e2e/
 tsconfig.tsbuildinfo
+release/
+.cache/
+data-e2e-pkg/
