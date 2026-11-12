@@ -4,11 +4,12 @@ import { displayUrl } from '../core/images'
 import { sanitizeHtml } from '../core/sanitize'
 import { setPhoto } from '../core/photos'
 import { collectColors, docMainColors, fixedDecorCount, harmonize, recolorHtml } from '../core/recolor'
-import { backgroundPhotos, editableText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, setBackgroundPhoto, setSlotAlign, slotAligns, slotRawTexts, type Align, type SlotRole, type TextSlot } from '../core/slots'
+import { backgroundPhotos, editableText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, setBackgroundPhoto, setSlotAlign, setSlotColor, slotAligns, slotColors, slotRawTexts, type Align, type SlotRole, type TextSlot } from '../core/slots'
 import { resolveTheme } from '../core/themes'
 import { richToPlain, textToRich } from '../core/richtext'
 import type { Block, ImageRef, PicItem } from '../core/types'
 import { api, type Asset } from './api'
+import { ColorPicker, type Swatch } from './ColorPicker'
 import { shownRatio } from './Canvas'
 import { useStore } from './store'
 
@@ -143,6 +144,19 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
   // 表单里显示保留空格的文字；对齐状态一次算出，避免每个槽位都重新解析一遍大片段
   const raws = useMemo(() => slotRawTexts(html, parseDoc), [html])
   const aligns = useMemo(() => slotAligns(html, parseDoc), [html])
+  const colors = useMemo(() => slotColors(html, parseDoc), [html])
+  // 取色板：片段原有的配色在前（改色后与原版式协调），其次是文章主题色
+  const themeId = useStore((s) => s.doc.themeId)
+  const themeOverrides = useStore((s) => s.doc.themeOverrides)
+  const colorGroups = useMemo(() => {
+    const own: Swatch[] = collectColors(html, parseDoc)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8)
+      .map((u) => ({ color: u.hex, label: '片段原有颜色' }))
+    const c = resolveTheme({ themeId, themeOverrides }).colors
+    const theme: Swatch[] = [{ color: c.primary, label: '主色' }, { color: c.accent, label: '强调色' }, { color: c.text, label: '正文色' }, { color: c.muted, label: '次要文字色' }]
+    return [{ label: '片段配色', colors: own }, { label: '主题色', colors: theme }]
+  }, [html, themeId, themeOverrides])
   const imgs = slots.filter((s) => s.kind === 'image').map((s) => s.src)
   const bgPhotos = useMemo(() => backgroundPhotos(html, parseDoc), [html])
   const replace = (i: number, src: string) => {
@@ -176,6 +190,13 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
                     </button>
                   ))}
                 </span>
+                <ColorPicker
+                  value={colors[s.id]}
+                  groups={colorGroups}
+                  alignRight
+                  onPick={(color) => upd({ html: setSlotColor(html, s.id, color, parseDoc) }, `color-${s.id}`)}
+                  testId={`color-${s.id}`}
+                />
               </div>
               <BufferedArea
                 rows={s.role === 'body' ? 3 : 1}

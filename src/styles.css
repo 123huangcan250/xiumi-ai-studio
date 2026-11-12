@@ -295,6 +295,25 @@ div.grow { padding: 5px 10px; }
 .align-btns button + button { border-left: 1px solid var(--line); }
 .align-btns button.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
 .align-btns button:disabled { opacity: .4; cursor: not-allowed; }
+.slot-head .align-btns { margin-left: auto; }
+.color-picker { position: relative; display: inline-flex; }
+.color-btn { display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px; font-size: 12px; line-height: 1.4; }
+.color-btn .color-a { font-weight: 700; border-bottom: 3px solid; line-height: 1.1; padding: 0 1px; }
+.color-btn .caret { font-size: 9px; color: var(--faint); }
+.color-pop {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: 196px; padding: 8px;
+  background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.14);
+  font-size: 12px; letter-spacing: 0; line-height: 1.4; color: var(--text); text-align: left;
+}
+.color-pop.right { left: auto; right: 0; }
+.color-group + .color-group { margin-top: 6px; }
+.color-group small { display: block; color: var(--faint); margin-bottom: 4px; }
+.swatches { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.color-pop .color-swatch { width: 18px; height: 18px; padding: 0; border: 1px solid rgba(0,0,0,.15); border-radius: 4px; cursor: pointer; }
+.color-pop .color-swatch.on { outline: 2px solid var(--brand); outline-offset: 1px; }
+.color-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.color-foot label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.color-foot input[type='color'] { width: 22px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; }
 .tpl-box { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-top: 10px; }
 .tpl-box h5 { margin: 0 0 6px; font-size: 13px; }
 .tpl-box .chip small { color: var(--faint); margin-left: 4px; }

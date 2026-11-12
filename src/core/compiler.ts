@@ -85,10 +85,12 @@ function renderInline(n: RichNode, ctx: Ctx): string {
   if (n.type !== 'text') return (n.content ?? []).map((x) => renderInline(x, ctx)).join('')
   let html = esc(n.text ?? '')
   let linkHref: string | undefined
+  // 加粗默认用主题色；文字设了颜色时以文字颜色为准（加粗标签在内层，它的颜色会盖住外层）
+  const textColor = safeColor(n.marks?.find((m) => m.type === 'textStyle')?.attrs?.color)
   for (const m of n.marks ?? []) {
     switch (m.type) {
       case 'bold':
-        html = `<strong style="${css({ 'font-weight': 700, color: ctx.c.primary })}">${html}</strong>`
+        html = `<strong style="${css({ 'font-weight': 700, color: textColor ?? ctx.c.primary })}">${html}</strong>`
         break
       case 'italic':
         html = `<em style="${css({ 'font-style': 'italic' })}">${html}</em>`
