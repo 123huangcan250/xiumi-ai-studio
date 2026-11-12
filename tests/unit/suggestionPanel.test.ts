@@ -3,6 +3,7 @@ import { act, createElement } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createBlock } from '../../src/core/blocks'
+import * as quickActions from '../../src/core/quickActions'
 import { textToRich } from '../../src/core/richtext'
 import { api } from '../../src/editor/api'
 import { RightPanel } from '../../src/editor/RightPanel'
@@ -141,4 +142,16 @@ it('never starts a queued request after opting out during an in-flight request',
   await advance(60_000)
   expect(api.aiSuggestInstruction).toHaveBeenCalledTimes(1)
   expect(input().placeholder).not.toBe('已关闭的建议')
+})
+
+it('does not build article context while suggestions are disabled', async () => {
+  const buildContext = vi.spyOn(quickActions, 'aiContext')
+  act(() => useStore.getState().setDocFields({ title: '不需要计算建议上下文' }))
+  expect(buildContext).not.toHaveBeenCalled()
+  act(() => toggle().click())
+  expect(buildContext).toHaveBeenCalledTimes(1)
+  act(() => toggle().click())
+  buildContext.mockClear()
+  act(() => useStore.getState().setDocFields({ title: '再次关闭' }))
+  expect(buildContext).not.toHaveBeenCalled()
 })

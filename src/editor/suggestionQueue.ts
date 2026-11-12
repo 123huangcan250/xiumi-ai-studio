@@ -26,7 +26,6 @@ export class SuggestionQueue {
     try {
       const result = await request
       if (revision === this.revision) this.cache.set(key, result.suggestion)
-      if (this.cache.size > 20) this.cache.delete(this.cache.keys().next().value!)
       return result.suggestion
     } catch (error) {
       // No automatic retry loops for a failed context (including bad credentials).

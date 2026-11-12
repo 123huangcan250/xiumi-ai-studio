@@ -84,3 +84,16 @@ describe('ai settings', () => {
   })
 
 })
+
+
+it.each(['http://localhost:11434/v1', 'https://one.example/v1', ''])('clears an explicitly empty saved key at %s without touching other profiles', async (baseUrl) => {
+  const saved = await settings.saveAiSettings({ activeId: 'a', profiles: [
+    { id: 'a', provider: 'openai', baseUrl: 'https://one.example/v1', apiKey: 'old-key', model: 'm' },
+    { id: 'b', provider: 'openai', baseUrl: 'https://two.example/v1', apiKey: 'other-key', model: 'n' },
+  ] })
+  const cleared = { ...saved.profiles[0], baseUrl, apiKey: '' }
+  expect((await settings.resolveDraftProfile(cleared)).apiKey).toBe('')
+  await settings.saveAiSettings({ activeId: 'a', profiles: [cleared, saved.profiles[1]] })
+  expect((await settings.getProfile('a'))?.apiKey).toBe('')
+  expect((await settings.getProfile('b'))?.apiKey).toBe('other-key')
+})

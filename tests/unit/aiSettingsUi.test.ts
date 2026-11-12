@@ -71,15 +71,16 @@ const changeInput = (el: HTMLInputElement, value: string) => act(() => {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, value)
   el.dispatchEvent(new Event('input', { bubbles: true }))
 })
-it('imports the selected model limits and clears them for an unknown model', async () => {
+it('imports selected model limits and preserves manual tuning when typing a model name', async () => {
   vi.mocked(api.aiModels).mockResolvedValue([{ id: 'new-model', contextWindow: 128000, maxOutput: 8192, efforts: ['low', 'high'] }])
   await act(async () => fetchButton().click())
   act(() => { list()!.value = 'new-model'; list()!.dispatchEvent(new Event('change', { bubbles: true })) })
   expect(input('ai-max-output')?.value).toBe('8192')
+  changeInput(input('ai-effort'), 'high')
   changeInput(input('ai-model'), 'custom-other-model')
-  expect(input('ai-context').value).toBe('')
-  expect(input('ai-max-output').value).toBe('')
-  expect(input('ai-effort').value).toBe('')
+  expect(input('ai-context').value).toBe('128000')
+  expect(input('ai-max-output').value).toBe('8192')
+  expect(input('ai-effort').value).toBe('high')
 })
 it('ignores probe results after the model changes on the same profile', async () => {
   let finish!: (r: any) => void
@@ -298,4 +299,49 @@ it('uses a saved key only for same-origin discovery and never just on opening th
   await blur(baseInput())
   expect(api.aiModels).toHaveBeenCalledTimes(1)
   expect(keyInput().value).toBe('')
+})
+
+
+it('preserves tuning when rotating a key for the same provider', () => {
+  changeInput(input('ai-context'), '128000')
+  changeInput(input('ai-max-output'), '4096')
+  changeInput(input('ai-effort'), 'high')
+  changeInput(keyInput(), 'rotated-key')
+  expect(input('ai-context').value).toBe('128000')
+  expect(input('ai-max-output').value).toBe('4096')
+  expect(input('ai-effort').value).toBe('high')
+})
+
+it('allows an explicitly cleared key to discover a local provider after changing origin', async () => {
+  vi.mocked(api.aiModels).mockResolvedValue([{ id: 'local-model' }])
+  changeInput(keyInput(), 'old-key')
+  changeInput(baseInput(), 'http://localhost:11434/v1')
+  changeInput(keyInput(), '')
+  await act(async () => fetchButton().click())
+  expect(api.aiModels).toHaveBeenCalledWith(expect.objectContaining({ apiKey: '', hasKey: false, baseUrl: 'http://localhost:11434/v1' }))
+  expect(list()!.options[1].value).toBe('local-model')
+})
+
+it('names ignored extra parameters visibly instead of silently dropping them', () => {
+  const el = host.querySelector<HTMLTextAreaElement>('[data-testid="ai-extra-body"]')!
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(el, '{"temperature":2,"max_tokens":500,"enable_thinking":false}')
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  const warning = host.querySelector('[data-testid="ai-extra-ignored"]')
+  expect(warning?.textContent).toContain('temperature')
+  expect(warning?.textContent).toContain('max_tokens')
+  expect(warning?.textContent).not.toContain('enable_thinking')
+})
+
+it('does not overwrite manual context tuning when key rotation refreshes matching model metadata', async () => {
+  changeInput(input('ai-context'), '64000')
+  changeInput(input('ai-max-output'), '4096')
+  changeInput(input('ai-effort'), 'high')
+  vi.mocked(api.aiModels).mockResolvedValue([{ id: 'old-model', contextWindow: 128000, maxOutput: 16000, efforts: ['low'] }])
+  changeInput(keyInput(), 'rotated-key')
+  await blur(keyInput())
+  expect(input('ai-context').value).toBe('64000')
+  expect(input('ai-max-output').value).toBe('4096')
+  expect(input('ai-effort').value).toBe('high')
 })

@@ -57,3 +57,17 @@ it('invalidates cached failures from global settings events even without an AI p
   target.dispatchEvent(new Event('ai-settings-changed'))
   expect(instructionSuggestions.revision).toBe(before + 1)
 })
+it('keeps the newest twenty entries across successful and failed requests', async () => {
+  const queue = new SuggestionQueue(0)
+  const signal = new AbortController().signal
+  for (let i = 0; i < 21; i++) await queue.get(String(i), async () => ({ suggestion: String(i) }), signal)
+  const shouldStayCached = vi.fn(async () => ({ suggestion: 'unexpected' }))
+  expect(await queue.get('1', shouldStayCached, signal)).toBe('1')
+  expect(shouldStayCached).not.toHaveBeenCalled()
+  await expect(queue.get('failed', async () => { throw new Error('offline') }, signal)).rejects.toThrow('offline')
+  expect(await queue.get('2', shouldStayCached, signal)).toBe('2')
+  expect(shouldStayCached).not.toHaveBeenCalled()
+  const evicted = vi.fn(async () => ({ suggestion: 'fresh' }))
+  expect(await queue.get('0', evicted, signal)).toBe('fresh')
+  expect(evicted).toHaveBeenCalledTimes(1)
+})

@@ -172,7 +172,6 @@ function xiumiZip(files: { name: string; data: Uint8Array }[], images: number): 
 
 /** 导出给秀米（不需要公众号接口）：本地图片换成占位图，另附按出现顺序编号的图片包 */
 export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void): Promise<XiumiDownload> {
-  checkedXiumiParts(compileDoc(doc).html)
   const replaced = replaceLocalImages(compileDoc(doc).html, (url, i) => placeholder(i + 1, fitRatio(url)))
   const { urls } = replaced
   const files = xiumiFiles(replaced.html)

@@ -233,11 +233,6 @@ export function extractSlots(html: string, parse: Parse = defaultParse, preserve
     : slot)
 }
 
-/** 兼容已有调用方；与 setSlotAlign 共用槽位隔离和外层布局处理。 */
-export function setSlotAlignment(html: string, id: string, align: Align, parse: Parse = defaultParse): string {
-  return setSlotAlign(html, id, align, parse)
-}
-
 /** 原图比例：优先用测得的比例，其次用 width/height 属性 */
 function ratioOf(img: Element, src: string, ratios?: Record<string, number>): number | undefined {
   const r = ratios?.[src]
@@ -536,7 +531,8 @@ function setDecl(el: Element, prop: string, value: string) {
 function alignHost(node: Node): Element | null {
   if (node.nodeType !== 1) return null
   const el = node as Element
-  return INLINE.has(tagOf(el)) || declOf(el, 'display') === 'inline' ? null : el
+  const display = declOf(el, 'display')
+  return display === 'inline' || (INLINE.has(tagOf(el)) && !['block', 'inline-block', 'flex', 'inline-flex'].includes(display)) ? null : el
 }
 
 /** 从文字所在的块向外，第一个明确设置的对齐；没有设置时为 null（跟随外层，页面上多半是左对齐） */
@@ -582,7 +578,11 @@ export function setSlotAlign(html: string, id: string, align: Align, parse: Pars
   if (!hit) return html
   let host = alignHost(hit.node)
   if (!host) {
-    host = root.ownerDocument.createElement('section')
+    // Paragraphs accept phrasing content only. A block-displayed span keeps the
+    // paragraph and inherited styles intact when the HTML is parsed again.
+    const inParagraph = hit.node.parentElement?.closest('p')
+    host = root.ownerDocument.createElement(inParagraph ? 'span' : 'section')
+    if (inParagraph) setDecl(host, 'display', 'block')
     hit.node.parentNode!.insertBefore(host, hit.node)
     host.append(hit.node)
   }

@@ -49,7 +49,7 @@ describe('red team: fetch transport boundaries', () => {
       await new Promise((done) => setTimeout(done, 40))
       return new Response(null, { status: 302, headers: { location: '/next' } })
     }) as unknown as typeof fetch
-    await expect(safeFetch('https://example.com/', { resolve: publicDns, fetcher, timeoutMs: 100, maxRedirects: 10 })).rejects.toMatchObject({ name: 'TimeoutError' })
+    await expect(safeFetch('https://example.com/', { resolve: publicDns, fetcher, timeoutMs: 100, maxRedirects: 10 })).rejects.toMatchObject({ status: 504, message: expect.stringContaining('超时') })
     expect(signals.size).toBe(1)
   })
 

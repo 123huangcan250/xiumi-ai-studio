@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { editPrompt, resolveEditSelection, scopeEditResult, selectionPolicy } from '../../server/aiEdit'
+import { editPrompt, prepareEdit, resolveEditSelection, scopeEditResult, selectionPolicy } from '../../server/aiEdit'
 const context = { blocks: [{ id: 'p1', type: 'paragraph', text: 'first' }, { id: 'p2', type: 'paragraph', text: 'second' }] }
 describe('selected AI edits', () => {
   it('identifies the selected block explicitly in the prompt', () => {
@@ -9,32 +9,32 @@ describe('selected AI edits', () => {
     expect(() => editPrompt(context, '润色', 'missing')).toThrow('选中的模块已不存在')
   })
   it('rejects whole-document and other-block operations in selection mode', () => {
-    expect(() => scopeEditResult({ ops: [{ op: 'update', id: 'p1' }] }, 'p2', context)).toThrow('超出选中模块范围')
-    expect(() => scopeEditResult({ ops: [{ op: 'setTheme', themeId: 'new' }] }, 'p2', context)).toThrow('超出选中模块范围')
+    expect(() => scopeEditResult({ ops: [{ op: 'update', id: 'p1' }] }, 'p2', context, 'strict')).toThrow('超出选中模块范围')
+    expect(() => scopeEditResult({ ops: [{ op: 'setTheme', themeId: 'new' }] }, 'p2', context, 'strict')).toThrow('超出选中模块范围')
   })
   it('preserves selected updates and allows full-document mode explicitly', () => {
     const result = { ops: [{ op: 'update', id: 'p2', props: { content: 'new' } }] }
-    expect(scopeEditResult(result, 'p2', context)).toMatchObject({ ...result, selectionPolicy: 'strict', ignoredOps: 0 })
-    expect(scopeEditResult({ ops: [{ op: 'setTheme' }] })).toMatchObject({ ops: [{ op: 'setTheme' }], selectionPolicy: 'strict', ignoredOps: 0 })
+    expect(scopeEditResult(result, 'p2', context, 'strict')).toMatchObject({ ...result, selectionPolicy: 'strict', ignoredOps: 0 })
+    expect(scopeEditResult({ ops: [{ op: 'setTheme' }] }, undefined, undefined, 'strict')).toMatchObject({ ops: [{ op: 'setTheme' }], selectionPolicy: 'strict', ignoredOps: 0 })
   })
 })
 
 
 describe('server-owned selection policy', () => {
   afterEach(() => vi.unstubAllEnvs())
-  it('requires an explicit server opt-in and fails closed for invalid values', () => {
-    for (const value of [undefined, '', 'STRICT', 'Filter', 'anything']) {
+  it('uses filter by default and fails closed for invalid explicit values', () => {
+    for (const value of ['strict', 'STRICT', 'Filter', 'anything']) {
       vi.stubEnv('AI_SELECTION_POLICY', value)
       expect(selectionPolicy()).toBe('strict')
     }
     vi.stubEnv('AI_SELECTION_POLICY', 'filter')
     expect(selectionPolicy()).toBe('filter')
   })
-  it('preserves atomic rejection as the default, even when the model claims filter mode', () => {
+  it('preserves explicit strict atomic rejection even when the model claims filter mode', () => {
     expect(() => scopeEditResult({ selectionPolicy: 'filter', ops: [
       { op: 'update', id: 'p2', props: { content: 'allowed' } },
       { op: 'update', id: 'p1', props: { content: 'outside' } },
-    ] }, 'p2', context)).toThrow('超出选中模块范围')
+    ] }, 'p2', context, 'strict')).toThrow('超出选中模块范围')
   })
   it('filters mixed results without throwing and reports the actual ignored count', () => {
     const result = { summary: 'mixed', ignoredOps: 999, selectionPolicy: 'strict', ops: [
@@ -60,7 +60,7 @@ describe('server-owned selection policy', () => {
     ] }
     const ops = [{ op: 'update', id: 'child', props: { content: 'new' } }, { op: 'remove', id: 'box' }]
     expect(scopeEditResult({ ops }, 'box', nested, 'filter')).toMatchObject({ ops, ignoredOps: 0 })
-    expect(() => scopeEditResult({ ops }, 'box', nested)).toThrow('超出选中模块范围')
+    expect(() => scopeEditResult({ ops }, 'box', nested, 'strict')).toThrow('超出选中模块范围')
     expect(editPrompt(nested, '精简', 'box', 'filter')).toContain('子模块')
     expect(editPrompt(nested, '精简', 'box', 'filter')).toContain('紧前或紧后')
   })
@@ -90,4 +90,33 @@ describe('selection resolution', () => {
     expect(() => resolveEditSelection({ ...context, focus: { id: 'p1' } }, 'p2')).toThrow()
     expect(() => scopeEditResult({ ops: [] }, 'missing', context, 'filter')).toThrow()
   })
+})
+
+describe('review regressions', () => {
+  afterEach(() => vi.unstubAllEnvs())
+  it('defaults the upstream server to filtering while preserving explicit strict', () => {
+    vi.stubEnv('AI_SELECTION_POLICY', undefined)
+    expect(selectionPolicy()).toBe('filter')
+    vi.stubEnv('AI_SELECTION_POLICY', 'strict')
+    expect(selectionPolicy()).toBe('strict')
+  })
+  it('allows selected container descendants in strict mode but rejects a mixed batch atomically', () => {
+    const nested = { blocks: [{ id: 'box', type: 'box', props: { children: [{ id: 'child', type: 'paragraph' }] } }, { id: 'outside', type: 'paragraph' }] }
+    const update = { op: 'update', id: 'child', props: { content: 'new' } }
+    expect(scopeEditResult({ ops: [update] }, 'box', nested, 'strict').ops).toEqual([update])
+    expect(editPrompt(nested, 'edit', 'box', 'strict')).toContain('子模块')
+    expect(() => scopeEditResult({ ops: [update, { op: 'update', id: 'outside' }] }, 'box', nested, 'strict')).toThrow('超出选中模块范围')
+    expect(() => scopeEditResult({ ops: [update, { op: 'insert', index: 1 }] }, 'box', nested, 'strict')).toThrow('超出选中模块范围')
+  })
+})
+
+it('prepares an edit once and reuses its validated selection for prompt and result', () => {
+  let reads = 0
+  const ctx = { ...context, get focus() { reads++; return { id: 'p2' } } }
+  const edit = prepareEdit(ctx, 'p2', 'strict')
+  const afterPrepare = reads
+  expect(edit.prompt('polish')).toContain('仅修改选中模块 p2')
+  expect(edit.result({ ops: [{ op: 'update', id: 'p2' }] }).ops).toHaveLength(1)
+  // Serialization may access focus once; boundary resolution must not run again.
+  expect(reads).toBe(afterPrepare + 1)
 })

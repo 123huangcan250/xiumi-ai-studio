@@ -18,7 +18,7 @@ it.each(['openai', 'anthropic'] as const)('blocks redirects and keeps controlled
   expect(b.temperature).toBeUndefined()
   expect(b.enable_thinking).toBe(true)
   if (provider === 'openai') {
-    expect(b.max_completion_tokens).toBe(2048); expect(b.max_tokens).toBeUndefined()
+    expect(b.max_tokens).toBe(2048); expect(b.max_completion_tokens).toBeUndefined()
     expect(b.reasoning_effort).toBe('high'); expect(b.response_format).toEqual({ type: 'json_object' })
   } else {
     expect(url).toBe('https://api.example/v1/messages'); expect(b.max_tokens).toBe(2048)
@@ -39,7 +39,7 @@ it('preserves the reasoning connection budget under the configured cap', async (
   let body: any
   vi.stubGlobal('fetch', async (_u: string, init: RequestInit) => { body = JSON.parse(String(init.body)); return Response.json({ choices: [{ message: { content: '{"ok":true}' } }] }) })
   await testConnection(p({ reasoningEffort: 'high', maxOutputTokens: 3000 }))
-  expect(body.max_completion_tokens).toBe(3000)
+  expect(body.max_tokens).toBe(3000)
   expect(body.temperature).toBeUndefined()
 })
 it('normalizes Anthropic discovery paths and preserves legacy effort metadata', async () => {
@@ -71,14 +71,14 @@ it.each([
 ])('adapts reasoning to a legacy token field without dropping effort: %s', async (message) => {
   const bodies: any[] = []
   vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
-    expect(url).toBe('https://api.example/v1/chat/completions')
+    expect(url).toBe('https://api.openai.com/v1/chat/completions')
     expect(init.redirect).toBe('error')
     const body = JSON.parse(String(init.body)); bodies.push(body)
     return 'max_completion_tokens' in body
       ? Response.json({ error: { message } }, { status: 400 })
       : Response.json({ choices: [{ message: { content: '{"ok":true}' } }] })
   })
-  await expect(chatJson('s', 'u', { profile: p({ reasoningEffort: 'high', maxOutputTokens: 2048 }) })).resolves.toEqual({ ok: true })
+  await expect(chatJson('s', 'u', { profile: p({ baseUrl: 'https://api.openai.com/v1', reasoningEffort: 'high', maxOutputTokens: 2048 }) })).resolves.toEqual({ ok: true })
   expect(bodies).toHaveLength(2)
   expect(bodies[0].max_completion_tokens).toBe(2048)
   expect(bodies[1].max_tokens).toBe(2048)
@@ -94,7 +94,7 @@ it('does not switch token field when the provider only asks for a smaller comple
       ? Response.json({ error: { message: 'max_completion_tokens is too large: 8000. Maximum output tokens: 4096' } }, { status: 400 })
       : Response.json({ choices: [{ message: { content: 'ok' } }] })
   })
-  await expect(chatText('s', 'u', { profile: p({ reasoningEffort: 'high' }) })).resolves.toBe('ok')
+  await expect(chatText('s', 'u', { profile: p({ baseUrl: 'https://api.openai.com/v1', reasoningEffort: 'high' }) })).resolves.toBe('ok')
   expect(bodies).toHaveLength(2)
   expect(bodies[1]).toMatchObject({ max_completion_tokens: 4096, reasoning_effort: 'high' })
   expect(bodies[1].max_tokens).toBeUndefined()
@@ -119,7 +119,7 @@ it('stops with the provider error if both token fields are rejected instead of c
     fields.push(field)
     return Response.json({ error: { message: `Unknown parameter: ${field}` } }, { status: 400 })
   })
-  await expect(chatText('s', 'u', { profile: p({ reasoningEffort: 'high', jsonMode: false }) })).rejects.toThrow(/Unknown parameter: max_tokens/)
+  await expect(chatText('s', 'u', { profile: p({ baseUrl: 'https://api.openai.com/v1', reasoningEffort: 'high', jsonMode: false }) })).rejects.toThrow(/Unknown parameter: max_tokens/)
   expect(fields).toEqual(['max_completion_tokens', 'max_tokens'])
 })
 
@@ -136,6 +136,29 @@ it('probes legacy-token providers without misreporting accepted or rejected effo
   expect(result.ignored).toBe(false)
   expect(result.supported).toEqual(['low', 'high'])
   expect(result.rejected.map((entry) => entry.effort)).toEqual(['none', 'minimal', 'medium', 'xhigh', 'max'])
-  expect(bodies.filter((body) => body.reasoning_effort === 'not-a-level')).toHaveLength(2)
+  // Compatible providers now receive max_tokens immediately, with no needless field retry.
+  expect(bodies.filter((body) => body.reasoning_effort === 'not-a-level')).toHaveLength(1)
   expect(bodies.filter((body) => !body.reasoning_effort)).toHaveLength(1)
+})
+
+
+it.each(['https://api.deepseek.com/v1', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'http://localhost:11434/v1', 'https://api.openai.com.evil.invalid/v1'])('sends the compatible token budget first at %s even with reasoning enabled', async (baseUrl) => {
+  const bodies: any[] = []
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    bodies.push(JSON.parse(String(init.body)))
+    return Response.json({ choices: [{ message: { content: '{}' } }] })
+  })
+  await chatJson('s', 'u', { profile: p({ baseUrl, reasoningEffort: 'high', maxOutputTokens: 2048 }) })
+  expect(bodies).toHaveLength(1)
+  expect(bodies[0]).toMatchObject({ max_tokens: 2048, reasoning_effort: 'high' })
+  expect(bodies[0].max_completion_tokens).toBeUndefined()
+})
+
+it('does not leave a timeout active when a reasoning profile has an invalid URL', async () => {
+  vi.useFakeTimers()
+  try {
+    vi.stubGlobal('fetch', async () => { throw new TypeError('Invalid URL') })
+    await expect(chatText('s', 'u', { profile: p({ baseUrl: 'not-a-url', reasoningEffort: 'high' }) })).rejects.toThrow()
+    expect(vi.getTimerCount()).toBe(0)
+  } finally { vi.useRealTimers() }
 })

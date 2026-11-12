@@ -68,7 +68,8 @@ const FILE = join(DATA, 'settings.json')
 const MASK = '••••••'
 
 function draftKey(p: Partial<AiProfile>, saved?: AiProfile): string {
-  if (typeof p.apiKey === 'string' && p.apiKey.trim() && !p.apiKey.includes(MASK)) return p.apiKey.trim()
+  // Empty is an explicit deletion. Only omitted or masked values reuse a saved key.
+  if (typeof p.apiKey === 'string' && !p.apiKey.includes(MASK)) return p.apiKey.trim()
   if (saved?.apiKey) {
     let sameOrigin = false
     try { sameOrigin = new URL(p.baseUrl ?? saved.baseUrl).origin === new URL(saved.baseUrl).origin } catch { /* invalid URL */ }
@@ -124,7 +125,7 @@ export async function publicAiSettings() {
   }
 }
 
-/** 保存配置；密钥字段为空或仍是打码值时保留原密钥 */
+/** 保存配置；密钥字段省略或仍是打码值时保留原密钥，明确清空则删除 */
 export async function saveAiSettings(input: { activeId: string; profiles: Partial<AiProfile>[] }) {
   const s = await load()
   const old = new Map(s.ai.profiles.map((p) => [p.id, p]))

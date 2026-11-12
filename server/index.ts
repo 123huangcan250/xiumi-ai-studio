@@ -5,10 +5,10 @@ import multer from 'multer'
 import { nanoid } from 'nanoid'
 import { cropAsset, deleteAsset, listAssets, saveAsset, variantPath } from './assets'
 import { listComponents, removeComponent, saveComponent, updateComponent } from './components'
-import { IMAGE_HOST, safeFetch, WECHAT_IMAGE_HOST } from './net'
+import { IMAGE_HOST, MAX_PAGE_BYTES, safeFetch, WECHAT_IMAGE_HOST } from './net'
 import { aiStatus, chatJson, discoverModels, testConnection, COPY_SYSTEM, DESIGN_SYSTEM, EDIT_SYSTEM, ENRICH_SYSTEM, OUTLINE_SYSTEM, PLACE_SYSTEM } from './ai'
 import { probeEfforts } from './aiModels'
-import { editPrompt, resolveEditSelection, scopeEditResult, selectionPolicy } from './aiEdit'
+import { prepareEdit } from './aiEdit'
 import { suggestionPrompt, readSuggestion, SUGGESTION_SYSTEM } from './aiSuggestion'
 import { isRoleId } from '../src/core/roles'
 import { publicAiSettings, resolveDraftProfile, saveAiSettings } from './settings'
@@ -273,10 +273,9 @@ app.post('/api/ai/suggest-instruction', h(async (req, res) => {
 }))
 app.post('/api/ai/edit', h(async (req, res) => {
   const { context, instruction } = req.body
-  const selectedId = resolveEditSelection(context, req.body.selectedId)
-  const policy = selectionPolicy()
-  const user = editPrompt(context, instruction, selectedId, policy)
-  res.json(scopeEditResult(await chatJson(EDIT_SYSTEM, user, { maxTokens: 6000, profileId: pid(req) }), selectedId, context, policy))
+  const edit = prepareEdit(context, req.body.selectedId)
+  const user = edit.prompt(instruction)
+  res.json(edit.result(await chatJson(EDIT_SYSTEM, user, { maxTokens: 6000, profileId: pid(req) })))
 }))
 
 // ---------- 文章抓取（导入公众号推文 / 参考风格） ----------
@@ -284,7 +283,7 @@ async function fetchPage(raw: string) {
   const r = await safeFetch(raw, {
     headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36', 'accept-language': 'zh-CN,zh;q=0.9' },
     maxRedirects: 5,
-    maxBytes: 5_000_000,
+    maxBytes: MAX_PAGE_BYTES,
   })
   if (!r.ok) throw Object.assign(new Error(`抓取失败 HTTP ${r.status}`), { status: 502 })
   return r.text()

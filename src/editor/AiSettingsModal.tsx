@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type AiProfile } from './api'
 import { AI_PRESETS } from './aiPresets'
 import { Modal } from './Modal'
+import { ignoredExtraParameters } from '../core/aiParameters'
 import { useStore } from './store'
 
 const validExtra = (text = '') => {
@@ -89,7 +90,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
       if (request !== modelRequest.current.generation) return
       setModelList(models)
       const matched = models.find((m) => m.id === p.model)
-      if (matched?.contextWindow) setProfiles((list) => list.map((x) => x.id === p.id && x.model === p.model ? { ...x, contextWindow: matched.contextWindow } : x))
+      if (matched?.contextWindow) setProfiles((list) => list.map((x) => x.id === p.id && x.model === p.model && !x.contextWindow ? { ...x, contextWindow: matched.contextWindow } : x))
       setModelStatus(models.length ? `已获取 ${models.length} 个模型；未提供的参数请查阅服务商文档。` : '服务未返回模型，可手动填写。')
     } catch (e: any) {
       if (request === modelRequest.current.generation) setModelStatus(`${e.message}；可继续手动填写。`)
@@ -130,11 +131,12 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   const close = () => { invalidate(); onClose() }
   const patch = (p: Partial<AiProfile>) => {
     // Invalidate synchronously, before a queued response can land after an edit.
-    const endpoint = ['baseUrl', 'provider', 'apiKey'].some((key) => key in p)
-    if (endpoint) {
+    const endpoint = ['baseUrl', 'provider'].some((key) => key in p)
+    if (endpoint || 'apiKey' in p) {
       modelRequest.current.generation++
       modelRequest.current.pending = true
     }
+    if (cur && 'apiKey' in p && !p.apiKey?.trim()) credentialScopes.current.delete(cur.id)
     if (cur && 'apiKey' in p && p.apiKey?.trim()) {
       const target = endpointOf(cur)
       if (target) credentialScopes.current.set(cur.id, target)
@@ -156,7 +158,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   }
   const selectModel = (id: string) => {
     const model = modelList.find((m) => m.id === id)
-    patch({ model: id, contextWindow: model?.contextWindow ?? 0, maxOutputTokens: model?.maxOutput ?? 0, efforts: model?.efforts ?? model?.reasoningEfforts ?? [], reasoningEffort: '' })
+    patch({ model: id, contextWindow: model?.contextWindow ?? 0, maxOutputTokens: model?.maxOutput ?? 0, efforts: model?.efforts ?? [], reasoningEffort: '' })
   }
 
   const probe = async (p: AiProfile) => {
@@ -221,6 +223,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const ignoredExtras = ignoredExtraParameters(cur?.extraBody)
   const preset = cur ? AI_PRESETS.find((x) => x.baseUrl && x.baseUrl === cur.baseUrl) : undefined
   return (
     <Modal title="AI 模型设置" onClose={close} width={760}>
@@ -259,11 +262,11 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
               <label className="field"><span>接口地址 Base URL</span><input data-testid="ai-base-url" value={cur.baseUrl} disabled={cur.readonly} placeholder="https://…/v1" onChange={(e) => patch({ baseUrl: e.target.value })} onBlur={(e) => discoverAfterEdit(cur, e.relatedTarget)} /></label>
               <label className="field">
                 <span>API Key{preset?.keyUrl && <a href={preset.keyUrl} target="_blank" rel="noreferrer">获取密钥 ↗</a>}</span>
-                <input type="password" value={cur.apiKey} disabled={cur.readonly} placeholder={cur.hasKey ? '已保存（留空则不修改）' : '粘贴密钥'} autoComplete="off" onChange={(e) => patch({ apiKey: e.target.value })} onBlur={(e) => discoverAfterEdit(cur, e.relatedTarget)} />
+                <input type="password" value={cur.apiKey} disabled={cur.readonly} placeholder={cur.hasKey ? '已保存（清空将删除密钥）' : '粘贴密钥'} autoComplete="off" onChange={(e) => patch({ apiKey: e.target.value, hasKey: Boolean(e.target.value.trim()) })} onBlur={(e) => discoverAfterEdit(cur, e.relatedTarget)} />
               </label>
-              <label className="field"><span>模型名称</span><input data-testid="ai-model" value={cur.model} disabled={cur.readonly} placeholder="例如 deepseek-chat / qwen-plus / claude-sonnet-5-5" onChange={(e) => selectModel(e.target.value)} /></label>
+              <label className="field"><span>模型名称</span><input data-testid="ai-model" value={cur.model} disabled={cur.readonly} placeholder="例如 deepseek-chat / qwen-plus / claude-sonnet-5-5" onChange={(e) => patch({ model: e.target.value })} /></label>
               <button data-testid="ai-load-models" disabled={!cur.baseUrl || fetchingModels} onClick={() => fetchModels(cur)}>{fetchingModels ? '获取中…' : '从服务商获取模型列表'}</button>
-              <p className="hint">填好地址和密钥后，离开输入框会自动获取模型列表；不会在打开设置或逐字输入时请求，也可点击按钮刷新。本地服务可不填密钥；更换服务商域名或接口类型后需重新输入密钥。</p>
+              <p className="hint">填好地址和密钥后，离开输入框会自动获取模型列表；不会在打开设置或逐字输入时请求，也可点击按钮刷新。本地服务可不填密钥；更换服务商域名或接口类型后需重新输入密钥，或明确清空以使用无密钥服务。</p>
               {modelStatus && <p className="hint" role="status" data-testid="ai-model-note">{modelStatus}</p>}
               {modelList.length > 0 && (
                 <label className="field"><span>可用模型（点击选择，也可在上方手动填写）</span>
@@ -282,12 +285,13 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
               <label className="field"><span>上下文窗口（tokens，仅记录，不自动截断）</span><input data-testid="ai-context" type="number" min="0" step="1" value={cur.contextWindow || ''} disabled={cur.readonly} placeholder="上游未提供，可手动填写" onChange={(e) => patch({ contextWindow: Number(e.target.value) || 0 })} /></label>
               <label className="field"><span>思考强度（留空使用服务商默认）</span><input data-testid="ai-effort" list="ai-reasoning-efforts" value={cur.reasoningEffort ?? ''} disabled={cur.readonly} placeholder="例如 low / medium / high" onChange={(e) => patch({ reasoningEffort: e.target.value })} /></label>
               <datalist id="ai-reasoning-efforts">{(cur.efforts?.length ? cur.efforts : COMMON_EFFORTS).map((effort) => <option key={effort} value={effort} />)}</datalist>
-              <p className="hint">仅填写服务商支持的强度；OpenAI 兼容接口发送 reasoning_effort，优先使用 max_completion_tokens，服务明确拒绝时尝试 max_tokens；Claude 发送 output_config.effort。设置强度时不发送 temperature；被拒绝的强度会显示错误，不会静默去掉。请求被接受不代表强度一定生效，请查阅服务商文档。</p>
+              <p className="hint">仅填写服务商支持的强度；OpenAI 兼容接口发送 reasoning_effort，兼容服务优先使用 max_tokens，OpenAI 官方接口设置强度时使用 max_completion_tokens；服务明确要求时才切换字段；Claude 发送 output_config.effort。设置强度时不发送 temperature；被拒绝的强度会显示错误，不会静默去掉。请求被接受不代表强度一定生效，请查阅服务商文档。</p>
               <label className="field"><span>单次最大输出（tokens）</span><input data-testid="ai-max-output" type="number" min="0" step="1" value={cur.maxOutputTokens || ''} disabled={cur.readonly} placeholder="未知" onChange={(e) => patch({ maxOutputTokens: Number(e.target.value) || 0 })} /></label>
               <p className="hint">请求的输出上限不会超过此值；留空使用任务默认值。</p>
               <button data-testid="ai-probe-effort" disabled={!cur.baseUrl || !cur.model || probing} onClick={() => probe(cur)}>{probing ? '检测中…' : '检测支持的强度'}</button>
               <p className="hint">检测会向当前服务商发送多条请求，可能产生 API 费用；只有点击检测才会发送。</p>
               <p className="hint" data-testid="ai-effort-note">{effortNote || (cur.efforts?.length ? `已知强度：${cur.efforts.join('、')}` : '可手动填写服务商支持的强度，或点击检测。')}</p>
+              {ignoredExtras.length > 0 && <p className="hint warn" role="status" data-testid="ai-extra-ignored">额外参数中的 {ignoredExtras.join('、')} 会被忽略；请使用上方对应设置，JSON 格式由任务控制。</p>}
               <details className="ai-advanced">
                 <summary>高级：额外的请求参数{cur.extraBody ? '（已设置）' : ''}</summary>
                 <textarea data-testid="ai-extra-body" rows={3} value={cur.extraBody ?? ''} disabled={cur.readonly} placeholder='{"enable_thinking": false}' onChange={(e) => patch({ extraBody: e.target.value })} />

@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test('discovers custom models, imports context and keeps manual reasoning settings', async ({ page, request }) => {
   const original = await (await request.get('/api/settings/ai')).json()
   try {
-    await page.route('**/api/settings/ai/models', (route) => route.fulfill({ json: [{ id: 'custom-reasoner', contextWindow: 128000, reasoningEfforts: ['low', 'high'] }] }))
+    await page.route('**/api/settings/ai/models', (route) => route.fulfill({ json: [{ id: 'custom-reasoner', contextWindow: 128000, efforts: ['low', 'high'] }] }))
     await page.goto('/')
     await page.waitForLoadState('networkidle')
     await page.getByTestId('open-ai-settings').click()

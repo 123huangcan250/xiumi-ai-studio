@@ -3,6 +3,9 @@ import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
 import { Agent, fetch as transportFetch } from 'undici'
 
+/** Complete decoded article HTML, bounded to avoid unbounded buffering. */
+export const MAX_PAGE_BYTES = 15_000_000
+
 const httpError = (message: string, status = 400) => Object.assign(new Error(message), { status })
 
 // URL 解析器会把点分十进制 mapped IPv6 改写成十六进制，必须先统一格式。
@@ -26,10 +29,10 @@ function normalizeAddress(ip: string): string {
 export function isPrivateAddress(ip: string): boolean {
   const addr = normalizeAddress(ip)
   if (isIP(addr) === 4) {
-    const [a, b] = addr.split('.').map(Number)
-    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)
+    const [a, b, c] = addr.split('.').map(Number)
+    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && (b === 168 || (b === 0 && c === 0)))
   }
-  if (isIP(addr) === 6) return addr === '::' || addr === '::1' || /^f[cd]/.test(addr) || /^fe[89ab]/.test(addr) || /^ff/.test(addr)
+  if (isIP(addr) === 6) return /^64:ff9b:/.test(addr) || /^2002:/.test(addr) || addr === '::' || addr === '::1' || /^f[cd]/.test(addr) || /^fe[89ab]/.test(addr) || /^ff/.test(addr)
   return false
 }
 
@@ -113,35 +116,40 @@ export async function safeFetch(raw: string, opts: SafeFetchOptions = {}): Promi
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw httpError('非法响应体大小限制')
   // 同一个截止时间涵盖所有跳转及最终响应体读取。
   const signal = AbortSignal.timeout(timeoutMs)
-  let url = new URL(raw)
-  for (let hop = 0; ; hop++) {
-    if (allowHost && !allowHost(url.hostname)) throw httpError('不允许访问该域名')
-    const addresses = await withDeadline(publicAddresses(url, resolve), signal)
-    signal.throwIfAborted()
-    // 只把本次已检查的地址交给实际 socket，禁止连接时再次解析 DNS。
-    // 保留 URL 主机名，HTTP Host / TLS SNI 与证书校验仍使用原域名。
-    const dispatcher = new Agent({ connect: { lookup: (_host, options, callback) => {
-      if (options.all) callback(null, addresses)
-      else callback(null, addresses[0].address, addresses[0].family)
-    } } })
-    try {
-      const init: RequestInit & { dispatcher: Agent } = { headers, redirect: 'manual', signal, dispatcher }
-      const response = await fetcher(url, init)
-      if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
-        await response.body?.cancel()
-        if (hop >= maxRedirects) throw httpError('重定向次数过多', 502)
-        url = new URL(response.headers.get('location')!, url)
-        continue
+  try {
+    let url = new URL(raw)
+    for (let hop = 0; ; hop++) {
+      if (allowHost && !allowHost(url.hostname)) throw httpError('不允许访问该域名')
+      const addresses = await withDeadline(publicAddresses(url, resolve), signal)
+      signal.throwIfAborted()
+      // 只把本次已检查的地址交给实际 socket，禁止连接时再次解析 DNS。
+      // 保留 URL 主机名，HTTP Host / TLS SNI 与证书校验仍使用原域名。
+      const dispatcher = new Agent({ connect: { lookup: (_host, options, callback) => {
+        if (options.all) callback(null, addresses)
+        else callback(null, addresses[0].address, addresses[0].family)
+      } } })
+      try {
+        const init: RequestInit & { dispatcher: Agent } = { headers, redirect: 'manual', signal, dispatcher }
+        const response = await fetcher(url, init)
+        if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
+          await response.body?.cancel()
+          if (hop >= maxRedirects) throw httpError('重定向次数过多', 502)
+          url = new URL(response.headers.get('location')!, url)
+          continue
+        }
+        const body = await boundedBody(response, maxBytes, signal)
+        // fetch 已自动解压，缓冲结果不再带有压缩体的长度/编码。
+        const resultHeaders = new Headers(response.headers)
+        resultHeaders.delete('content-encoding')
+        resultHeaders.delete('content-length')
+        return new Response(body ? new Uint8Array(body) : null, { status: response.status, statusText: response.statusText, headers: resultHeaders })
+      } finally {
+        await dispatcher.destroy()
       }
-      const body = await boundedBody(response, maxBytes, signal)
-      // fetch 已自动解压，缓冲结果不再带有压缩体的长度/编码。
-      const resultHeaders = new Headers(response.headers)
-      resultHeaders.delete('content-encoding')
-      resultHeaders.delete('content-length')
-      return new Response(body ? new Uint8Array(body) : null, { status: response.status, statusText: response.statusText, headers: resultHeaders })
-    } finally {
-      await dispatcher.destroy()
     }
+  } catch (error) {
+    if (signal.aborted) throw httpError('抓取超时，请稍后重试或改用文件导入', 504)
+    throw error
   }
 }
 

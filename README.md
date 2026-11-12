@@ -4,7 +4,7 @@
 
 ## 快速开始（Windows）
 
-需要 Node.js ≥ 22.19（推荐 Node.js 24 LTS）与 pnpm。DNS 固定连接使用的 undici 8 要求该最低版本；旧版 Node 用户需先升级。Windows CI 使用 Node.js 24，未验证其他打包工具内置的 Node 运行时。
+需要 Node.js ≥ 22.19（推荐 Node.js 24 LTS）与 pnpm 11.25.0（与 CI 一致）。Node 下限沿用 DNS 固定连接依赖 undici 8 声明的支持范围，不表示已实测所有更低版本都无法运行。Windows CI 使用 Node.js 24，未验证其他打包工具内置的 Node 运行时。
 
 ```bash
 pnpm install

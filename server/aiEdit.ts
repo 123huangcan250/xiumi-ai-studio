@@ -3,7 +3,8 @@ import type { SelectionPolicy } from '../src/core/types'
 
 /** Only the server's environment selects the policy, never a request or model response. */
 export function selectionPolicy(): SelectionPolicy {
-  return process.env.AI_SELECTION_POLICY === 'filter' ? 'filter' : 'strict'
+  const configured = process.env.AI_SELECTION_POLICY
+  return !configured || configured === 'filter' ? 'filter' : 'strict'
 }
 
 export function resolveEditSelection(context: any, requestedId?: unknown): string | undefined {
@@ -22,19 +23,34 @@ export function resolveEditSelection(context: any, requestedId?: unknown): strin
 }
 
 /** Selection is an explicit boundary, not a suggestion the model can ignore. */
-export function editPrompt(context: any, instruction: unknown, selectedId?: string, policy: SelectionPolicy = 'strict'): string {
-  const id = resolveEditSelection(context, selectedId)
+export function editPrompt(context: any, instruction: unknown, selectedId?: string, policy: SelectionPolicy = selectionPolicy()): string {
+  return prepareEdit(context, selectedId, policy).prompt(instruction)
+}
+
+function promptForSelection(context: any, instruction: unknown, id: string | undefined, policy: SelectionPolicy): string {
   let scope = '修改范围：全文。'
   if (id) {
     scope = policy === 'filter'
       ? `仅修改选中模块 ${id} 及其子模块：允许 update、remove，或在其顶层位置紧前或紧后 insert（index 以当前文档为准）；框内模块的插入以所在文本框为准。不得修改父模块、兄弟模块、其他模块、主题、文章信息或移动模块。文本框子模块按 id 逐个修改，不得整体替换 children。`
-      : `仅修改选中模块 ${id}。其他模块仅供背景参考；只允许对该 id 输出 update 操作，不得修改全文、主题、其他模块或增删移动模块。`
+      : `仅修改选中模块 ${id} 及其子模块。其他模块仅供背景参考；只允许对这些 id 输出 update 操作，不得修改全文、主题、范围外模块或增删移动模块；文本框子模块按 id 逐个修改，不得整体替换 children。`
   }
   return `当前文档（模块按顺序排列）：\n${JSON.stringify(context)}\n\n${scope}\n\n用户指令：${String(instruction).slice(0, 2000)}`
 }
 
-export function scopeEditResult(result: any, selectedId?: string, context?: any, policy: SelectionPolicy = 'strict'): any {
+export function scopeEditResult(result: any, selectedId?: string, context?: any, policy: SelectionPolicy = selectionPolicy()): any {
+  return prepareEdit(context, selectedId, policy).result(result)
+}
+
+/** Prepare once per request; only trusted server code supplies the policy. */
+export function prepareEdit(context: any, selectedId?: unknown, policy: SelectionPolicy = selectionPolicy()) {
   const id = resolveEditSelection(context, selectedId)
+  return {
+    prompt: (instruction: unknown) => promptForSelection(context, instruction, id, policy),
+    result: (result: any) => resultForSelection(result, id, context, policy),
+  }
+}
+
+function resultForSelection(result: any, id: string | undefined, context: any, policy: SelectionPolicy): any {
   if (!Array.isArray(result?.ops)) {
     throw Object.assign(new Error('AI 返回的修改建议格式无效，请重试'), { status: 502 })
   }

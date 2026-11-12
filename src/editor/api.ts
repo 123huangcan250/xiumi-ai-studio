@@ -51,7 +51,6 @@ export interface ModelInfo {
   contextWindow?: number
   maxOutput?: number
   efforts?: string[]
-  reasoningEfforts?: string[]
 }
 export interface EffortProbe {
   baseError?: string

@@ -2,6 +2,7 @@
 // 密钥只在服务端读取；所有输出都要求是 JSON，再由调用方校验。
 import { getProfile, type AiProfile } from './settings'
 import { fetchModels, type ModelInfo } from './aiModels'
+import { PROTECTED_AI_PARAMETERS } from '../src/core/aiParameters'
 
 export interface AiStatus {
   enabled: boolean
@@ -53,7 +54,7 @@ async function readError(res: Response) {
 }
 
 /** 请求里这些字段不能被“额外参数”改掉 */
-const PROTECTED = new Set(['model', 'messages', 'system', 'stream', 'tools', 'tool_choice', 'max_tokens', 'max_completion_tokens', 'temperature', 'reasoning_effort', 'output_config', 'response_format'])
+const PROTECTED = new Set<string>(PROTECTED_AI_PARAMETERS)
 
 /** 配置里的额外请求参数（JSON 对象），去掉不允许覆盖的字段 */
 export function extraBodyOf(p: AiProfile): Record<string, unknown> {
@@ -81,7 +82,7 @@ export function adjustWire(w: Wire, message: string, keepEffort = true): Wire | 
   // Compatible providers may support reasoning_effort with the older token field.
   // Only rewrite on an explicit parameter rejection, not an output-budget error.
   if (w.tokenField === 'max_completion_tokens' && /max_completion_tokens/.test(m) && /unsupported|unknown|unrecognized|unexpected|not supported|not allowed|not permitted/.test(m)) return { ...w, tokenField: 'max_tokens' }
-  if (w.tokenField === 'max_tokens' && /max_completion_tokens/.test(m)) return { ...w, tokenField: 'max_completion_tokens' }
+  if (w.tokenField === 'max_tokens' && /max_completion_tokens/.test(m) && /unsupported|not supported|use |must|required|only supports/.test(m)) return { ...w, tokenField: 'max_completion_tokens' }
   if (w.temperature && /temperature/.test(m)) return { ...w, temperature: false }
   if (w.effort && !keepEffort && /reasoning|effort|thinking/.test(m)) return { ...w, effort: false }
   if (w.json && /response_format|json_object|json_schema|json mode|json_mode/.test(m)) return { ...w, json: false }
@@ -117,23 +118,23 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
   const ctrl = new AbortController()
   const timeout = opts.timeoutMs ?? 180_000
   const timer = setTimeout(() => ctrl.abort(), timeout)
-  const effort = opts.effort ?? p.reasoningEffort ?? ''
-  const wanted = opts.maxTokens ?? 8000
-  const start: Wire = {
-    json: p.jsonMode && p.provider !== 'anthropic',
-    tokenField: effort && p.provider !== 'anthropic' ? 'max_completion_tokens' : 'max_tokens',
-    temperature: !effort,
-    effort: Boolean(effort),
-    maxTokens: p.maxOutputTokens ? Math.min(wanted, p.maxOutputTokens) : wanted,
-  }
-  const extra = extraBodyOf(p)
   try {
+    const effort = opts.effort ?? p.reasoningEffort ?? ''
+    const wanted = opts.maxTokens ?? 8000
+    const start: Wire = {
+      json: p.jsonMode && p.provider !== 'anthropic',
+      tokenField: effort && p.provider !== 'anthropic' && new URL(p.baseUrl).hostname === 'api.openai.com' ? 'max_completion_tokens' : 'max_tokens',
+      temperature: !effort,
+      effort: Boolean(effort),
+      maxTokens: p.maxOutputTokens ? Math.min(wanted, p.maxOutputTokens) : wanted,
+    }
+    const extra = extraBodyOf(p)
     if (p.provider === 'anthropic') {
       const res = await sendAdaptive(
         (w) =>
           fetch(`${anthropicBase(p.baseUrl)}/messages`, {
             method: 'POST',
-          redirect: 'error',
+            redirect: 'error',
             signal: ctrl.signal,
             headers: { 'content-type': 'application/json', 'x-api-key': p.apiKey, 'anthropic-version': '2023-06-01' },
             body: JSON.stringify({
@@ -191,22 +192,20 @@ export async function chatJson(system: string, user: string, opts: ChatOpts = {}
   return extractJson(await chatText(system, user, opts))
 }
 
-export interface DiscoveredModel extends ModelInfo {
-  /** Compatibility with existing clients. */
-  reasoningEfforts?: string[]
-}
+export type DiscoveredModel = ModelInfo
 
 function anthropicBase(base: string) {
   return base.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1'
 }
 
 export async function discoverModels(p: AiProfile): Promise<DiscoveredModel[]> {
-  return (await fetchModels(p)).map((m) => ({ ...m, ...(m.efforts ? { reasoningEfforts: m.efforts } : {}) }))
+  return fetchModels(p)
 }
 
 export function testConnection(profile: AiProfile): Promise<any> {
   return chatJson('只输出 JSON。', '请输出 {"ok":true,"model":"你的模型名称"}', {
-    profile, maxTokens: profile.reasoningEffort ? 4096 : 100, temperature: 0,
+    // Some models reason by default even without an explicit effort setting.
+    profile, maxTokens: 4096, temperature: 0,
   })
 }
 

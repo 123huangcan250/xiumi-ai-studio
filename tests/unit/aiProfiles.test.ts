@@ -6,7 +6,7 @@ afterEach(() => vi.unstubAllGlobals())
 describe('model discovery and reasoning', () => {
   it('reads upstream IDs and optional metadata without inventing missing capabilities', async () => {
     vi.stubGlobal('fetch', async () => Response.json({ data: [{ id: 'custom', context_length: 12345, reasoning_efforts: ['low', 'high'] }, { id: 'plain' }, { missingId: 'invalid' }] }))
-    expect(await discoverModels(profile)).toEqual([{ id: 'custom', contextWindow: 12345, efforts: ['low', 'high'], reasoningEfforts: ['low', 'high'] }, { id: 'plain' }])
+    expect(await discoverModels(profile)).toEqual([{ id: 'custom', contextWindow: 12345, efforts: ['low', 'high'] }, { id: 'plain' }])
   })
   it('uses the Anthropic models path once when base already ends in v1', async () => {
     let url = ''
@@ -19,8 +19,8 @@ describe('model discovery and reasoning', () => {
     vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => { body = JSON.parse(String(init.body)); return Response.json({ choices: [{ message: { content: '{"ok":true}' } }] }) })
     await chatJson('system', 'user', { profile: { ...profile, reasoningEffort: 'xhigh' } })
     expect(body.reasoning_effort).toBe('xhigh')
-    expect(body.max_completion_tokens).toBe(8000)
-    expect(body.max_tokens).toBeUndefined()
+    expect(body.max_tokens).toBe(8000)
+    expect(body.max_completion_tokens).toBeUndefined()
     expect(body.temperature).toBeUndefined()
   })
   it('sends Anthropic effort using its native output config', async () => {
@@ -41,11 +41,21 @@ describe('model discovery and reasoning', () => {
     let body: any
     vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => { body = JSON.parse(String(init.body)); return Response.json({ choices: [{ message: { content: '{"ok":true}' } }] }) })
     await testConnection({ ...profile, reasoningEffort: 'high' })
-    expect(body.max_completion_tokens).toBe(4096)
+    expect(body.max_tokens).toBe(4096)
   })
   it('reports token exhaustion as a responding model, not missing JSON', async () => {
     vi.stubGlobal('fetch', async () => Response.json({ choices: [{ finish_reason: 'length', message: { content: '' } }] }))
     await expect(chatJson('s', 'u', { profile })).rejects.toThrow('AI 已响应，但输出达到 token 上限')
   })
 
+})
+
+it('uses a sufficient probe budget even when the model reasons by default', async () => {
+  let body: any
+  vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+    body = JSON.parse(String(init.body))
+    return Response.json({ choices: [{ finish_reason: body.max_tokens < 4096 ? 'length' : 'stop', message: { content: body.max_tokens < 4096 ? '' : '{"ok":true}' } }] })
+  })
+  await expect(testConnection(profile)).resolves.toEqual({ ok: true })
+  expect(body.max_tokens).toBe(4096)
 })

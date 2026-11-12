@@ -166,13 +166,13 @@ export function selectionScope(doc: ScopeDocument, selectedId: string | null | u
   return { ids, top }
 }
 
-/** Strict stays atomic and update-only. Filtering is an explicit server-owned opt-in. */
-export function limitToSelection(doc: ScopeDocument, selectedId: string | null | undefined, rawOps: any[], policy: SelectionPolicy = 'strict'): { ops: any[]; dropped: any[] } {
+/** Strict stays atomic and update-only within the selected subtree. Filtering preserves valid operations. */
+export function limitToSelection(doc: ScopeDocument, selectedId: string | null | undefined, rawOps: any[], policy: SelectionPolicy = 'filter'): { ops: any[]; dropped: any[] } {
   if (selectedId == null) return { ops: rawOps, dropped: [] }
   const scope = selectionScope(doc, selectedId)
   if (!scope) return { ops: [], dropped: rawOps }
   if (policy !== 'filter') {
-    const valid = rawOps.every(op => op?.op === 'update' && op.id === selectedId)
+    const valid = rawOps.every(op => op?.op === 'update' && scope.ids.has(op.id))
     return valid ? { ops: rawOps, dropped: [] } : { ops: [], dropped: rawOps }
   }
   const ops: any[] = [], dropped: any[] = []

@@ -51,9 +51,9 @@ describe('ai edits limited to the selected module', () => {
     { op: 'setMeta', title: '新标题' },
   ]
   it('rejects an entire mixed-scope result and never permits insert/remove', () => {
-    const r = limitToSelection(doc, 'b', raw)
+    const r = limitToSelection(doc, 'b', raw, 'strict')
     expect(r.ops).toEqual([])
-    expect(limitToSelection(doc, 'b', [raw[0]]).ops).toEqual([raw[0]])
+    expect(limitToSelection(doc, 'b', [raw[0]], 'strict').ops).toEqual([raw[0]])
     expect(r.dropped).toEqual(raw)
   })
   it('treats a text box and its children as one scope; children insert around the box', () => {
@@ -61,7 +61,7 @@ describe('ai edits limited to the selected module', () => {
     const inChild = selectionScope(doc, 'c1')!
     expect([...inChild.ids]).toEqual(['c1'])
     expect(inChild.top).toBe(2)
-    expect(limitToSelection(doc, 'c1', [{ op: 'update', id: 'c1', props: {} }, { op: 'update', id: 'box', props: {} }, { op: 'insert', index: 3 }, { op: 'insert', index: 0 }]).ops).toHaveLength(0)
+    expect(limitToSelection(doc, 'c1', [{ op: 'update', id: 'c1', props: {} }, { op: 'update', id: 'box', props: {} }, { op: 'insert', index: 3 }, { op: 'insert', index: 0 }], 'strict').ops).toHaveLength(0)
   })
   it('passes everything through when nothing is selected', () => {
     expect(limitToSelection(doc, null, raw)).toEqual({ ops: raw, dropped: [] })

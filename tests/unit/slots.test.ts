@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom'
 import { describe, expect, it } from 'vitest'
-import { cleanText, editableText, extractFrames, extractSlots, fillSlots, isPhotoSlot, removeBackgroundPhotos, removeImage, setSlotAlign, setSlotAlignment, skeleton, slotAligns, slotRawTexts, type ImageSlot, type TextSlot } from '../../src/core/slots'
+import { cleanText, editableText, extractFrames, extractSlots, fillSlots, isPhotoSlot, removeBackgroundPhotos, removeImage, setSlotAlign, skeleton, slotAligns, slotRawTexts, type ImageSlot, type TextSlot } from '../../src/core/slots'
 
 const parse = (s: string) => new JSDOM(s).window.document
 const texts = (html: string) => extractSlots(html, parse).filter((s): s is TextSlot => s.kind === 'text')
@@ -233,11 +233,10 @@ describe('merged imported-slot editing behavior', () => {
     }
   })
 
-  it('reports all four alignments and retains both helper names', () => {
+  it('reports all four alignments through the public helper', () => {
     const html = '<p style="color: red; text-align: center !important">正文</p><p>其他段落</p>'
     for (const align of ['left', 'center', 'right', 'justify'] as const) {
-      const out = setSlotAlignment(html, 't0', align, parse)
-      expect(out).toBe(setSlotAlign(html, 't0', align, parse))
+      const out = setSlotAlign(html, 't0', align, parse)
       expect(slotAligns(out, parse).t0).toEqual({ alignable: true, align })
       const p = parse(out).querySelector('p')!
       expect(p.style.color).toBe('red')

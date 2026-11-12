@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { expect, it, vi } from 'vitest'
 import { checkedXiumiParts } from '../../src/core/xiumiExport'
-import { xiumiUploaded } from '../../src/editor/wechatOutput'
+import { xiumiUploaded, xiumiPackage } from '../../src/editor/wechatOutput'
+import * as compiler from '../../src/core/compiler'
 import { createBlock } from '../../src/core/blocks'
 import { emptyDoc } from '../../src/editor/store'
 import { api } from '../../src/editor/api'
@@ -28,4 +29,15 @@ it('keeps safely split content complete and bounded', () => {
   expect(parts.length).toBeGreaterThan(1)
   expect(parts.every(p => p.length <= 120000)).toBe(true)
   expect(parts.map(p => p.slice(9, -10)).join('')).toBe(html.slice(9, -10))
+})
+
+it('compiles a manual package only once and still validates its output', async () => {
+  const compile = vi.spyOn(compiler, 'compileDoc')
+  try {
+    const doc = { ...emptyDoc(), blocks: [createBlock('html', { html: '<p>Complete content</p>' })] }
+    const result = await xiumiPackage(doc)
+    expect(result.parts).toBe(1)
+    expect(result.blob.size).toBeGreaterThan(0)
+    expect(compile).toHaveBeenCalledTimes(1)
+  } finally { compile.mockRestore() }
 })

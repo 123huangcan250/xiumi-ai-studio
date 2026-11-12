@@ -125,10 +125,11 @@ function AiPanel() {
   const [suggestion, setSuggestion] = useState({ key: '', text: '', error: '' })
   const selectedId = scope === 'selection' ? selected?.id : undefined
   // Strip image URLs and rich-text metadata, and send only selected content in selection mode.
-  const context = useMemo(() => aiContext(selectedId && selected ? { ...doc, blocks: [selected] } : doc), [doc, selected, selectedId])
-  const contextKey = JSON.stringify([doc.id, context, selectedId, ai?.profileId, ai?.model, ai?.provider, instructionSuggestions.revision])
+  const context = useMemo(() => autoSuggest ? aiContext(selectedId && selected ? { ...doc, blocks: [selected] } : doc) : null, [autoSuggest, doc, selected, selectedId])
+  const suggestionRevision = instructionSuggestions.revision
+  const contextKey = useMemo(() => context ? JSON.stringify([doc.id, context, selectedId, ai?.profileId, ai?.model, ai?.provider, suggestionRevision]) : '', [doc.id, context, selectedId, ai?.profileId, ai?.model, ai?.provider, suggestionRevision])
   useEffect(() => {
-    if (!autoSuggest || !ai?.enabled || instruction || busy || !context.blocks.length) return
+    if (!autoSuggest || !ai?.enabled || instruction || busy || !context?.blocks.length) return
     const controller = new AbortController()
     const timer = setTimeout(() => {
       instructionSuggestions.get(contextKey, () => api.aiSuggestInstruction(context, ai.profileId, selectedId), controller.signal)

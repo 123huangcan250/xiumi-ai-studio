@@ -30,7 +30,7 @@ export function richToPlain(rich: RichText | undefined, options: { preserveWhite
     if (n.type === 'text') return n.text ?? ''
     if (n.type === 'hardBreak') return '\n'
     const inner = (n.content ?? []).map(walk).join('')
-    return ['paragraph', 'heading', 'listItem'].includes(n.type) ? inner + '\n' : inner
+    return ['paragraph', 'heading'].includes(n.type) ? inner + '\n' : inner
   }
   const text = walk(rich)
   return options.preserveWhitespace ? text.replace(/\n$/, '') : text.trim()
