@@ -151,7 +151,7 @@ export function drawRun(run: TextRun, ctx: RenderCtx, opts: { color?: string; pe
         y: run.y + base + i * lh,
         'font-size': run.font.size,
         'font-weight': run.font.weight === 700 ? 'bold' : undefined,
-        'font-family': FONT_FAMILY,
+        'font-family': run.font.family ?? FONT_FAMILY,
         'letter-spacing': run.font.letterSpacing || undefined,
         'text-anchor': anchor,
         fill: color,

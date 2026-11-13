@@ -1,6 +1,6 @@
 // 布局：flow 自上而下自动排版（间距、断行、按内容算高度），absolute 按 frame 放置。
 import { toHex } from '../color'
-import { replayEnv, wrapText, type FontSpec } from './text'
+import { FONT_FAMILY, replayEnv, wrapText, type FontSpec } from './text'
 import type { Glyph, ReplayDoc, ReplayItem, ReplayItemType, ReplayScene, ReplayStyle } from './types'
 
 export const CANVAS_W = 750
@@ -129,7 +129,14 @@ export function resolveStyle(item: ReplayItem, doc: ReplayDoc, outline = false):
   return { ...BASE, color: text, ...d[item.type], ...(item.style ?? {}) } as ReplayStyle
 }
 
-const font = (s: ReplayStyle): FontSpec => ({ size: s.fontSize, weight: s.fontWeight, letterSpacing: s.letterSpacing })
+/** 可用于栅格化的特殊字体（页面需先加载） */
+export const FACE_FAMILY: Record<string, string> = { zcool: "'ZCOOL QingKe HuangYou'" }
+const font = (s: ReplayStyle): FontSpec => ({
+  size: s.fontSize,
+  weight: s.fontWeight,
+  letterSpacing: s.letterSpacing,
+  ...(s.face && FACE_FAMILY[s.face] && { family: `${FACE_FAMILY[s.face]},${FONT_FAMILY}` }),
+})
 /** 去掉 **关键词** 标记，返回纯文字和关键词区间 */
 export function parseMarks(content: string): { plain: string; marks: [number, number][] } {
   const marks: [number, number][] = []

@@ -207,6 +207,7 @@ export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void)
 /** 导出给秀米（已配置公众号接口）：本地图片先传到微信图床，全部变成秀米能接受的地址 */
 export async function xiumiUploaded(doc: Doc, onProgress?: (msg: string) => void): Promise<XiumiDownload> {
   const { html } = await compileForWechat(doc, 'wechat', onProgress)
-  if (/(?:src="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
+  // 编辑回放里的图片是 SVG 的 href，也要检查
+  if (/(?:src="|href="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
   return xiumiZip(xiumiFiles(html), 0)
 }

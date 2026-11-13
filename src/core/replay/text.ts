@@ -7,6 +7,8 @@ export interface FontSpec {
   size: number
   weight: 400 | 700
   letterSpacing: number
+  /** 指定字体（栅格化时使用，需要页面已加载该字体）；不填用系统字体 */
+  family?: string
 }
 
 export interface RasterSpec extends FontSpec {
@@ -112,10 +114,10 @@ export function canvasEnv(doc: Document): ReplayEnv {
   const canvas = doc.createElement('canvas')
   const g = canvas.getContext('2d')
   if (!g) return { measure: approxMeasure, rasterize: null }
-  const fontOf = (f: FontSpec) => `${f.weight} ${f.size}px ${FONT_FAMILY}`
+  const fontOf = (f: FontSpec) => `${f.weight} ${f.size}px ${f.family ?? FONT_FAMILY}`
   const mcache = new Map<string, number>()
   const measure = (text: string, f: FontSpec) => {
-    const key = `${f.size}|${f.weight}|${f.letterSpacing}|${text}`
+    const key = `${f.size}|${f.weight}|${f.letterSpacing}|${f.family ?? ''}|${text}`
     let w = mcache.get(key)
     if (w === undefined) {
       g.font = fontOf(f)
