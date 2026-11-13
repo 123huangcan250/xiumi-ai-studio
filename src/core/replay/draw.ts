@@ -1,6 +1,6 @@
 // 绘制基础：渲染上下文、SVG 属性序列化、文字（栅格图或 <text>）与元素静态外观。
 import { esc } from '../style'
-import { backgroundAt, baseColor, mix, type TextRun } from './layout'
+import { backgroundAt, baseColor, glyphMeasure, mix, type TextRun } from './layout'
 import type { TimedItem } from './schedule'
 import { smil, type AnimSpec, type PlayMode } from './smil'
 import { baseline, FONT_FAMILY, replayEnv, type Segment } from './text'
@@ -105,6 +105,24 @@ export function drawRun(run: TextRun, ctx: RenderCtx, opts: { color?: string; pe
   const color = opts.color ?? run.color
   const lh = run.lineHeight
   const env = replayEnv()
+  // 特殊字体：每个字画成路径（不需要字体文件，也不是图片）
+  const table = run.glyphs
+  if (table && lines.every((l) => [...l].every((c) => /\s/.test(c) || table[c]))) {
+    const measure = glyphMeasure(table)
+    const k = run.font.size / 1000
+    return lines.map((l, i) => {
+      const w = measure(l, run.font)
+      let x = run.align === 'center' ? run.x + (run.w - w) / 2 : run.align === 'right' ? run.x + run.w - w : run.x
+      const y = run.y + baseline(run.font.size, lh) + i * lh
+      let paths = ''
+      for (const c of l) {
+        const g = table[c]
+        if (g?.d) paths += `<path transform="translate(${Math.round(((x - run.x) / k) * 10) / 10} 0)" d="${g.d}"/>`
+        x += ((g?.adv ?? 300) * run.font.size) / 1000 + run.font.letterSpacing
+      }
+      return `<g transform="translate(${Math.round(run.x * 100) / 100} ${Math.round(y * 100) / 100}) scale(${Math.round(k * 100000) / 100000})" fill="${color}">${paths}</g>`
+    })
+  }
   if (ctx.doc.textMode === 'image' && env.rasterize) {
     // first：ls 第一行在 run.lines 里的序号（逐行绘制时用于找关键词）
     const raster = (ls: string[], y: number, first: number) => {
@@ -145,7 +163,8 @@ export function drawRun(run: TextRun, ctx: RenderCtx, opts: { color?: string; pe
 
 /** 文字某一行的实际起点与宽度（打字遮挡、选中高亮用） */
 export function lineBox(run: TextRun, i: number): { x: number; y: number; w: number; h: number } {
-  const w = Math.min(run.w, replayEnv().measure(run.lines[i] ?? '', run.font))
+  const measure = run.glyphs ? glyphMeasure(run.glyphs) : replayEnv().measure
+  const w = Math.min(run.w, measure(run.lines[i] ?? '', run.font))
   const x = run.align === 'center' ? run.x + (run.w - w) / 2 : run.align === 'right' ? run.x + run.w - w : run.x
   return { x, y: run.y + i * run.lineHeight, w, h: run.lineHeight }
 }

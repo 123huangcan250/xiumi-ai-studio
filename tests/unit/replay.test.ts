@@ -461,3 +461,34 @@ describe('渐变背景上打字', () => {
     for (const c of covers) expect(bandColors.has(c.getAttribute('fill'))).toBe(true)
   })
 })
+
+describe('开始阅读统一触发、重播与特殊字体', () => {
+  it('外部触发：动画挂在开始按钮上，不画自己的点击层，↻ 用负偏移从本模块开始时间重播', () => {
+    const d = sampleReplay()
+    d.textMode = 'svg-text'
+    d.playback = { ...d.playback, trigger: 'tap', triggerId: 'tlgo', replay: true, start: 12 }
+    const svg = renderScene(d.scenes[0], d, { idsAllowed: true, sid: 'rp0', warn: () => {} }).svg
+    expect(svg).toContain('begin="tlgo.click;rp0r.click-12s"')
+    expect(svg).toContain('<g id="rp0r">')
+    expect(svg).not.toContain('end="rp0.click"')
+    expect(svg).not.toContain('点击开始回放')
+  })
+  it('正文打字速度可按“字/秒”设置', () => {
+    const d = defaultReplay()
+    d.playback.typeSpeed = 10
+    d.scenes = [makeScene([makeItem('text', { content: '一二三四五六七八九十'.repeat(3), enter: 'type-on' })])]
+    const it0 = scheduleScene(d.scenes[0], d).items[0]
+    expect(it0.tEnd - it0.tStart).toBeCloseTo(3 + 0.12, 2)
+  })
+  it('字形齐全时标题画成路径，缺字时回退为文字', () => {
+    const d = defaultReplay()
+    d.textMode = 'svg-text'
+    d.glyphs = { zc: { 空: { d: 'M0 0L500 -700L1000 0Z', adv: 1000 }, 虚: { d: 'M0 0L1000 -700Z', adv: 1000 } } }
+    d.scenes = [makeScene([makeItem('title', { content: '空虚', style: { face: 'zc' } }), makeItem('title', { content: '空白', style: { face: 'zc' } })])]
+    const svg = scene0(d).svg
+    expect(svg).toContain('d="M0 0L500 -700L1000 0Z"')
+    expect(svg).toContain('>空白</text>')
+    expect(normalizeReplay(d).glyphs?.zc['空'].adv).toBe(1000)
+    expect(normalizeReplay({ ...d, glyphs: { zc: { 坏: { d: '<script>', adv: 1 } } } }).glyphs).toBeUndefined()
+  })
+})

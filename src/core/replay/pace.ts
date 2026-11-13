@@ -57,12 +57,12 @@ export function paceTable(p: Pace): PaceTable {
   return out
 }
 
-export function presetDuration(preset: EnterPreset, p: Pace, chars = 0, body = false): number {
+export function presetDuration(preset: EnterPreset, p: Pace, chars = 0, body = false, perChar?: number): number {
   const k = PACE_SCALE[p] ?? 1
   if (preset === 'type-on') {
     const t = paceTable(p)
     // 标题按字数计时但封顶；正文（text / quote）像打字机一样逐字，不封顶
-    if (body) return Math.max(t.typeMin, chars * t.bodyPerChar) + 0.12 * k
+    if (body) return Math.max(t.typeMin, chars * (perChar ?? t.bodyPerChar)) + 0.12 * k
     return Math.min(t.typeMax, Math.max(t.typeMin, chars * t.typePerChar)) + 0.12 * k
   }
   return PRESET_BASE[preset] * k

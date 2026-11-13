@@ -29,6 +29,14 @@ export interface ReplayStyle {
   lineHeight: number
   letterSpacing: number
   radius: number
+  /** 用文档里内嵌的字形路径绘制（见 ReplayDoc.glyphs），缺字时回退为普通文字 */
+  face?: string
+}
+
+/** 一个字的轮廓：d 以 1000 为字号、基线在 y = 0（向下为正），adv 为步进宽度 */
+export interface Glyph {
+  d: string
+  adv: number
 }
 
 export interface ReplayFrame {
@@ -82,6 +90,12 @@ export interface ReplayDoc {
     pace: Pace
     /** 开始前等待的秒数：同一篇里多个回放可以接力，依次播放（所有 SVG 从页面加载起共用同一个时钟） */
     start?: number
+    /** trigger = tap 时由文章里另一个元素（如开头的“开始阅读”按钮）触发：填它的 id，不再画本模块自己的“点击开始” */
+    triggerId?: string
+    /** 右上角显示 ↻，轻触后本模块从头重播（依赖 id） */
+    replay?: boolean
+    /** 正文打字速度（字/秒），不填按节奏档位 */
+    typeSpeed?: number
   }
   textMode: TextMode
   theme: { accent: string; inspector: string; alert: string; text: string; cursorPalette: string[] }
@@ -89,6 +103,8 @@ export interface ReplayDoc {
   /** 体积预算（KB），导出时超出则警告；默认值是估计值，上限待公众号后台实测 */
   budget: { sceneKB: number; totalKB: number }
   scenes: ReplayScene[]
+  /** 特殊字体的字形路径（只存用到的字）：不需要字体文件和图片，秀米、公众号都能显示 */
+  glyphs?: Record<string, Record<string, Glyph>>
 }
 
 // 时间轴（TimedItem / Timeline）由引擎生成，定义在 schedule.ts；光标轨迹定义在 cursors.ts

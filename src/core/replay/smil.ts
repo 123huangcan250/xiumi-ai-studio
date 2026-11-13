@@ -7,8 +7,8 @@ export type PlayMode =
   | { kind: 'once' }
   /** 方案 B 循环：所有动画共用同一个 dur，repeatCount = indefinite */
   | { kind: 'loop'; cycle: number }
-  /** 方案 A：点击触发（依赖 id），cycle 存在时点击后循环 */
-  | { kind: 'tap'; trigger: string; cycle?: number }
+  /** 方案 A：点击触发（依赖 id），cycle 存在时点击后循环；replay：另一个按钮从本模块的开始时间重播 */
+  | { kind: 'tap'; trigger: string; cycle?: number; replay?: { id: string; offset: number } }
 
 export type Ease = 'out' | 'in' | 'inout' | 'linear'
 
@@ -63,13 +63,20 @@ export function smil(spec: AnimSpec, mode: PlayMode): string {
   const attrs: string[] = []
   if (spec.transform) attrs.push(`attributeName="transform"`, `type="${spec.transform}"`)
   else attrs.push(`attributeName="${spec.attr}"`)
-  attrs.push(`begin="${mode.kind === 'tap' ? `${mode.trigger}.click` : '0s'}"`, `dur="${sec(end)}"`)
+  attrs.push(`begin="${begin(mode)}"`, `dur="${sec(end)}"`)
   attrs.push(`values="${keys.map((k) => val(k.v)).join(';')}"`, `keyTimes="${kt.join(';')}"`)
   if (spec.discrete) attrs.push('calcMode="discrete"')
   else attrs.push('calcMode="spline"', `keySplines="${keys.slice(1).map((k) => SPLINES[k.ease ?? 'linear']).join(';')}"`)
   if (cycle !== undefined) attrs.push('repeatCount="indefinite"')
   else attrs.push('fill="freeze"')
   return `<${spec.transform ? 'animateTransform' : 'animate'} ${attrs.join(' ')}/>`
+}
+
+/** 开始时间：重播按钮用负偏移，让动画直接跳到本模块开始的那一刻（关键帧都按触发后的绝对时间写） */
+function begin(mode: PlayMode): string {
+  if (mode.kind !== 'tap') return '0s'
+  const r = mode.replay
+  return `${mode.trigger}.click` + (r ? `;${r.id}.click${r.offset > 0 ? `-${Math.round(r.offset * 1000) / 1000}s` : ''}` : '')
 }
 
 /** 常用：在 t 时刻从 a 跳到 b（离散） */

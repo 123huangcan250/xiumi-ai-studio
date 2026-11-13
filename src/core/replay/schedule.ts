@@ -46,7 +46,8 @@ export function scheduleScene(scene: ReplayScene, doc: ReplayDoc): Timeline {
   let prevDur = 0
   const items: TimedItem[] = layout.items.map((l) => {
     const preset = effectivePreset(l.item)
-    const dur = presetDuration(preset, pace, chars(l.item), l.item.type === 'text' || l.item.type === 'quote')
+    const speed = doc.playback.typeSpeed
+    const dur = presetDuration(preset, pace, chars(l.item), l.item.type === 'text' || l.item.type === 'quote', speed ? 1 / speed : undefined)
     const auto = prevStart < 0 ? start + t.intro : prevStart + prevDur * overlap
     const tStart = round(Math.max(0, auto + (l.item.delay ?? 0)))
     prevStart = tStart

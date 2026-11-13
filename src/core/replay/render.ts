@@ -83,20 +83,31 @@ export function renderScene(scene: ReplayScene, doc: ReplayDoc, o: SceneOpts): S
   const total = Math.max(end + TAIL, plan.end)
   const loop = doc.playback.loop
   const cycle = loop ? Math.round((total + loop.hold) * 1000) / 1000 : undefined
-  const mode: PlayMode = o.idsAllowed ? { kind: 'tap', trigger: o.sid, cycle } : cycle ? { kind: 'loop', cycle } : { kind: 'once' }
+  // 外部触发：由文章里另一个元素（如开头的“开始阅读”）统一开始；可选右上角 ↻ 重播
+  const external = o.idsAllowed && doc.playback.triggerId
+  const replayId = external && doc.playback.replay ? `${o.sid}r` : undefined
+  const mode: PlayMode = external
+    ? { kind: 'tap', trigger: doc.playback.triggerId!, cycle, ...(replayId && { replay: { id: replayId, offset: doc.playback.start ?? 0 } }) }
+    : o.idsAllowed
+      ? { kind: 'tap', trigger: o.sid, cycle }
+      : cycle
+        ? { kind: 'loop', cycle }
+        : { kind: 'once' }
   const ctx: RenderCtx = { doc, mode, sceneHeight: H, idsAllowed: o.idsAllowed, sid: o.sid, img: o.mapImage ?? ((u) => u), warn: o.warn }
 
   const itemLayer = timeline.items.map((ti) => renderItem(ti, ctx)).join('')
   const show = o.showCursors ?? doc.cursors.show
   const cursorLayer = show ? renderCursors(plan, ctx) : ''
   // 方案 A：点击前隐藏元素和光标，显示“点击开始”；透明的点击区域放在最上面
-  const hide = o.idsAllowed ? `<set attributeName="opacity" to="0" begin="0s" end="${o.sid}.click"/>` : ''
+  // 外部触发时不隐藏：触发前显示成稿（通常被开头的封面挡着），引用失效时也只是退化为静态成稿
+  const hide = o.idsAllowed && !external ? `<set attributeName="opacity" to="0" begin="0s" end="${o.sid}.click"/>` : ''
   const layers = `<g>${hide}${itemLayer}</g>` + (cursorLayer ? `<g>${hide}${cursorLayer}</g>` : '')
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 750 ${H}" width="100%" style="${css({ display: 'block', width: '100%' })}">` +
     background(doc, H, ctx) +
     layers +
-    (o.idsAllowed ? tapTrigger(ctx, H) : '') +
+    (o.idsAllowed && !external ? tapTrigger(ctx, H) : '') +
+    (replayId ? replayButton(ctx, replayId) : '') +
     `</svg>`
   return { svg, height: H, timeline, plan, end, total, cycle, bytes: estimateBytes(svg), itemLayer }
 }
@@ -145,6 +156,15 @@ function tapTrigger(ctx: RenderCtx, H: number): string {
     el('rect', { x, y, width: w, height: 72, rx: 36, fill: accent }) +
     drawRun({ x, y, w, lines: ['▶  点击开始回放'], font: { size: 26, weight: 700, letterSpacing: 2 }, color: mix(accent, '#000000', 0.8), lineHeight: 72, align: 'center' }, ctx).join('')
   return `<g opacity="0"><set attributeName="opacity" to="1" begin="0s" end="${ctx.sid}.click"/>${prompt}</g>` + el('rect', { id: ctx.sid, width: 750, height: H, fill: '#000000', 'fill-opacity': 0 })
+}
+
+/** 右上角 ↻：轻触后本模块从头重播 */
+function replayButton(ctx: RenderCtx, id: string): string {
+  const bg = ctx.doc.canvas.background
+  const light = bg.type === 'color' && /^#(f|e|d)/i.test(bg.value)
+  const color = light ? mix(ctx.doc.theme.accent, '#ffffff', 0.15) : ctx.doc.theme.accent
+  const arrow = 'M714 34A14 14 0 1 0 718 48M714 34L706 30M714 34L713 43'
+  return `<g id="${id}">${el('circle', { cx: 704, cy: 44, r: 26, fill: light ? '#f2f5fb' : '#000000', 'fill-opacity': light ? 1 : 0.35, stroke: color, 'stroke-width': 1.5 })}${el('path', { d: arrow, stroke: color, 'stroke-width': 3, fill: 'none', 'stroke-linecap': 'round', transform: 'translate(-8 4)' })}</g>`
 }
 
 /** 画布定格时间：元素全部完成、光标离场（或 swarm 散开）之后 */

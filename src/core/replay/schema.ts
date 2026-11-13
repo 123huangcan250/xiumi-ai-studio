@@ -88,6 +88,7 @@ function style(v: unknown): Partial<ReplayStyle> | undefined {
   if (v.lineHeight !== undefined) out.lineHeight = num(v.lineHeight, 1.6, 1, 3)
   if (v.letterSpacing !== undefined) out.letterSpacing = num(v.letterSpacing, 0, -2, 20)
   if (v.radius !== undefined) out.radius = num(v.radius, 0, 0, 200)
+  if (typeof v.face === 'string' && /^[\w-]{1,24}$/.test(v.face)) out.face = v.face
   return Object.keys(out).length ? out : undefined
 }
 
@@ -148,6 +149,9 @@ export function normalizeReplay(raw: unknown): ReplayDoc {
   const playback: ReplayDoc['playback'] = { trigger: pick(pb.trigger, ['auto', 'tap'] as const, 'auto'), pace: pick(pb.pace, PACES, 'fast') }
   if (isObj(pb.loop)) playback.loop = { hold: num(pb.loop.hold, 2, 0, 30) }
   if (pb.start !== undefined && Number(pb.start) > 0) playback.start = num(pb.start, 0, 0, 3600)
+  if (typeof pb.triggerId === 'string' && /^[A-Za-z][\w-]{0,30}$/.test(pb.triggerId)) playback.triggerId = pb.triggerId
+  if (pb.replay === true) playback.replay = true
+  if (pb.typeSpeed !== undefined && Number(pb.typeSpeed) > 0) playback.typeSpeed = num(pb.typeSpeed, 10, 2, 60)
 
   const th = isObj(r.theme) ? r.theme : {}
   const palette = (Array.isArray(th.cursorPalette) ? th.cursorPalette : []).map((c: unknown) => color(c, '')).filter(Boolean).slice(0, 8)
@@ -169,8 +173,26 @@ export function normalizeReplay(raw: unknown): ReplayDoc {
     },
     cursors: { count: Math.round(num(cu.count, 3, 1, 6)), show: cu.show === undefined ? true : !!cu.show, ...(names && names.some(Boolean) && { names }) },
     budget: { sceneKB: num(bu.sceneKB, 80, 5, 2000), totalKB: num(bu.totalKB, 400, 10, 10000) },
+    ...(glyphs(r.glyphs) && { glyphs: glyphs(r.glyphs) }),
     scenes: scenes.length ? scenes : d.scenes,
   }
+}
+
+const PATH_RE = /^[MLHVCSQTAZmlhvcsqtaz0-9.,\s-]*$/
+/** 字形表：{ 字体名: { 字: { d, adv } } }，只保留合法的路径数据 */
+function glyphs(v: unknown): ReplayDoc['glyphs'] | undefined {
+  if (!isObj(v)) return undefined
+  const out: NonNullable<ReplayDoc['glyphs']> = {}
+  for (const [face, table] of Object.entries(v).slice(0, 4)) {
+    if (!/^[\w-]{1,24}$/.test(face) || !isObj(table)) continue
+    const t: Record<string, { d: string; adv: number }> = {}
+    for (const [ch, g] of Object.entries(table).slice(0, 2000)) {
+      if ([...ch].length !== 1 || !isObj(g) || typeof g.d !== 'string' || g.d.length > 20000 || !PATH_RE.test(g.d)) continue
+      t[ch] = { d: g.d, adv: num(g.adv, 1000, 0, 3000) }
+    }
+    if (Object.keys(t).length) out[face] = t
+  }
+  return Object.keys(out).length ? out : undefined
 }
 
 function gradientValue(v: unknown, d: string): string {

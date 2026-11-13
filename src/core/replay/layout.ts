@@ -1,7 +1,7 @@
 // 布局：flow 自上而下自动排版（间距、断行、按内容算高度），absolute 按 frame 放置。
 import { toHex } from '../color'
 import { replayEnv, wrapText, type FontSpec } from './text'
-import type { ReplayDoc, ReplayItem, ReplayItemType, ReplayScene, ReplayStyle } from './types'
+import type { Glyph, ReplayDoc, ReplayItem, ReplayItemType, ReplayScene, ReplayStyle } from './types'
 
 export const CANVAS_W = 750
 export const PAD_X = 56
@@ -27,7 +27,20 @@ export interface TextRun {
   starts?: number[]
   /** 关键词颜色 */
   markColor?: string
+  /** 整段都能用特殊字体的字形路径绘制时的字形表 */
+  glyphs?: Record<string, Glyph>
 }
+
+/** 字形表覆盖这段文字的全部字符时返回它（空白不需要字形） */
+export function glyphTable(doc: ReplayDoc | undefined, face: string | undefined, text: string): Record<string, Glyph> | undefined {
+  const t = face ? doc?.glyphs?.[face] : undefined
+  if (!t) return undefined
+  return [...text].every((c) => /\s/.test(c) || t[c]) ? t : undefined
+}
+
+/** 用字形步进宽度测量（和字形路径绘制一致） */
+export const glyphMeasure = (t: Record<string, Glyph>) => (text: string, f: FontSpec) =>
+  [...text].reduce((w, c) => w + ((t[c]?.adv ?? 300) * f.size) / 1000 + f.letterSpacing, 0)
 
 export interface LaidItem {
   item: ReplayItem
@@ -131,13 +144,15 @@ export function parseMarks(content: string): { plain: string; marks: [number, nu
   return { plain, marks }
 }
 
-const run = (s: ReplayStyle, x: number, y: number, w: number, content: string, override: Partial<ReplayStyle> = {}, markColor?: string): TextRun => {
+const run = (s: ReplayStyle, x: number, y: number, w: number, content: string, override: Partial<ReplayStyle> = {}, markColor?: string, doc?: ReplayDoc): TextRun => {
   const st = { ...s, ...override }
   const f = font(st)
   const { plain, marks } = parseMarks(content)
+  // 特殊字体：只在没有关键词标记、字形齐全时使用
+  const glyphs = marks.length ? undefined : glyphTable(doc, st.face, plain)
   // 关键词加粗后会略宽：留一点余量，避免超出行宽
-  const lines = wrapText(plain, f, marks.length ? w * 0.97 : w)
-  const out: TextRun = { x, y, w, lines, font: f, color: st.color, lineHeight: Math.round(st.fontSize * st.lineHeight), align: st.align }
+  const lines = glyphs ? wrapText(plain, f, w, glyphMeasure(glyphs)) : wrapText(plain, f, marks.length ? w * 0.97 : w)
+  const out: TextRun = { x, y, w, lines, font: f, color: st.color, lineHeight: Math.round(st.fontSize * st.lineHeight), align: st.align, ...(glyphs && { glyphs }) }
   if (marks.length) {
     let cursor = 0
     out.starts = lines.map((l) => {
@@ -174,7 +189,7 @@ function measureItem(item: ReplayItem, index: number, doc: ReplayDoc, w: number,
         out.label = run(s, pad, y, w - pad * 2, item.label, { color: doc.theme.accent, fontSize: 20, fontWeight: 700, letterSpacing: 2, lineHeight: 1.4, align: 'left' })
         y += runHeight(out.label) + 12
       }
-      out.text = run(s, pad, y, w - pad * 2, item.content, {}, doc.theme.accent)
+      out.text = run(s, pad, y, w - pad * 2, item.content, {}, doc.theme.accent, doc)
       box.h = y + runHeight(out.text) + pad
       break
     }
