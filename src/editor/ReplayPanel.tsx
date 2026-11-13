@@ -117,7 +117,7 @@ function ItemRow({ item, doc, scene, onChange, onRemove }: { item: ReplayItem; d
         </div>
       ) : item.type !== 'divider' ? (
         TEXT_AREA.has(item.type) ? (
-          <textarea rows={item.type === 'text' ? 3 : 2} value={item.content} onChange={(e) => set({ content: e.target.value }, 'content')} data-testid="rp-content" />
+          <textarea rows={item.type === 'text' ? 3 : 2} value={item.content} placeholder="用 **关键词** 标出重点，打字时会加粗变色并划出底纹" onChange={(e) => set({ content: e.target.value }, 'content')} data-testid="rp-content" />
         ) : (
           <input value={item.content} placeholder={item.type === 'stat' ? '数值，如 98%、3.2万' : ''} onChange={(e) => set({ content: e.target.value }, 'content')} data-testid="rp-content" />
         )
@@ -209,6 +209,10 @@ export function ReplayPanel({ block }: { block: Block<'replay'> }) {
         {doc.playback.loop && <input className="rp-inline-num" type="number" min={0} step={0.5} value={doc.playback.loop.hold} onChange={(e) => upd({ playback: { ...doc.playback, loop: { hold: Math.max(0, Number(e.target.value) || 0) } } }, 'hold')} />}
         {doc.playback.loop && <span>秒后重放</span>}
       </label>
+      <div className="rp-nums">
+        <Num label="开始时间 s" step={0.5} value={doc.playback.start} placeholder="0" onChange={(start) => upd({ playback: { ...doc.playback, start: start && start > 0 ? start : undefined } }, 'start')} />
+      </div>
+      <p className="hint">同一篇里有多个回放时，所有动画从打开文章起共用一个时钟：给后面的模块设开始时间，就能一段接一段播放。</p>
       <Seg label="文字输出" value={doc.textMode} options={[['image', '栅格图片（最稳，推荐）'], ['svg-text', 'SVG 文字']]} onChange={(textMode) => upd({ textMode }, 'textMode')} />
 
       <h5>背景板</h5>
@@ -287,6 +291,10 @@ export function ReplayPanel({ block }: { block: Block<'replay'> }) {
         </button>
       </div>
       <Seg label="排版" value={scene.layout} options={[['flow', '自动排版'], ['absolute', '自由定位']]} onChange={(layout) => setScene({ ...scene, layout }, 'layout')} />
+      <label className="check">
+        <input type="checkbox" checked={scene.overlap === 1} onChange={(e) => setScene({ ...scene, overlap: e.target.checked ? 1 : undefined }, 'overlap')} />
+        <span>依次出现（上一个完成后才开始，适合逐段打字的正文）</span>
+      </label>
       <Seg label="收尾" value={scene.finale} options={[['exit', '光标各自离场'], ['swarm', '聚拢绕圈后散开']]} onChange={(finale) => setScene({ ...scene, finale }, 'finale')} />
       <div className="rp-nums">
         <Num label="场景高度" value={scene.height} placeholder="自动" onChange={(height) => setScene({ ...scene, height }, 'height')} />

@@ -21,6 +21,12 @@ export interface TextRun {
   color: string
   lineHeight: number
   align: ReplayStyle['align']
+  /** 关键词（**…** 标出）在去掉标记后的文字里的区间 [起, 止) */
+  marks?: [number, number][]
+  /** 每行第一个字在去掉标记后的文字里的位置 */
+  starts?: number[]
+  /** 关键词颜色 */
+  markColor?: string
 }
 
 export interface LaidItem {
@@ -97,10 +103,39 @@ export function resolveStyle(item: ReplayItem, doc: ReplayDoc, outline = false):
 }
 
 const font = (s: ReplayStyle): FontSpec => ({ size: s.fontSize, weight: s.fontWeight, letterSpacing: s.letterSpacing })
-const run = (s: ReplayStyle, x: number, y: number, w: number, content: string, override: Partial<ReplayStyle> = {}): TextRun => {
+/** 去掉 **关键词** 标记，返回纯文字和关键词区间 */
+export function parseMarks(content: string): { plain: string; marks: [number, number][] } {
+  const marks: [number, number][] = []
+  let plain = ''
+  const parts = content.split('**')
+  // 不成对的 ** 原样保留
+  const usable = parts.length % 2 === 1 ? parts : [...parts.slice(0, -2), `${parts[parts.length - 2]}**${parts[parts.length - 1]}`]
+  usable.forEach((part, i) => {
+    if (i % 2 === 1 && part) marks.push([plain.length, plain.length + part.length])
+    plain += part
+  })
+  return { plain, marks }
+}
+
+const run = (s: ReplayStyle, x: number, y: number, w: number, content: string, override: Partial<ReplayStyle> = {}, markColor?: string): TextRun => {
   const st = { ...s, ...override }
   const f = font(st)
-  return { x, y, w, lines: wrapText(content, f, w), font: f, color: st.color, lineHeight: Math.round(st.fontSize * st.lineHeight), align: st.align }
+  const { plain, marks } = parseMarks(content)
+  // 关键词加粗后会略宽：留一点余量，避免超出行宽
+  const lines = wrapText(plain, f, marks.length ? w * 0.97 : w)
+  const out: TextRun = { x, y, w, lines, font: f, color: st.color, lineHeight: Math.round(st.fontSize * st.lineHeight), align: st.align }
+  if (marks.length) {
+    let cursor = 0
+    out.starts = lines.map((l) => {
+      const i = plain.indexOf(l, cursor)
+      const at = i < 0 ? cursor : i
+      cursor = at + l.length
+      return at
+    })
+    out.marks = marks
+    out.markColor = markColor
+  }
+  return out
 }
 export const runHeight = (r: TextRun | undefined) => (r ? r.lines.length * r.lineHeight : 0)
 
@@ -125,12 +160,12 @@ function measureItem(item: ReplayItem, index: number, doc: ReplayDoc, w: number,
         out.label = run(s, pad, y, w - pad * 2, item.label, { color: doc.theme.accent, fontSize: 20, fontWeight: 700, letterSpacing: 2, lineHeight: 1.4, align: 'left' })
         y += runHeight(out.label) + 12
       }
-      out.text = run(s, pad, y, w - pad * 2, item.content)
+      out.text = run(s, pad, y, w - pad * 2, item.content, {}, doc.theme.accent)
       box.h = y + runHeight(out.text) + pad
       break
     }
     case 'quote': {
-      out.text = run(s, 30, 4, w - 30, item.content)
+      out.text = run(s, 30, 4, w - 30, item.content, {}, doc.theme.accent)
       let h = 4 + runHeight(out.text)
       if (item.label) {
         out.label = run(s, 30, h + 10, w - 30, `— ${item.label}`, { color: mix(s.color, baseColor(doc), 0.35), fontSize: 22, lineHeight: 1.5, letterSpacing: 1 })
@@ -204,7 +239,7 @@ export function layoutScene(scene: ReplayScene, doc: ReplayDoc): SceneLayout {
 }
 
 function layoutAbsolute(scene: ReplayScene, doc: ReplayDoc): SceneLayout {
-  let y = PAD_TOP
+  let y = scene.padding ?? PAD_TOP
   const items = scene.items.map((item, i) => {
     const f = item.frame ?? { x: PAD_X, y, w: CONTENT_W }
     const l = measureItem(item, i, doc, f.w)
@@ -215,13 +250,13 @@ function layoutAbsolute(scene: ReplayScene, doc: ReplayDoc): SceneLayout {
     return l
   })
   const bottom = Math.max(0, ...items.map((l) => l.box.y + l.box.h))
-  const height = scene.height ?? Math.max(1100, bottom + PAD_BOTTOM)
+  const height = scene.height ?? Math.max(1100, bottom + (scene.padding ?? PAD_BOTTOM))
   return { items, height, overflow: bottom > height }
 }
 
 function layoutFlow(scene: ReplayScene, doc: ReplayDoc): SceneLayout {
   const out: LaidItem[] = []
-  let y = PAD_TOP
+  let y = scene.padding ?? PAD_TOP
   let i = 0
   const list = scene.items
   while (i < list.length) {
@@ -244,7 +279,8 @@ function layoutFlow(scene: ReplayScene, doc: ReplayDoc): SceneLayout {
     i = j
   }
   const bottom = y
-  const height = scene.height ?? Math.max(MIN_FLOW_HEIGHT, Math.ceil(bottom + PAD_BOTTOM))
+  // 设置了留白的场景（如逐段打字的正文）按内容定高，不套用一屏的最小高度
+  const height = scene.height ?? (scene.padding !== undefined ? Math.ceil(bottom + scene.padding) : Math.max(MIN_FLOW_HEIGHT, Math.ceil(bottom + PAD_BOTTOM)))
   return { items: out, height, overflow: bottom > height }
 }
 

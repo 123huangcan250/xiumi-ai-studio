@@ -282,7 +282,7 @@ describe('SMIL 输出', () => {
 
 describe('wechat-svg-lint', () => {
   it('示例模板三种播放方式都零错误，只使用允许的标签', () => {
-    const allowed = new Set(['svg', 'g', 'rect', 'path', 'circle', 'text', 'image', 'animate', 'animatetransform', 'set', 'defs', 'lineargradient', 'stop'])
+    const allowed = new Set(['svg', 'g', 'rect', 'path', 'circle', 'text', 'tspan', 'image', 'animate', 'animatetransform', 'set', 'defs', 'lineargradient', 'stop'])
     for (const patch of [{}, { loop: { hold: 2 } }, { trigger: 'tap' as const }]) {
       const d = sampleReplay()
       d.playback = { ...d.playback, ...patch }
@@ -360,5 +360,73 @@ describe('画布定格时间', () => {
       expect(finals[i]).toBeGreaterThanOrEqual(out.plan.end)
       expect(finals[i]).toBeGreaterThanOrEqual(out.end)
     })
+  })
+})
+
+describe('逐字打字的正文与关键词', () => {
+  const body = () => {
+    const d = defaultReplay()
+    d.cursors.show = false
+    d.textMode = 'svg-text'
+    d.canvas.background = { type: 'color', value: '#ffffff' }
+    d.scenes = [
+      {
+        ...makeScene([
+          makeItem('text', { content: '第一段，讲**手感**为什么会消失，以及它和归属感的关系。', enter: 'type-on' }),
+          makeItem('text', { content: '第二段，讲**难度**被一句话抹平之后，成就感去了哪里。', enter: 'type-on' }),
+        ]),
+        overlap: 1,
+        padding: 24,
+      },
+    ]
+    return d
+  }
+  it('正文按字数逐字计时（不封顶），依次出现：后一段在前一段打完后开始', () => {
+    const d = body()
+    const tl = scheduleScene(d.scenes[0], d)
+    const [a, b] = tl.items
+    const chars = [...'第一段，讲手感为什么会消失，以及它和归属感的关系。'].length
+    expect(a.tEnd - a.tStart).toBeCloseTo(chars * paceTable('fast').bodyPerChar + 0.12, 2)
+    expect(b.tStart).toBeCloseTo(a.tEnd, 3)
+    d.scenes[0].items[0].content = '很长'.repeat(200)
+    const long = scheduleScene(d.scenes[0], d).items[0]
+    expect(long.tEnd - long.tStart).toBeGreaterThan(10)
+  })
+  it('开始时间让整段时间轴整体后移（多个回放接力）', () => {
+    const d = body()
+    const base = scheduleScene(d.scenes[0], d)
+    d.playback.start = 12
+    const later = scheduleScene(d.scenes[0], d)
+    later.items.forEach((x, i) => expect(x.tStart).toBeCloseTo(base.items[i].tStart + 12, 3))
+    const s = sampleReplay()
+    s.playback.start = 5
+    const plan = planCursors(scheduleScene(s.scenes[0], s), s, s.scenes[0])
+    for (const tr of plan.tracks) if (tr.spawn) expect(tr.spawn.t).toBeGreaterThanOrEqual(5 - 0.5)
+  })
+  it('留白收紧时场景按内容定高', () => {
+    const d = body()
+    const l = layoutScene(d.scenes[0], d)
+    expect(l.items[0].box.y).toBe(24)
+    expect(l.height).toBe(Math.ceil(l.items[1].box.y + l.items[1].box.h + 24))
+  })
+  it('**关键词** 去掉标记，加粗变色，打字经过时划出荧光笔底纹并保留', () => {
+    const d = body()
+    const out = scene0(d)
+    expect(out.svg).not.toContain('**')
+    expect(out.svg).toContain(`<tspan font-weight="bold" fill="${d.theme.accent}">手感</tspan>`)
+    const doc = parse(out.svg)
+    const markers = [...doc.querySelectorAll('rect[fill-opacity="0.22"]')]
+    expect(markers).toHaveLength(2)
+    // 终态保留底纹，动画从 0 宽开始
+    for (const m of markers) {
+      expect(Number(m.getAttribute('width'))).toBeGreaterThan(20)
+      expect(m.querySelector('animate')!.getAttribute('values')!.startsWith('0;0;')).toBe(true)
+    }
+    expect(renderReplay(d).errors).toEqual([])
+  })
+  it('不成对的 ** 原样保留', async () => {
+    const { parseMarks } = await import('../../src/core/replay/layout')
+    expect(parseMarks('a **b** c')).toEqual({ plain: 'a b c', marks: [[2, 3]] })
+    expect(parseMarks('a ** b')).toEqual({ plain: 'a ** b', marks: [] })
   })
 })

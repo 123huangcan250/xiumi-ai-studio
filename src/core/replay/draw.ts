@@ -3,7 +3,7 @@ import { esc } from '../style'
 import { backgroundAt, baseColor, mix, type TextRun } from './layout'
 import type { TimedItem } from './schedule'
 import { smil, type AnimSpec, type PlayMode } from './smil'
-import { baseline, FONT_FAMILY, replayEnv } from './text'
+import { baseline, FONT_FAMILY, replayEnv, type Segment } from './text'
 import type { ReplayDoc } from './types'
 
 export interface RenderCtx {
@@ -49,6 +49,56 @@ export function shape(tag: string, a: Attrs, ctx: RenderCtx, anims: (AnimSpec | 
 
 // ---------- 文字 ----------
 
+/** 某一行按关键词切成的片段；color 覆盖时（如故障副本）整行同色 */
+export function lineSegments(run: TextRun, i: number, color?: string): Segment[] {
+  const line = run.lines[i] ?? ''
+  const base: Segment = { text: line, color: color ?? run.color, weight: run.font.weight }
+  if (!run.marks?.length || !run.starts) return [base]
+  const from = run.starts[i]
+  const to = from + line.length
+  const out: Segment[] = []
+  let at = from
+  for (const [a, b] of run.marks) {
+    const s = Math.max(a, from)
+    const e = Math.min(b, to)
+    if (s >= e) continue
+    if (s > at) out.push({ ...base, text: line.slice(at - from, s - from) })
+    out.push({ text: line.slice(s - from, e - from), color: color ?? run.markColor ?? run.color, weight: 700 })
+    at = e
+  }
+  if (at < to) out.push({ ...base, text: line.slice(at - from) })
+  return out.length ? out : [base]
+}
+
+/** 关键词的位置（逐行），用于画荧光笔底纹 */
+export function markSpans(run: TextRun): { x: number; y: number; w: number; h: number; line: number }[] {
+  if (!run.marks?.length) return []
+  const env = replayEnv()
+  const out: { x: number; y: number; w: number; h: number; line: number }[] = []
+  run.lines.forEach((_, i) => {
+    const segs = lineSegments(run, i)
+    const widths = segs.map((g) => env.measure(g.text, { ...run.font, weight: g.weight }))
+    const total = widths.reduce((a, b) => a + b, 0)
+    let x = run.align === 'center' ? run.x + (run.w - total) / 2 : run.align === 'right' ? run.x + run.w - total : run.x
+    segs.forEach((g, j) => {
+      if (g.weight === 700 && run.font.weight !== 700 && g.text.trim()) out.push({ x, y: run.y + i * run.lineHeight, w: widths[j], h: run.lineHeight, line: i })
+      x += widths[j]
+    })
+  })
+  return out
+}
+
+/** 荧光笔底纹：压在关键词下半部 */
+export const markerAttrs = (m: { x: number; y: number; w: number; h: number }, color: string) => ({
+  x: m.x - 2,
+  y: m.y + m.h * 0.55,
+  width: m.w + 4,
+  height: m.h * 0.3,
+  rx: 3,
+  fill: color,
+  'fill-opacity': 0.22,
+})
+
 /** 一行或整段文字的绘制结果：整体一个元素，或逐行元素（逐行出现时使用） */
 export function drawRun(run: TextRun, ctx: RenderCtx, opts: { color?: string; perLine?: boolean; lines?: string[] } = {}): string[] {
   const lines = opts.lines ?? run.lines
@@ -56,17 +106,25 @@ export function drawRun(run: TextRun, ctx: RenderCtx, opts: { color?: string; pe
   const lh = run.lineHeight
   const env = replayEnv()
   if (ctx.doc.textMode === 'image' && env.rasterize) {
-    const raster = (ls: string[], y: number) => {
-      const url = env.rasterize!({ ...run.font, lines: ls, color, lineHeight: lh, width: run.w, height: ls.length * lh, align: run.align })
+    // first：ls 第一行在 run.lines 里的序号（逐行绘制时用于找关键词）
+    const raster = (ls: string[], y: number, first: number) => {
+      const segments = run.marks?.length && !opts.lines ? ls.map((_, k) => lineSegments(run, first + k, opts.color)) : undefined
+      const url = env.rasterize!({ ...run.font, lines: ls, color, lineHeight: lh, width: run.w, height: ls.length * lh, align: run.align, ...(segments && { segments }) })
       return url ? el('image', { href: ctx.img(url), x: run.x, y, width: run.w, height: ls.length * lh }) : null
     }
-    const out = opts.perLine ? lines.map((l, i) => raster([l], run.y + i * lh)) : [raster(lines, run.y)]
+    const out = opts.perLine ? lines.map((l, i) => raster([l], run.y + i * lh, i)) : [raster(lines, run.y, 0)]
     if (out.every(Boolean)) return out as string[]
   }
   if (ctx.doc.textMode === 'image') ctx.warn('当前环境不能把文字栅格化，已临时改用 svg-text 输出')
   const anchor = run.align === 'center' ? 'middle' : run.align === 'right' ? 'end' : undefined
   const x = run.align === 'center' ? run.x + run.w / 2 : run.align === 'right' ? run.x + run.w : run.x
   const base = baseline(run.font.size, lh)
+  const tspans = (l: string, i: number) => {
+    if (!run.marks?.length || opts.lines) return esc(l) || ' '
+    return lineSegments(run, i, opts.color)
+      .map((g) => (g.weight === 700 && run.font.weight !== 700 ? `<tspan font-weight="bold"${g.color !== color ? ` fill="${g.color}"` : ''}>${esc(g.text)}</tspan>` : esc(g.text)))
+      .join('')
+  }
   const text = (l: string, i: number) =>
     el(
       'text',
@@ -80,7 +138,7 @@ export function drawRun(run: TextRun, ctx: RenderCtx, opts: { color?: string; pe
         'text-anchor': anchor,
         fill: color,
       },
-      esc(l) || ' ',
+      tspans(l, i),
     )
   return lines.map(text)
 }
@@ -135,7 +193,11 @@ export function itemBody(ti: TimedItem, ctx: RenderCtx, opts: { textOverride?: s
   }
   if (ti.label && item.type !== 'image') parts.push(...drawRun(ti.label, ctx, { color: opts.color }))
   if (opts.textOverride !== undefined) parts.push(opts.textOverride)
-  else if (ti.text) parts.push(...drawRun(ti.text, ctx, { color: opts.color }))
+  else if (ti.text) {
+    // 关键词的荧光笔底纹（终态）；故障副本等改色版本不画
+    if (!opts.color) parts.push(...markSpans(ti.text).map((m) => el('rect', markerAttrs(m, ti.text!.markColor ?? ctx.doc.theme.accent))))
+    parts.push(...drawRun(ti.text, ctx, { color: opts.color }))
+  }
   if (ti.label && item.type === 'image') parts.push(...drawRun(ti.label, ctx, { color: opts.color }))
   return parts.join('')
 }

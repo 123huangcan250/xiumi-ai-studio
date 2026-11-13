@@ -42,7 +42,7 @@ export interface ReplayItem {
   /** 界面排序用的稳定 id，不会输出到 SVG */
   id: string
   type: ReplayItemType
-  /** 文案；stat 为最终数值（可带前后缀，如 "98%"、"3.2万"） */
+  /** 文案；stat 为最终数值（可带前后缀，如 "98%"、"3.2万"）。文字类元素可用 **关键词** 标出重点 */
   content: string
   /** stat 的说明文字、quote 的出处、image 的图注 */
   label?: string
@@ -64,13 +64,23 @@ export interface ReplayScene {
   layout: 'flow' | 'absolute'
   /** 收尾：光标各自离场，或全部聚到焦点绕圈后散开 */
   finale: 'exit' | 'swarm'
+  /** 下一个元素在上一个完成到这个比例时开始（默认 0.6；1 = 依次出现，适合逐段打字的正文） */
+  overlap?: number
+  /** 上下留白（默认 88 / 96），正文场景可以收紧 */
+  padding?: number
   items: ReplayItem[]
 }
 
 export interface ReplayDoc {
   canvas: { width: 750; background: ReplayBackground }
   /** trigger：auto = 方案 B（begin="Xs" 自动播放）；tap = 方案 A（begin="id.click+Xs"，依赖 id 保留） */
-  playback: { trigger: 'auto' | 'tap'; loop?: { hold: number }; pace: Pace }
+  playback: {
+    trigger: 'auto' | 'tap'
+    loop?: { hold: number }
+    pace: Pace
+    /** 开始前等待的秒数：同一篇里多个回放可以接力，依次播放（所有 SVG 从页面加载起共用同一个时钟） */
+    start?: number
+  }
   textMode: TextMode
   theme: { accent: string; inspector: string; alert: string; text: string; cursorPalette: string[] }
   cursors: { count: number; names?: string[]; show: boolean }

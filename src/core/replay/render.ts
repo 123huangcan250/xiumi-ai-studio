@@ -60,7 +60,9 @@ export function renderReplay(doc: ReplayDoc, opts: ReplayRenderOptions = {}): Re
     if (s.bytes > doc.budget.sceneKB * 1024) warnings.add(`场景 ${i + 1} 约 ${kb(s.bytes)}，超过单场景预算 ${doc.budget.sceneKB} KB`)
     if (s.timeline.overflow) warnings.add(`场景 ${i + 1} 的内容超出了设定的高度`)
     if (s.plan.unassigned.length) warnings.add(`场景 ${i + 1} 有 ${s.plan.unassigned.length} 个元素没有空闲光标演示（元素照常出现），可增加光标数量`)
-    if (s.end > 6) warnings.add(`场景 ${i + 1} 播放 ${s.end.toFixed(1)} 秒才完成，建议控制在 6 秒内（减少元素或换快节奏）`)
+    // 逐段打字的正文（不显示光标）按字数计时，不受 6 秒建议限制
+    const own = s.end - (doc.playback.start ?? 0)
+    if (own > 6 && doc.cursors.show) warnings.add(`场景 ${i + 1} 播放 ${own.toFixed(1)} 秒才完成，建议控制在 6 秒内（减少元素或换快节奏）`)
   })
   if (total > doc.budget.totalKB * 1024) warnings.add(`编辑回放整体约 ${kb(total)}，超过预算 ${doc.budget.totalKB} KB`)
   const empty = doc.scenes.flatMap((s) => s.items).filter((it) => it.type === 'image' && !it.image?.src).length

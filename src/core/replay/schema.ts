@@ -122,7 +122,9 @@ function scene(v: unknown): ReplayScene {
     finale: pick(s.finale, ['exit', 'swarm'] as const, 'exit'),
     items: (Array.isArray(s.items) ? s.items : []).slice(0, 40).map(item).filter((x): x is ReplayItem => !!x),
   }
-  if (s.height !== undefined && s.height !== null && s.height !== '') out.height = Math.round(num(s.height, 1100, 300, 3000))
+  if (s.height !== undefined && s.height !== null && s.height !== '') out.height = Math.round(num(s.height, 1100, 200, 6000))
+  if (s.overlap !== undefined) out.overlap = num(s.overlap, 0.6, 0.1, 1)
+  if (s.padding !== undefined) out.padding = Math.round(num(s.padding, 88, 0, 300))
   return out
 }
 
@@ -144,6 +146,7 @@ export function normalizeReplay(raw: unknown): ReplayDoc {
   const pb = isObj(r.playback) ? r.playback : {}
   const playback: ReplayDoc['playback'] = { trigger: pick(pb.trigger, ['auto', 'tap'] as const, 'auto'), pace: pick(pb.pace, PACES, 'fast') }
   if (isObj(pb.loop)) playback.loop = { hold: num(pb.loop.hold, 2, 0, 30) }
+  if (pb.start !== undefined && Number(pb.start) > 0) playback.start = num(pb.start, 0, 0, 3600)
 
   const th = isObj(r.theme) ? r.theme : {}
   const palette = (Array.isArray(th.cursorPalette) ? th.cursorPalette : []).map((c: unknown) => color(c, '')).filter(Boolean).slice(0, 8)

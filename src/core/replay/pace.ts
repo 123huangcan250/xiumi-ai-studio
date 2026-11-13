@@ -23,6 +23,8 @@ export const PACE_BASE = {
   typePerChar: 0.024,
   typeMin: 0.35,
   typeMax: 1.3,
+  /** 正文逐字打字：每字（不设上限，长段落按字数计时） */
+  bodyPerChar: 0.03,
   /** 光标离场 */
   exit: 0.28,
   /** 收尾 swarm：聚拢、绕圈、散开 */
@@ -55,10 +57,12 @@ export function paceTable(p: Pace): PaceTable {
   return out
 }
 
-export function presetDuration(preset: EnterPreset, p: Pace, chars = 0): number {
+export function presetDuration(preset: EnterPreset, p: Pace, chars = 0, body = false): number {
   const k = PACE_SCALE[p] ?? 1
   if (preset === 'type-on') {
     const t = paceTable(p)
+    // 标题按字数计时但封顶；正文（text / quote）像打字机一样逐字，不封顶
+    if (body) return Math.max(t.typeMin, chars * t.bodyPerChar) + 0.12 * k
     return Math.min(t.typeMax, Math.max(t.typeMin, chars * t.typePerChar)) + 0.12 * k
   }
   return PRESET_BASE[preset] * k

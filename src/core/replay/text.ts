@@ -17,6 +17,14 @@ export interface RasterSpec extends FontSpec {
   width: number
   height: number
   align: 'left' | 'center' | 'right'
+  /** 按行分段（关键词另用颜色和字重）；没有时整行用 color / weight */
+  segments?: Segment[][]
+}
+
+export interface Segment {
+  text: string
+  color: string
+  weight: 400 | 700
 }
 
 export interface ReplayEnv {
@@ -134,9 +142,17 @@ export function canvasEnv(doc: Document): ReplayEnv {
     x.textBaseline = 'alphabetic'
     if ('letterSpacing' in x) (x as any).letterSpacing = `${s.letterSpacing}px`
     s.lines.forEach((line, i) => {
-      const w = measure(line, s)
-      const lx = s.align === 'center' ? (s.width - w) / 2 : s.align === 'right' ? s.width - w : 0
-      x.fillText(line, lx, baseline(s.size, s.lineHeight) + i * s.lineHeight)
+      const segs = s.segments?.[i] ?? [{ text: line, color: s.color, weight: s.weight }]
+      const widths = segs.map((g) => measure(g.text, { ...s, weight: g.weight }))
+      const w = widths.reduce((a, b) => a + b, 0)
+      let lx = s.align === 'center' ? (s.width - w) / 2 : s.align === 'right' ? s.width - w : 0
+      const y = baseline(s.size, s.lineHeight) + i * s.lineHeight
+      segs.forEach((g, j) => {
+        x.font = fontOf({ ...s, weight: g.weight })
+        x.fillStyle = g.color
+        x.fillText(g.text, lx, y)
+        lx += widths[j]
+      })
     })
     const url = c.toDataURL('image/png')
     if (rcache.size > 800) rcache.clear()

@@ -1,6 +1,6 @@
 // 进场预设库：renderItem 只根据元素自己的 tStart / tEnd 生成进场动画，完全不读光标数据。
 // 每种预设都不依赖 id：遮挡用同色矩形，裁切用 image 自带视口，抖动用 discrete 关键帧。
-import { coverColor, drawRun, el, group, itemBody, lineBox, rand, shape, type RenderCtx } from './draw'
+import { coverColor, drawRun, el, group, itemBody, lineBox, markerAttrs, markSpans, rand, shape, type RenderCtx } from './draw'
 import { paceTable, PACE_SCALE } from './pace'
 import type { TimedItem } from './schedule'
 import type { AnimSpec, Key } from './smil'
@@ -134,6 +134,17 @@ const typeOn: Renderer = (ti, ctx) => {
     const lines = drawRun(run, ctx, { perLine: true })
     text = lines.map((l, i) => group(ctx, {}, [fade(spans[i].t0, spans[i].t0 + 0.06)], l)).join('')
   }
+  // 关键词：打字经过时荧光笔底纹从左往右扫出，之后保留
+  const color = run.markColor ?? ctx.doc.theme.accent
+  const markers = markSpans(run)
+    .map((m) => {
+      const sp = spans[m.line]
+      const at = (x: number) => sp.t0 + ((x - sp.x) / Math.max(1, sp.w)) * (sp.t1 - sp.t0)
+      const a = markerAttrs(m, color)
+      return shape('rect', a, ctx, [{ attr: 'width', keys: [{ t: at(m.x), v: 0 }, { t: at(m.x + m.w) + 0.12, v: a.width, ease: 'out' }] }])
+    })
+    .join('')
+  text = markers + text
   // 闪烁光标竖线：跟随打字位置，打完后闪两下消失
   const caretH = run.font.size * 1.1
   const cy = (i: number) => spans[i].y + (spans[i].h - caretH) / 2

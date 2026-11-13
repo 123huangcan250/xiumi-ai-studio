@@ -30,7 +30,7 @@ export function effectivePreset(item: ReplayItem): EnterPreset {
   return p
 }
 
-const chars = (item: ReplayItem) => [...item.content.replace(/\s+/g, '')].length
+const chars = (item: ReplayItem) => [...item.content.replace(/\*\*/g, '').replace(/\s+/g, '')].length
 
 /**
  * 给每个元素算出 tStart / tEnd：下一个元素在上一个完成约 60% 时开始（相邻重叠），
@@ -40,19 +40,21 @@ export function scheduleScene(scene: ReplayScene, doc: ReplayDoc): Timeline {
   const pace = doc.playback.pace
   const t = paceTable(pace)
   const layout = layoutScene(scene, doc)
+  const start = doc.playback.start ?? 0
+  const overlap = scene.overlap ?? t.overlap
   let prevStart = -1
   let prevDur = 0
   const items: TimedItem[] = layout.items.map((l) => {
     const preset = effectivePreset(l.item)
-    const dur = presetDuration(preset, pace, chars(l.item))
-    const auto = prevStart < 0 ? t.intro : prevStart + prevDur * t.overlap
+    const dur = presetDuration(preset, pace, chars(l.item), l.item.type === 'text' || l.item.type === 'quote')
+    const auto = prevStart < 0 ? start + t.intro : prevStart + prevDur * overlap
     const tStart = round(Math.max(0, auto + (l.item.delay ?? 0)))
     prevStart = tStart
     prevDur = dur
     const action = l.item.cursor?.action ?? defaultAction(preset)
     return { ...l, preset, action, tStart, tEnd: round(tStart + dur) }
   })
-  return { items, height: layout.height, overflow: layout.overflow, end: round(Math.max(t.intro, ...items.map((i) => i.tEnd))) }
+  return { items, height: layout.height, overflow: layout.overflow, end: round(Math.max(start + t.intro, ...items.map((i) => i.tEnd))) }
 }
 
 export const round = (v: number) => Math.round(v * 1000) / 1000

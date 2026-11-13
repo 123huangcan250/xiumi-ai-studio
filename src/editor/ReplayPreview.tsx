@@ -51,7 +51,9 @@ const fmt = (t: number) => `${t.toFixed(2)}s`
 export function ReplayPreviewModal({ block, onClose }: { block: ReplayBlock; onClose: () => void }) {
   const [showCursors, setShowCursors] = useState(block.props.cursors.show)
   const [speed, setSpeed] = useState(1)
-  const [t, setT] = useState(0)
+  // 接力播放的模块（设置了开始时间）从自己的开始时间预览
+  const from = block.props.playback.start ?? 0
+  const [t, setT] = useState(from)
   const [playing, setPlaying] = useState(true)
   const shown = useMemo(() => asAuto(block), [block])
   const out = useMemo(() => compileReplay(shown, {}, showCursors), [shown, showCursors])
@@ -59,7 +61,7 @@ export function ReplayPreviewModal({ block, onClose }: { block: ReplayBlock; onC
   const cycle = out.scenes[0]?.cycle
   const max = Math.max(...out.scenes.map((s) => s.cycle ?? s.total))
   const ref = useRef<HTMLDivElement>(null)
-  const tRef = useRef(0)
+  const tRef = useRef(from)
 
   const seek = useCallback(
     (v: number) => {
@@ -115,7 +117,7 @@ export function ReplayPreviewModal({ block, onClose }: { block: ReplayBlock; onC
           <button
             className="primary"
             onClick={() => {
-              if (!playing && tRef.current >= max) seek(0)
+              if (!playing && tRef.current >= max) seek(from)
               setPlaying(!playing)
             }}
             data-testid="replay-toggle"
@@ -124,7 +126,7 @@ export function ReplayPreviewModal({ block, onClose }: { block: ReplayBlock; onC
           </button>
           <button
             onClick={() => {
-              seek(0)
+              seek(from)
               setPlaying(true)
             }}
           >
