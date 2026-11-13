@@ -10,6 +10,7 @@ import { richToPlain, textToRich } from '../core/richtext'
 import type { Block, ImageRef, PicItem } from '../core/types'
 import { api, type Asset } from './api'
 import { ColorPicker, type Swatch } from './ColorPicker'
+import { ReplayPanel } from './ReplayPanel'
 import { shownRatio } from './Canvas'
 import { useStore } from './store'
 
@@ -489,6 +490,9 @@ export function PropsForm({ block }: { block: Block }) {
           <Select label="样式" value={p.variant} options={[['flag', '三色框'], ['circuit', '电路角框'], ['ticket', '车票']]} onChange={(v) => upd({ variant: v }, 'variant')} />
         </>
       )
+      break
+    case 'replay':
+      body = <ReplayPanel block={block} />
       break
     case 'photos': {
       const LAYOUTS: Record<number, [string, string][]> = { 2: [['even', '并排'], ['feature', '错落']], 3: [['even', '一行三张'], ['feature', '上一下二']], 4: [['even', '田字格'], ['feature', '上一下三']] }

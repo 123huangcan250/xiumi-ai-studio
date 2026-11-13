@@ -125,7 +125,7 @@ export function LeftPanel() {
     }
   }
 
-  const groups = ['结构', '文字', '图片', '信息'] as const
+  const groups = ['结构', '文字', '图片', '信息', '动效'] as const
   return (
     <aside className="panel left">
       <nav className="tabs">
