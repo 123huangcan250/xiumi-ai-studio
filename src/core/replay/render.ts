@@ -2,7 +2,7 @@
 import { css } from '../style'
 import { planCursors, renderCursors, type CursorPlan } from './cursors'
 import { drawRun, el, type RenderCtx } from './draw'
-import { mix } from './layout'
+import { gradientBands, mix } from './layout'
 import { estimateBytes, lintReplaySvg } from './lint'
 import { renderItem } from './presets'
 import { scheduleScene, type Timeline } from './schedule'
@@ -114,14 +114,10 @@ function background(doc: ReplayDoc, H: number, ctx: RenderCtx): string {
         `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">${stops.map((c, i) => el('stop', { offset: stops.length > 1 ? i / (stops.length - 1) : 0, 'stop-color': c })).join('')}</linearGradient></defs>` +
         el('rect', { width: 750, height: H, fill: `url(#${id})` })
     } else {
-      // 不依赖 id：32 条横向色带近似渐变
-      const n = 32
-      const bh = H / n
-      out = Array.from({ length: n }, (_, i) => {
-        const t = (i / (n - 1)) * (stops.length - 1)
-        const j = Math.min(stops.length - 2, Math.floor(t))
-        return el('rect', { y: Math.floor(i * bh), width: 750, height: Math.ceil(bh) + 1, fill: mix(stops[j], stops[j + 1], t - j) })
-      }).join('')
+      // 不依赖 id：横向色带近似渐变
+      out = gradientBands(doc, H)!
+        .map((b) => el('rect', { y: b.y, width: 750, height: b.h, fill: b.color }))
+        .join('')
     }
   } else {
     out = el('rect', { width: 750, height: H, fill: '#000000' })

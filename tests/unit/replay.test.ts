@@ -447,3 +447,17 @@ describe('导出给秀米', () => {
     }
   })
 })
+
+describe('渐变背景上打字', () => {
+  it('遮挡块按背景色带切段，每段颜色都和所在色带一致（不露暗边）', () => {
+    const d = sampleReplay()
+    d.textMode = 'svg-text'
+    const svg = scene0(d).svg
+    const doc = parse(svg)
+    const bandColors = new Set([...doc.querySelectorAll('svg > rect')].map((r) => r.getAttribute('fill')))
+    // 打字遮挡：有 x、width 两个动画的矩形
+    const covers = [...doc.querySelectorAll('rect')].filter((r) => r.querySelector('animate[attributeName="x"]') && r.querySelector('animate[attributeName="width"]'))
+    expect(covers.length).toBeGreaterThan(2)
+    for (const c of covers) expect(bandColors.has(c.getAttribute('fill'))).toBe(true)
+  })
+})

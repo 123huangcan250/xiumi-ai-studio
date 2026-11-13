@@ -1,6 +1,7 @@
 // 进场预设库：renderItem 只根据元素自己的 tStart / tEnd 生成进场动画，完全不读光标数据。
 // 每种预设都不依赖 id：遮挡用同色矩形，裁切用 image 自带视口，抖动用 discrete 关键帧。
 import { coverColor, drawRun, el, group, itemBody, lineBox, markerAttrs, markSpans, rand, shape, type RenderCtx } from './draw'
+import { gradientBands } from './layout'
 import { paceTable, PACE_SCALE } from './pace'
 import type { TimedItem } from './schedule'
 import type { AnimSpec, Key } from './smil'
@@ -119,14 +120,22 @@ const typeOn: Renderer = (ti, ctx) => {
   const frame = group(ctx, {}, [fade(s, s + 0.1)], itemBody(ti, ctx, { textOverride: '' }))
   let text: string
   if (solid) {
+    // 渐变背景由色带拼成：遮挡也按色带切成几段，每段用所在色带的颜色，不会露出一条暗边
+    const bands = ti.style.fill ? null : gradientBands(ctx.doc, ctx.sceneHeight)
     const covers = spans
       .map((sp) => {
-        const color = coverColor(ti, ctx, sp.y + sp.h / 2)!
         const pad = 4
-        return shape('rect', { x: sp.x + sp.w + pad, y: sp.y, width: 0, height: sp.h, fill: color }, ctx, [
-          { attr: 'x', keys: [{ t: sp.t0, v: sp.x - pad }, { t: sp.t1, v: sp.x + sp.w + pad, ease: 'linear' }] },
-          { attr: 'width', keys: [{ t: sp.t0, v: sp.w + pad * 2 }, { t: sp.t1, v: 0, ease: 'linear' }] },
-        ])
+        const strips = bands
+          ? bands.filter((b) => b.y < sp.y + sp.h && b.y + b.h > sp.y).map((b) => ({ y: Math.max(b.y, sp.y), h: Math.min(b.y + b.h, sp.y + sp.h) - Math.max(b.y, sp.y), color: b.color }))
+          : [{ y: sp.y, h: sp.h, color: coverColor(ti, ctx, sp.y + sp.h / 2)! }]
+        return strips
+          .map((st) =>
+            shape('rect', { x: sp.x + sp.w + pad, y: st.y, width: 0, height: st.h, fill: st.color }, ctx, [
+              { attr: 'x', keys: [{ t: sp.t0, v: sp.x - pad }, { t: sp.t1, v: sp.x + sp.w + pad, ease: 'linear' }] },
+              { attr: 'width', keys: [{ t: sp.t0, v: sp.w + pad * 2 }, { t: sp.t1, v: 0, ease: 'linear' }] },
+            ]),
+          )
+          .join('')
       })
       .join('')
     text = drawRun(run, ctx).join('') + covers

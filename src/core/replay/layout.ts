@@ -68,6 +68,20 @@ export function baseColor(doc: ReplayDoc): string {
 }
 
 /** 渐变背景在 y 处的颜色（打字遮挡用，和色带近似一致） */
+/** 不依赖 id 的渐变背景：横向色带（背景绘制和打字遮挡共用，保证颜色严丝合缝） */
+export const GRADIENT_BANDS = 32
+export function gradientBands(doc: ReplayDoc, height: number): { y: number; h: number; color: string }[] | null {
+  const bg = doc.canvas.background
+  if (bg.type !== 'gradient') return null
+  const stops = bg.value.split(',')
+  const bh = height / GRADIENT_BANDS
+  return Array.from({ length: GRADIENT_BANDS }, (_, i) => {
+    const t = (i / (GRADIENT_BANDS - 1)) * (stops.length - 1)
+    const j = Math.min(stops.length - 2, Math.floor(t))
+    return { y: Math.floor(i * bh), h: Math.ceil(bh) + 1, color: mix(stops[j], stops[j + 1], t - j) }
+  })
+}
+
 export function backgroundAt(doc: ReplayDoc, y: number, height: number): string | null {
   const bg = doc.canvas.background
   if (bg.type === 'color') return bg.value
