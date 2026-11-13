@@ -138,7 +138,19 @@ const typeOn: Renderer = (ti, ctx) => {
           .join('')
       })
       .join('')
-    text = drawRun(run, ctx).join('') + covers
+    // 遮挡块会盖住背景网格：在这几行上补画网格线，打字时不露出一块“没有网格”的空白
+    const grid = ctx.doc.canvas.background.grid
+    let gridOver = ''
+    if (grid && !ti.style.fill) {
+      const g = grid.size
+      for (const sp of spans) {
+        const x0 = sp.x - 4
+        const x1 = Math.max(sp.x + sp.w + 4, x0)
+        for (let x = Math.ceil(x0 / g) * g; x <= x1; x += g) gridOver += `M${x} ${sp.y}V${sp.y + sp.h}`
+        for (let y = Math.ceil(sp.y / g) * g; y < sp.y + sp.h; y += g) gridOver += `M${Math.round(x0)} ${y}H${Math.round(x1)}`
+      }
+    }
+    text = drawRun(run, ctx).join('') + covers + (gridOver ? el('path', { d: gridOver, stroke: grid!.color, 'stroke-width': 1, fill: 'none' }) : '')
   } else {
     const lines = drawRun(run, ctx, { perLine: true })
     text = lines.map((l, i) => group(ctx, {}, [fade(spans[i].t0, spans[i].t0 + 0.06)], l)).join('')
