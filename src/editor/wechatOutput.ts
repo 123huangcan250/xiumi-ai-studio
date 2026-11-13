@@ -190,7 +190,7 @@ export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void)
   // 秀米不接受内嵌图片：编辑回放的文字改用 SVG 文字输出，否则导入后文字全是空白
   const compiled = compileDoc(doc, { replaySvgText: true }).html
   // 编辑回放里的图片在 SVG 内部：秀米不接受内嵌图片，导入后也选不中、无法替换，只能先传到微信图床
-  if (/<image[^>]*\shref="\/media\//.test(compiled)) throw new Error('编辑回放里有本地图片：它们在动画内部，秀米不接受内嵌图片，导入后也无法替换。请先配置公众号接口，改用“上传图片并下载”；或把这些图片改用普通的图片模块')
+  if (/<image\s[^>]*href="\/media\//.test(compiled)) throw new Error('编辑回放里有本地图片：它们在动画内部，秀米不接受内嵌图片，导入后也无法替换。请先配置公众号接口，改用“上传图片并下载”；或把这些图片改用普通的图片模块')
   const replaced = replaceLocalImages(compiled, (url, i) => placeholder(i + 1, fitRatio(url)))
   const { urls } = replaced
   const files = xiumiFiles(replaced.html)
