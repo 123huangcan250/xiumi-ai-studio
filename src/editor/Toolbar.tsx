@@ -84,8 +84,10 @@ function ExportModal({ onClose }: { onClose: () => void }) {
   }, [])
   const base = compileDoc(doc)
   const safeName = (doc.title || 'article').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
-  const xiumi = xiumiReport(base.html)
-  const xiumiParts = splitForXiumi(xiumiSvgBoxes(base.html)).length
+  // 秀米的统计按“导给秀米的版本”算：编辑回放的文字在那里输出为 SVG 文字
+  const xiumiHtml = compileDoc(doc, { replaySvgText: true }).html
+  const xiumi = xiumiReport(xiumiHtml)
+  const xiumiParts = splitForXiumi(xiumiSvgBoxes(xiumiHtml)).length
   /** 超出秀米一次导入的上限时先提示会导出多份文件；用户取消就不下载 */
   const confirmParts = (parts: number) =>
     parts <= 1 || confirm(`这篇超出秀米一次导入的上限（约 13 万字符，超出部分会被秀米丢掉），将导出 ${parts} 份文件（打包为 zip）。\n\n请下载后解压，按「导入秀米-1.txt」到「导入秀米-${parts}.txt」的顺序依次导入秀米。\n\n点“确定”下载。`)

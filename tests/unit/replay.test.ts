@@ -430,3 +430,20 @@ describe('逐字打字的正文与关键词', () => {
     expect(parseMarks('a ** b')).toEqual({ plain: 'a ** b', marks: [] })
   })
 })
+
+describe('导出给秀米', () => {
+  it('编辑回放的文字改用 SVG 文字，不含内嵌图片（秀米会把内嵌图片丢掉，文字变空白）', async () => {
+    const { setReplayEnv } = await import('../../src/core/replay')
+    setReplayEnv({ rasterize: () => 'data:image/png;base64,AAAA' })
+    try {
+      const d = sampleReplay()
+      const doc: Doc = { id: 'd', title: 't', author: '', digest: '', themeId: THEMES[0].id, blocks: normalizeBlocks([{ id: 'r', type: 'replay', props: d }]), createdAt: 0, updatedAt: 0 }
+      expect(compileDoc(doc).html).toContain('data:image/png')
+      const xiumi = compileDoc(doc, { replaySvgText: true }).html
+      expect(xiumi).not.toContain('data:image')
+      expect(xiumi).toContain('>一篇推文，是这样被写')
+    } finally {
+      setReplayEnv({ rasterize: null })
+    }
+  })
+})

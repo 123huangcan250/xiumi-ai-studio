@@ -19,6 +19,8 @@ export interface CompileOptions {
   hints?: boolean
   /** 模块位于大型文本框内：按文本框的字号、颜色和间距自适应 */
   inBox?: boolean
+  /** 编辑回放的文字一律输出为 SVG 文字（秀米不接受内嵌图片，栅格化的文字导入后会变成空白） */
+  replaySvgText?: boolean
 }
 
 /** 给本地素材附加裁切参数（服务器用 sharp 生成对应尺寸） */
@@ -495,7 +497,8 @@ export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = 
 
 /** 编辑回放：每个模块用自己的 id 前缀，避免同一篇里多个回放的 id 冲突（点击开始方案） */
 export function compileReplay(block: Extract<Block, { type: 'replay' }>, opts: CompileOptions = {}, showCursors?: boolean): ReplayOutput {
-  return renderReplay(block.props, { mapImage: opts.mapImage, showCursors, idPrefix: `rp${block.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 6)}` })
+  const props = opts.replaySvgText && block.props.textMode !== 'svg-text' ? { ...block.props, textMode: 'svg-text' as const } : block.props
+  return renderReplay(props, { mapImage: opts.mapImage, showCursors, idPrefix: `rp${block.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 6)}` })
 }
 
 export interface CompileResult {
