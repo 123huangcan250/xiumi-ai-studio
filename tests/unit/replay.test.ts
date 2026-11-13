@@ -16,6 +16,7 @@ import {
   normalizeReplay,
   planCursors,
   renderReplay,
+  replayFinalTimes,
   sampleReplay,
   scheduleScene,
   validateReplay,
@@ -347,5 +348,17 @@ describe('动画被过滤时退化为静态成稿', () => {
     expect(texts).not.toContain('Ada')
     // 数字跳动只剩最终值
     expect(visibleTexts(out.svg).filter((t) => t === '12' || t === '48' || t === '3.6s')).toHaveLength(3)
+  })
+})
+
+describe('画布定格时间', () => {
+  it('等光标离场或 swarm 散开之后再定格，画面里不留光标', () => {
+    const doc = sampleReplay()
+    const finals = replayFinalTimes(doc)
+    doc.scenes.forEach((_, i) => {
+      const out = scene0(doc, i)
+      expect(finals[i]).toBeGreaterThanOrEqual(out.plan.end)
+      expect(finals[i]).toBeGreaterThanOrEqual(out.end)
+    })
   })
 })

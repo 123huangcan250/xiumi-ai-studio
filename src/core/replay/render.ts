@@ -149,7 +149,10 @@ function tapTrigger(ctx: RenderCtx, H: number): string {
   return `<g opacity="0"><set attributeName="opacity" to="1" begin="0s" end="${ctx.sid}.click"/>${prompt}</g>` + el('rect', { id: ctx.sid, width: 750, height: H, fill: '#000000', 'fill-opacity': 0 })
 }
 
-/** 画布定格时间：每个场景元素全部完成的时刻 */
+/** 画布定格时间：元素全部完成、光标离场（或 swarm 散开）之后 */
 export function replayFinalTimes(doc: ReplayDoc): number[] {
-  return doc.scenes.map((s) => scheduleScene(s, doc).end + TAIL)
+  return doc.scenes.map((s) => {
+    const tl = scheduleScene(s, doc)
+    return Math.max(tl.end + TAIL, planCursors(tl, doc, s).end)
+  })
 }
