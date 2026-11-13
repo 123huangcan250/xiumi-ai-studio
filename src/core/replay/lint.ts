@@ -39,7 +39,7 @@ export function lintReplaySvg(svg: string, opts: LintOptions): LintResult {
     if (refs) errors.add('包含 url(#id) 引用（当前为自动播放方案，不应依赖 id）')
     if (events) errors.add('包含跨元素触发 begin="x.click"（当前为自动播放方案）')
   } else if (ids || refs || events) {
-    warnings.add('点击开始方案依赖 id 和跨元素触发，公众号是否保留 id 待真机验证，失败时内容会一直停在“点击开始”')
+    warnings.add('点击开始方案依赖 id：2026-11-14 实测秀米→公众号会保留 id、同一个 SVG 内的跨元素触发有效；由文章开头的按钮触发其他 SVG 尚待确认（失败时显示静态成稿）')
   }
   for (const m of svg.matchAll(/<animate(?:Transform)?\b[^>]*>/g)) {
     const mode = m[0].match(/calcMode="(\w+)"/)?.[1] ?? 'linear'
