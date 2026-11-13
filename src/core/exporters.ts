@@ -75,6 +75,16 @@ export function docToMarkdown(doc: Doc): string {
       case 'frame':
         out.push(img(p.image?.src, p.caption), p.caption && `*${p.caption}*`)
         break
+      case 'replay':
+        for (const scene of p.scenes)
+          for (const it of scene.items) {
+            if (it.type === 'image') out.push(img(it.image?.src, it.label))
+            else if (it.type === 'title') out.push(`## ${it.content}`)
+            else if (it.type === 'quote') out.push(`> ${it.content}${it.label ? ` —— ${it.label}` : ''}`)
+            else if (it.type === 'stat') out.push(`**${it.content}** ${it.label ?? ''}`)
+            else if (it.type !== 'divider' && it.type !== 'shape') out.push(it.content)
+          }
+        break
     }
   }
   doc.blocks.forEach(walk)

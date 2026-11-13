@@ -1,6 +1,7 @@
 // 微信 HTML 编译器：文档 JSON → 全内联样式 HTML。
 // 画布、手机预览、复制、草稿箱都使用同一份输出，保证所见即所得。
 import { boxParts, boxTheme, KIT_RENDERERS, KIT_TYPES, kitEmptySlots, type KitCtx } from './kit'
+import { renderReplay, type ReplayOutput } from './replay/render'
 import { guardHtml } from './sanitize'
 import { css, esc, safeColor } from './style'
 import { resolveTheme } from './themes'
@@ -164,7 +165,7 @@ export function renderRich(rich: RichText | undefined, ctx: Ctx, align = 'justif
 // ---------- 模块 ----------
 
 type Renderer<T extends Block['type']> = (b: Extract<Block, { type: T }>, ctx: Ctx) => string
-type Renderers = { [K in Exclude<Block['type'], 'html' | (typeof KIT_TYPES)[number]>]: Renderer<K> }
+type Renderers = { [K in Exclude<Block['type'], 'html' | 'replay' | (typeof KIT_TYPES)[number]>]: Renderer<K> }
 
 const R: Renderers = {
   cover(b, ctx) {
@@ -474,6 +475,7 @@ export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = 
   const t = opts.inBox ? boxTheme(theme) : theme
   const ctx = new Ctx(t, opts)
   if (block.type === 'html') return renderHtml(block, ctx)
+  if (block.type === 'replay') return compileReplay(block, opts).html
   if (block.type === 'box') {
     const parts = boxParts(block.props, ctx)
     const kids = block.props.children.filter((c) => c.type !== 'box')
@@ -489,6 +491,11 @@ export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = 
   if (kit) return kit(block, ctx)
   const render = R[block.type as keyof Renderers] as Renderer<keyof Renderers>
   return render(block as never, ctx)
+}
+
+/** 编辑回放：每个模块用自己的 id 前缀，避免同一篇里多个回放的 id 冲突（点击开始方案） */
+export function compileReplay(block: Extract<Block, { type: 'replay' }>, opts: CompileOptions = {}, showCursors?: boolean): ReplayOutput {
+  return renderReplay(block.props, { mapImage: opts.mapImage, showCursors, idPrefix: `rp${block.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 6)}` })
 }
 
 export interface CompileResult {
@@ -512,10 +519,15 @@ export function blockGap(block: Block, next: Block | undefined, theme: Theme): n
 export function compileDoc(doc: Doc, opts: CompileOptions = {}): CompileResult {
   const theme = resolveTheme(doc)
   const failed: number[] = []
+  const replayIssues: string[] = []
   const parts = doc.blocks.map((b, i) => {
     let inner: string
     try {
-      inner = compileBlock(b, theme, opts)
+      if (b.type === 'replay') {
+        const r = compileReplay(b, opts)
+        replayIssues.push(...r.errors.map((e) => `${REPLAY_ERROR} ${e}`), ...r.warnings.map((w) => `编辑回放：${w}`))
+        inner = r.html
+      } else inner = compileBlock(b, theme, opts)
     } catch {
       // 单个模块数据损坏时跳过，不影响整篇输出
       failed.push(i + 1)
@@ -531,8 +543,12 @@ export function compileDoc(doc: Doc, opts: CompileOptions = {}): CompileResult {
   const empty = flatBlocks(doc.blocks).reduce((n, b) => n + kitEmptySlots(b), 0)
   if (empty) warnings.push(`有 ${empty} 个图片位置还没放图片，导出时会留空`)
   if (failed.length) warnings.unshift(`第 ${failed.join('、')} 个模块数据异常，已跳过输出`)
+  warnings.push(...new Set(replayIssues))
   return { html, charCount: html.length, warnings }
 }
+
+/** 编辑回放 lint 错误的前缀：导出面板据此禁止复制 */
+export const REPLAY_ERROR = '编辑回放 ✕'
 
 /** 针对公众号编辑器已知限制的静态检查（不等于真机验证） */
 export function lintWechatHtml(html: string): string[] {

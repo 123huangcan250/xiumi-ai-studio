@@ -10,7 +10,7 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
   switch (op.op) {
     case 'insert': {
       const type = op.block?.type
-      if (!isBlockType(type) || type === 'html') return { error: `不支持插入模块类型 ${type}` }
+      if (!isBlockType(type) || type === 'html' || type === 'replay') return { error: `不支持插入模块类型 ${type}` }
       // AI 返回的字段类型不可信（如 index 给数字）：按模块结构强制转换
       const block = createBlock(type, coerceProps(type, op.block.props) as any)
       const index = Math.max(0, Math.min(doc.blocks.length, Number(op.index ?? doc.blocks.length)))
@@ -34,6 +34,8 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
         if (!Object.keys(slots).length) return { error: `修改 ${op.id} 没有有效的文字槽位` }
         return { op: { op: 'update', id: op.id, props: { html: fillSlots(b.props.html, slots, { split: false }) }, slots, reason: op.reason } }
       }
+      // 编辑回放的结构较深，AI 只读（在属性面板里修改）
+      if (b.type === 'replay') return { error: '编辑回放模块不支持 AI 修改' }
       const props: Record<string, any> = coerceProps(b.type, op.props, true)
       // 文本框的子模块只能逐个修改，不能整体替换（避免丢内容）
       delete props.children
@@ -178,6 +180,8 @@ export function summarize(b: Block): string {
       return `${p.count} 张图 ${p.pics.map((x: any) => x.caption).filter(Boolean).join(' / ')}`
     case 'frame':
       return `图片框 ${[p.caption, p.label].filter(Boolean).join(' · ')}`
+    case 'replay':
+      return `编辑回放 ${p.scenes.length} 个场景：${p.scenes.flatMap((s: any) => s.items.map((i: any) => i.content)).filter(Boolean).join(' / ').slice(0, 160)}`
     case 'html':
       return `${p.label}：${String(p.html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)}`
     default:

@@ -8,7 +8,7 @@ import { api, type AppInfo, type VersionSummary } from './api'
 import { DataModal } from './DataModal'
 import { Modal } from './Modal'
 import { flushSave, normalizeDoc, saveNow, useStore } from './store'
-import { compileForWechat, copyRichText, download, standaloneHtml, xiumiPackage, xiumiUploaded, type ImageMode } from './wechatOutput'
+import { assertReplayOk, compileForWechat, copyRichText, download, standaloneHtml, xiumiPackage, xiumiUploaded, type ImageMode } from './wechatOutput'
 
 const ArticleImportModal = lazy(() => import('./ArticleImport').then((m) => ({ default: m.ArticleImportModal })))
 const ImportWizard = lazy(() => import('./ImportWizard').then((m) => ({ default: m.ImportWizard })))
@@ -102,7 +102,7 @@ function ExportModal({ onClose }: { onClose: () => void }) {
   const copy = async () => {
     setBusy('准备中…')
     try {
-      const compiled = compileForWechat(doc, mode, setBusy).then((r) => (setReport(r), r.html))
+      const compiled = compileForWechat(doc, mode, setBusy).then((r) => (setReport(r), assertReplayOk(r).html))
       const how = await copyRichText(compiled)
       notify(`已复制（${how === 'clipboard-api' ? '富文本' : '兼容模式'}），到公众号后台编辑器中 Ctrl+V 粘贴`)
     } catch (e: any) {
@@ -226,7 +226,7 @@ function DraftModal({ onClose }: { onClose: () => void }) {
   const push = async () => {
     try {
       setBusy('上传图片…')
-      const r = await compileForWechat(doc, 'wechat', setBusy)
+      const r = assertReplayOk(await compileForWechat(doc, 'wechat', setBusy))
       if (r.charCount >= 20000) throw new Error(`正文 HTML ${r.charCount} 字符，超过接口 20,000 字符上限。请精简模块，或使用“复制到公众号后台”。`)
       setBusy('创建草稿…')
       const res = await api.wechatDraft({ title: doc.title, author: doc.author, digest: doc.digest, html: r.html, cover: cover!, confirm: true })

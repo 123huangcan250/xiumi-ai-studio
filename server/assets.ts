@@ -1,6 +1,7 @@
 // 素材库：上传、按需裁切缩放（微信相册统一比例）、裁剪另存。
 import { existsSync } from 'node:fs'
-import { readFile, readdir, rm, stat } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { nanoid } from 'nanoid'
 import sharp from 'sharp'
@@ -102,4 +103,18 @@ export async function wechatReady(path: string): Promise<{ buf: Buffer; mime: st
 
 export async function cleanCache() {
   for (const f of await readdir(DIRS.cache)) await rm(join(DIRS.cache, f), { force: true })
+}
+
+/** 编辑回放的文字栅格图：按内容哈希存成 rp-*.png，不进素材列表，相同内容只存一份 */
+export async function saveGlyph(dataUrl: string): Promise<string | null> {
+  const m = dataUrl.match(/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/)
+  if (!m) return null
+  const buf = Buffer.from(m[1], 'base64')
+  if (buf.length > 2_000_000) return null
+  const meta = await sharp(buf).metadata().catch(() => null)
+  if (meta?.format !== 'png') return null
+  const file = `rp-${createHash('sha1').update(buf).digest('hex').slice(0, 24)}.png`
+  const path = join(DIRS.assets, file)
+  if (!existsSync(path)) await writeFile(path, buf)
+  return file
 }

@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { cloneBlock, createBlock, newId, normalizeBlocks } from '../core/blocks'
 import { applyOp, limitToSelection, validateOp } from '../core/ops'
 import { allThemes, registerTheme } from '../core/themes'
-import { findBlock, insertBlocksAt, insertionPoint, moveBlockTo, removeBlockById, replaceBlockWith, updateBlock } from '../core/tree'
+import { findBlock, insertBlocksAt, insertionPoint, moveBlockTo, removeBlockById, replaceBlockWith, TOP_ONLY, updateBlock } from '../core/tree'
 import type { Block, BlockType, Doc, DocOp, Theme } from '../core/types'
 import { api } from './api'
 
@@ -149,7 +149,8 @@ export const useStore = create<State>((set, get) => ({
   insertBlock(typeOrBlock, index, parentId = null) {
     const { doc, selectedId, commit } = get()
     const block = typeof typeOrBlock === 'string' ? createBlock(typeOrBlock) : typeOrBlock
-    const at = index === undefined ? insertionPoint(doc.blocks, selectedId, block.type === 'box') : { parentId: block.type === 'box' ? null : parentId, index }
+    const top = TOP_ONLY.has(block.type)
+    const at = index === undefined ? insertionPoint(doc.blocks, selectedId, top) : { parentId: top ? null : parentId, index }
     commit({ ...doc, blocks: insertBlocksAt(doc.blocks, at.parentId, at.index, [block]) })
     set({ selectedId: block.id })
     return block.id

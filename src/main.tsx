@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { canvasEnv, setReplayEnv } from './core/replay'
 import { ErrorBoundary } from './editor/ErrorBoundary'
 import { saveNow, useStore } from './editor/store'
 import './styles.css'
@@ -27,6 +28,9 @@ function Crashed({ error, reset }: { error: Error; reset: () => void }) {
     </div>
   )
 }
+
+// 编辑回放：文字测量与栅格化使用浏览器 canvas
+setReplayEnv(canvasEnv(document))
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

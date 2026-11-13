@@ -76,9 +76,12 @@ export function insertBlocksAt(blocks: Block[], parentId: string | null, index: 
 }
 
 /** 把模块移到某个位置（同层排序、移入或移出文本框）；index 指移除该模块之后的位置 */
+/** 只能放在顶层、不能放进文本框的模块 */
+export const TOP_ONLY = new Set(['box', 'replay'])
+
 export function moveBlockTo(blocks: Block[], id: string, parentId: string | null, index: number): Block[] {
   const at = findBlock(blocks, id)
-  if (!at || (parentId && at.block.type === 'box') || parentId === id) return blocks
+  if (!at || (parentId && TOP_ONLY.has(at.block.type)) || parentId === id) return blocks
   return insertBlocksAt(removeBlockById(blocks, id), parentId, index, [at.block])
 }
 

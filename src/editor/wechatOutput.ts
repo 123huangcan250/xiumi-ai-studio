@@ -1,6 +1,6 @@
 // 输出到微信：图片处理（内嵌 / 上传微信 / 原链接）+ 富文本剪贴板。
 // 剪贴板写入方式参考 doocs/md（WTFPL）：ClipboardItem 优先，execCommand 兜底；首尾加零高度段落。
-import { compileDoc, css, type CompileResult } from '../core/compiler'
+import { compileDoc, css, REPLAY_ERROR, type CompileResult } from '../core/compiler'
 import { fitRatio } from '../core/photos'
 import { asciiHtml, makeZip, replaceLocalImages, splitForXiumi, xiumiSvgBoxes } from '../core/xiumiExport'
 import type { Doc } from '../core/types'
@@ -29,7 +29,15 @@ async function toDataUrl(url: string): Promise<string> {
 }
 
 export async function compileForWechat(doc: Doc, mode: ImageMode, onProgress?: (msg: string) => void): Promise<CompileResult> {
-  const urls = collectImageUrls(doc).filter((u) => u.startsWith('/media/'))
+  const all = collectImageUrls(doc)
+  // 编辑回放的文字栅格图是 data URL：上传到微信前先存成本地素材，之后和普通图片一样处理
+  const glyphs = mode === 'embed' ? [] : all.filter((u) => u.startsWith('data:image/png'))
+  const glyphMap: Record<string, string> = {}
+  for (let i = 0; i < glyphs.length; i += 40) {
+    onProgress?.(`保存文字图片 ${Math.min(i + 40, glyphs.length)}/${glyphs.length}`)
+    Object.assign(glyphMap, await api.replayGlyphs(glyphs.slice(i, i + 40)))
+  }
+  const urls = [...new Set([...all.filter((u) => u.startsWith('/media/')), ...Object.values(glyphMap)])]
   const map: Record<string, string> = {}
   if (mode === 'embed') {
     let i = 0
@@ -43,8 +51,15 @@ export async function compileForWechat(doc: Doc, mode: ImageMode, onProgress?: (
   } else {
     for (const u of urls) map[u] = location.origin + u
   }
-  const r = compileDoc(doc, { mapImage: (u) => map[u] ?? u })
+  const r = compileDoc(doc, { mapImage: (u) => map[glyphMap[u] ?? u] ?? glyphMap[u] ?? u })
   if (mode === 'embed') r.warnings = r.warnings.filter((w) => !w.includes('20,000'))
+  return r
+}
+
+/** 编辑回放没有通过 wechat-svg-lint 时停止导出（错误会显示在导出报告里） */
+export function assertReplayOk(r: CompileResult): CompileResult {
+  const bad = r.warnings.filter((w) => w.startsWith(REPLAY_ERROR))
+  if (bad.length) throw new Error(`编辑回放未通过检查，已停止导出：${bad[0].slice(REPLAY_ERROR.length).trim()}`)
   return r
 }
 
