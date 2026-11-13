@@ -125,6 +125,7 @@ function scene(v: unknown): ReplayScene {
   if (s.height !== undefined && s.height !== null && s.height !== '') out.height = Math.round(num(s.height, 1100, 200, 6000))
   if (s.overlap !== undefined) out.overlap = num(s.overlap, 0.6, 0.1, 1)
   if (s.padding !== undefined) out.padding = Math.round(num(s.padding, 88, 0, 300))
+  if (s.gap !== undefined) out.gap = Math.round(num(s.gap, 24, 0, 200))
   return out
 }
 

@@ -68,6 +68,8 @@ export interface ReplayScene {
   overlap?: number
   /** 上下留白（默认 88 / 96），正文场景可以收紧 */
   padding?: number
+  /** 元素之间的间距（不填按类型取默认值） */
+  gap?: number
   items: ReplayItem[]
 }
 

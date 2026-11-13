@@ -18,7 +18,9 @@ function freeze(root: HTMLElement | null, times: number[]) {
     // 只处理每个场景的根 svg
     if (svg.parentElement?.closest('svg')) return
     svg.pauseAnimations()
-    svg.setCurrentTime(times[i] ?? 0)
+    // 时间异常时停在开头，不让整个模块报错
+    const t = times[i]
+    svg.setCurrentTime(Number.isFinite(t) ? t : 0)
   })
 }
 

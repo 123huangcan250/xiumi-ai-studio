@@ -262,7 +262,7 @@ function layoutFlow(scene: ReplayScene, doc: ReplayDoc): SceneLayout {
   while (i < list.length) {
     const item = list[i]
     const family = INLINE[item.type]
-    if (out.length) y += MARGIN[item.type]
+    if (out.length) y += scene.gap ?? MARGIN[item.type]
     if (!family) {
       const l = measureItem(item, i, doc, CONTENT_W)
       out.push(shift(l, PAD_X + alignOffset(l, CONTENT_W), y))
