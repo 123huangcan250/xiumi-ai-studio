@@ -306,7 +306,7 @@ describe('wechat-svg-lint', () => {
     expect(lintReplaySvg(svg, { idsAllowed: false }).errors).toHaveLength(3)
     const tap = lintReplaySvg(svg, { idsAllowed: true })
     expect(tap.errors).toEqual([])
-    expect(tap.warnings[0]).toContain('待真机验证')
+    expect(tap.warnings[0]).toContain('尚待确认')
   })
   it('图片地址：本机与外链报错，内嵌警告，微信图片通过', () => {
     const r = lintReplaySvg('<svg><image href="/media/a.jpg"/><image href="https://example.com/a.png"/><image href="data:image/png;base64,AA"/><image href="https://mmbiz.qpic.cn/a/0"/></svg>', { idsAllowed: false })
