@@ -1,0 +1,11 @@
+// 编辑回放：对外接口
+export type * from './types'
+export { defaultReplay, makeItem, makeScene, normalizeReplay, validateReplay, ITEM_TYPES, ITEM_LABEL, PRESETS, PRESET_LABEL, DEFAULT_PRESET, PACES } from './schema'
+export { scheduleScene, effectivePreset, type Timeline, type TimedItem } from './schedule'
+export { layoutScene, CANVAS_W } from './layout'
+export { planCursors, type CursorPlan } from './cursors'
+export { renderReplay, replayFinalTimes, type ReplayOutput, type SceneOutput } from './render'
+export { lintReplaySvg, estimateBytes } from './lint'
+export { setReplayEnv, canvasEnv, wrapText, approxMeasure } from './text'
+export { PACE_BASE, PACE_SCALE, PRESET_BASE } from './pace'
+export { sampleReplay } from './sample'

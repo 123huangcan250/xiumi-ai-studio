@@ -14,6 +14,8 @@ export interface ReplayBackground {
   value: string
   /** type = image 时的背景图（素材库或微信图片） */
   image?: ImageRef
+  /** 蓝图网格（可选）：线条颜色与间距 */
+  grid?: { color: string; size: number }
 }
 
 export interface ReplayStyle {
@@ -60,6 +62,8 @@ export interface ReplayScene {
   /** 不填时 flow 布局按内容自动计算，absolute 布局默认 1100 */
   height?: number
   layout: 'flow' | 'absolute'
+  /** 收尾：光标各自离场，或全部聚到焦点绕圈后散开 */
+  finale: 'exit' | 'swarm'
   items: ReplayItem[]
 }
 
@@ -75,43 +79,4 @@ export interface ReplayDoc {
   scenes: ReplayScene[]
 }
 
-// ---------- 时间轴（引擎输出，与光标无关） ----------
-
-export interface TimedItem {
-  item: ReplayItem
-  index: number
-  /** 布局后的位置与尺寸（SVG 坐标，宽 750） */
-  box: { x: number; y: number; w: number; h: number }
-  preset: EnterPreset
-  tStart: number
-  tEnd: number
-}
-
-export interface Timeline {
-  items: TimedItem[]
-  /** 场景高度 */
-  height: number
-  /** 最后一个元素完成的时间 */
-  end: number
-}
-
-// ---------- 光标轨迹（由时间轴反推，只用于展示） ----------
-
-export interface CursorStop {
-  /** 到达时间 */
-  t: number
-  x: number
-  y: number
-  action: CursorAction
-  /** 对应的元素序号 */
-  item: number
-}
-
-export interface CursorTrack {
-  who: number
-  color: string
-  name?: string
-  spawn: { t: number; x: number; y: number }
-  stops: CursorStop[]
-  exit: { t: number; x: number; y: number }
-}
+// 时间轴（TimedItem / Timeline）由引擎生成，定义在 schedule.ts；光标轨迹定义在 cursors.ts
