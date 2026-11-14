@@ -41,3 +41,8 @@ The config refuses reuse of a running server, disables environment-file credenti
 Inline red/green proposal review, multi-selection, typography commands and image handles are separate behavior ports. They must keep upstream descendant/filter/strict/insert policies, slotColors and replay/ColorPicker behavior. This shell deliberately does not replace any of those contracts.
 
 Verification manifest: visual-evidence/editorial-shell/verification-manifest.json records all 323 source hashes (including font resources), source invariance across gates, and test-file hashes/classification. The existing tests/unit directory is explicitly mixed/not strictly classified; directory names are not treated as unit-coverage proof.
+
+## CI theme determinism follow-up
+The standard `playwright.config.ts` now seeds only test-browser local storage with light mode, using the exact dev localhost:5273 or packaged 127.0.0.1:5284 origin. Product automatic local-time behavior is unchanged. CI runs the nine shell scenarios after the original E2E command with SHELL_PHASE=after; shell failure traces/screenshots have an independent test-results-shell directory included in artifacts.
+
+Three configuration regressions failed before this patch and passed afterwards. They verify both origins and CI/artifact wiring. Standard lint/types pass. Discovery confirms 43 existing cases for both dev and packaged configs and nine shell cases. No new full E2E run or packaged EXE execution was performed for this configuration-only follow-up; remote dual-Node CI remains to be verified. Explicit webServer array type annotations resolve a latent optional-env inference error exposed by importing the configuration in the new tests; server commands and environments are unchanged.

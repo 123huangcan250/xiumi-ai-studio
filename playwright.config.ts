@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { defineConfig, devices } from '@playwright/test'
+import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/test'
 
 // E2E 使用独立端口与数据目录，不影响日常使用的 data/
 // E2E_TARGET=packaged（pnpm e2e:package）时改为测试打包好的 XIUMI AI Studio.exe
@@ -7,7 +7,7 @@ const packaged = process.env.E2E_TARGET === 'packaged'
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version
 const exe = `release/XIUMI-AI-Studio-${version}-win-x64/XIUMI AI Studio.exe`
 
-const devServers = [
+const devServers: PlaywrightTestConfig['webServer'] = [
   {
     // 每次运行前清空 E2E 数据目录
     command: `node -e "require('fs').rmSync('data-e2e',{recursive:true,force:true})" && npx tsx server/index.ts`,
@@ -23,7 +23,7 @@ const devServers = [
     reuseExistingServer: false,
   },
 ]
-const packagedServer = [
+const packagedServer: PlaywrightTestConfig['webServer'] = [
   {
     command: `node -e "require('fs').rmSync('data-e2e-pkg',{recursive:true,force:true})" && "${exe}"`,
     env: { XIUMI_DATA_DIR: 'data-e2e-pkg', XIUMI_PORT: '5284', XIUMI_NO_BROWSER: '1', XIUMI_NO_PAUSE: '1' },
@@ -44,6 +44,8 @@ export default defineConfig({
   use: {
     ...devices['Desktop Chrome'],
     baseURL: packaged ? 'http://127.0.0.1:5284' : 'http://localhost:5273',
+    // Test-only determinism: product automatic day/night mode remains unchanged.
+    storageState: { cookies: [], origins: [{ origin: packaged ? 'http://127.0.0.1:5284' : 'http://localhost:5273', localStorage: [{ name: 'xiumi-color-mode', value: 'light' }] }] },
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
     permissions: ['clipboard-read', 'clipboard-write'],

@@ -1670,6 +1670,21 @@
       "path": "tests/unit/xiumiLimits.test.ts",
       "layer": "existing-mixed-not-strictly-classified",
       "sha256": "B7331582291B4D026D27D8D757B844B845AC2DE57973DA4DFBCCCE1AAF9FD466"
+    },
+    {
+      "sha256": "FCE0E07DB7634D954A44C2D24F9DF41D1D43BCFC3FC0C31CCC63E0C5F7F88960",
+      "layer": "test-configuration-unit",
+      "path": "tests/unit/editorialShellConfig.test.ts"
     }
-  ]
+  ],
+  "ciDeterminismFollowup": {
+    "shellDiscovery": 9,
+    "remoteCIPending": true,
+    "devDiscovery": 43,
+    "lint": 0,
+    "configRegressions": "3 red then 3 green",
+    "productionSourceUnchanged": true,
+    "types": 0,
+    "packagedDiscovery": 43
+  }
 }
