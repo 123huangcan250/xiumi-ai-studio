@@ -47,3 +47,10 @@ it('does not cache aborted failures or late stale results, allowing a fresh requ
  const stop=new AbortController();const bad=queue.get('other',async()=>{stop.abort();throw new DOMException('Cancelled','AbortError')},stop.signal);await expect(bad).rejects.toThrow()
  expect(await queue.get('other',fresh,new AbortController().signal)).toBe('fresh')
 })
+it('serializes multi-selection separately from legacy primary id without losing suggestion abort signal',async()=>{
+ const ctrl=new AbortController();const fetch=vi.fn(async(_url:unknown,_init?:RequestInit)=>new Response('{}'));vi.stubGlobal('fetch',fetch)
+ await api.aiEdit({},'edit',undefined,'b',['a','b'])
+ expect(JSON.parse(fetch.mock.calls[0][1]!.body as string)).toMatchObject({selectedId:'b',selectedIds:['a','b']})
+ await api.aiSuggestInstruction({},undefined,'b',ctrl.signal,['a','b'])
+ expect(JSON.parse(fetch.mock.calls[1][1]!.body as string)).toMatchObject({selectedId:'b',selectedIds:['a','b']});expect(fetch.mock.calls[1][1]!.signal).toBe(ctrl.signal)
+})

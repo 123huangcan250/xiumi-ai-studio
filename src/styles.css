@@ -519,3 +519,14 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .rp-asset > img { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; }
 .rp-asset-grid { flex-basis: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-height: 200px; overflow: auto; }
 .rp-asset-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: pointer; }
+
+/* Editor-only selection controls. Never inherit into article content. */
+.canvas-wrap > .selection-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 12px; background: var(--panel); color: var(--text); border-bottom: 1px solid var(--line); font-size: 14px; }
+.canvas-wrap > .selection-bar button { min-height: 44px; font-size: 14px; }
+.canvas-wrap > .selection-bar button[aria-pressed="true"] { border-color: currentColor; font-weight: 600; }
+.block > .block-select-toggle { position: relative; z-index: 4; display: block; min-height: 44px; min-width: 64px; margin: 0 0 8px auto; font-size: 14px; line-height: 22px; background: var(--panel); color: var(--text); border: 1px solid currentColor; }
+.block > .block-select-toggle[aria-pressed="true"] { font-weight: 700; border-width: 2px; }
+:root[data-color-mode='dark'] :is(.canvas-wrap > .selection-bar,.block > .block-select-toggle) { background: var(--ui-panel); color: var(--ui-text); }
+:root[data-color-mode='dark'] .canvas-wrap > .selection-bar button { color: var(--ui-text); background: var(--ui-panel); border-color: var(--ui-line); }
+[data-testid='multi-selection-properties'] li { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .canvas-wrap > .selection-bar { gap: 4px 8px; padding: 4px 8px; } .canvas-wrap > .selection-bar button { min-height: 44px; } }
