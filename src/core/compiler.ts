@@ -11,6 +11,8 @@ import type { Block, Doc, ImageRef, RichNode, RichText, Theme } from './types'
 export { css, esc }
 
 export interface CompileOptions {
+  /** Source preflight only; never enable for the final export. */
+  replayPendingImageUpload?: boolean
   /** 把（已附加裁切参数的）图片地址映射为最终地址：绝对 URL / base64 / mmbiz URL */
   mapImage?: (url: string) => string
   /** 非公众号文章链接的处理方式；微信会过滤外链，默认转成文字 */
@@ -527,7 +529,7 @@ export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = 
 /** 编辑回放：每个模块用自己的 id 前缀，避免同一篇里多个回放的 id 冲突（点击开始方案） */
 export function compileReplay(block: Extract<Block, { type: 'replay' }>, opts: CompileOptions = {}, showCursors?: boolean): ReplayOutput {
   const props = opts.replaySvgText && block.props.textMode !== 'svg-text' ? { ...block.props, textMode: 'svg-text' as const } : block.props
-  return renderReplay(props, { mapImage: opts.mapImage, showCursors, idPrefix: `rp${block.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 6)}` })
+  return renderReplay(props, { pendingLocalImages: opts.replayPendingImageUpload, mapImage: opts.mapImage, showCursors, idPrefix: `rp${block.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 6)}` })
 }
 
 export interface CompileResult {

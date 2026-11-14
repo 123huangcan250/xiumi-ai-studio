@@ -212,7 +212,7 @@ export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void)
 export function prepareXiumiUpload(doc: Doc): { parts: number; upload: (onProgress?: (msg: string) => void) => Promise<XiumiDownload> } {
   const snapshot = structuredClone(doc)
   const urls = new Set<string>()
-  const source = assertReplayOk(compileDoc(snapshot, { mapImage: url => { urls.add(url); return url } }))
+  const source = assertReplayOk(compileDoc(snapshot, { replayPendingImageUpload: true, mapImage: url => { urls.add(url); return url } }))
   const parts = checkedXiumiParts(source.html).length
   return { parts, upload: async onProgress => {
     const { html } = assertReplayOk(await compileWechatSources(snapshot, 'wechat', [...urls], onProgress))

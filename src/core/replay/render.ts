@@ -10,6 +10,7 @@ import type { PlayMode } from './smil'
 import type { ReplayDoc, ReplayScene } from './types'
 
 export interface ReplayRenderOptions {
+  pendingLocalImages?: boolean
   mapImage?: (url: string) => string
   /** 覆盖 doc.cursors.show（预览器的“显示/隐藏光标层”与解耦测试） */
   showCursors?: boolean
@@ -51,7 +52,7 @@ export function renderReplay(doc: ReplayDoc, opts: ReplayRenderOptions = {}): Re
   const prefix = (opts.idPrefix ?? 'rp').replace(/[^\w-]/g, '').slice(0, 16) || 'rp'
   const scenes = doc.scenes.map((scene, i) => renderScene(scene, doc, { ...opts, idsAllowed, sid: `${prefix}${i}`, warn: (m) => warnings.add(m) }))
   // 整个模块一起检查，同类问题合并成一条
-  const lint = lintReplaySvg(scenes.map((s) => s.svg).join(''), { idsAllowed })
+  const lint = lintReplaySvg(scenes.map((s) => s.svg).join(''), { idsAllowed, pendingLocalImages: opts.pendingLocalImages })
   lint.errors.forEach((e) => errors.add(e))
   lint.warnings.forEach((w) => warnings.add(w))
   let total = 0
