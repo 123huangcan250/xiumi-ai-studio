@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { compileDoc, variantUrl } from '../core/compiler'
 import { docToMarkdown } from '../core/exporters'
 import { displayHtml } from '../core/images'
@@ -7,7 +7,7 @@ import { AiSettingsModal } from './AiSettingsModal'
 import { api, type AppInfo, type VersionSummary } from './api'
 import { DataModal } from './DataModal'
 import { Modal } from './Modal'
-import { flushSave, normalizeDoc, saveNow, useStore } from './store'
+import { flushSave, normalizeDoc, saveConflictCopy, saveNow, useStore } from './store'
 import { assertReplayOk, compileForWechat, copyRichText, download, standaloneHtml, xiumiPackage, prepareXiumiUpload, type ImageMode } from './wechatOutput'
 
 const ArticleImportModal = lazy(() => import('./ArticleImport').then((m) => ({ default: m.ArticleImportModal })))
@@ -26,6 +26,9 @@ export function PhonePreview({ html, title, onClose }: { html: string; title: st
 }
 
 function VersionsModal({ onClose }: { onClose: () => void }) {
+  const active = useRef(true)
+  const request = useRef(0)
+  useEffect(() => { active.current = true; return () => { active.current = false } }, [])
   const doc = useStore((s) => s.doc)
   const { commit, notify } = useStore.getState()
   const [list, setList] = useState<VersionSummary[]>([])
@@ -56,7 +59,14 @@ function VersionsModal({ onClose }: { onClose: () => void }) {
           </div>
           <button
             onClick={async () => {
+              const expected = useStore.getState().doc
+              const generation = ++request.current
               const { doc: old } = await api.version(doc.id, v.id)
+              if (!active.current || generation !== request.current) return
+              if (useStore.getState().doc !== expected) {
+                notify('等待期间文稿已变化，未覆盖新编辑。请重试恢复。', 'error')
+                return
+              }
               commit(normalizeDoc({ ...old, id: doc.id }))
               notify(`已恢复「${v.label}」`)
               onClose()
@@ -270,6 +280,7 @@ export function Toolbar() {
   const doc = useStore((s) => s.doc)
   const saveStatus = useStore((s) => s.saveStatus)
   const saveError = useStore((s) => s.saveError)
+  const saveConflict = useStore((s) => s.saveConflict)
   const canUndo = useStore((s) => s.past.length > 0)
   const canRedo = useStore((s) => s.future.length > 0)
   const { undo, redo, setDocFields } = useStore.getState()
@@ -317,6 +328,7 @@ export function Toolbar() {
       <span className={`save ${saveStatus}`} title={saveError} data-testid="save-status">
         {{ saved: '已保存', dirty: '未保存', saving: '保存中…', error: '保存失败' }[saveStatus]}
       </span>
+      {saveConflict && <button onClick={() => void saveConflictCopy()} data-testid="save-conflict-copy">另存冲突副本</button>}
       <div className="spacer" />
       <button onClick={undo} disabled={!canUndo} title="撤销 Ctrl+Z">↶ 撤销</button>
       <button onClick={redo} disabled={!canRedo} title="重做 Ctrl+Y">↷ 重做</button>

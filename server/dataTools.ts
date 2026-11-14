@@ -8,6 +8,7 @@ import type { Writable } from 'node:stream'
 import { Unzip, UnzipInflate, Zip, ZipDeflate, ZipPassThrough } from 'fflate'
 import { APP_ID, DATA, DATA_ENV } from './paths'
 import { readJson, writeJson } from './store'
+import { restoreProjectFile } from './projectStore'
 
 export const CATEGORIES = {
   projects: { label: '项目', re: /^projects\/[\w-]{1,64}\.json$/ },
@@ -123,7 +124,9 @@ export async function applyMerge(plan: MergePlan): Promise<MergeResult> {
     const to = join(target, rel)
     await mkdir(dirname(to), { recursive: true })
     try {
-      await copyFile(join(source, rel), to, constants.COPYFILE_EXCL)
+      const copy = () => copyFile(join(source, rel), to, constants.COPYFILE_EXCL)
+      if (category === 'projects') await restoreProjectFile(join(source, rel), to)
+      else await copy()
       copied++
       if (category === 'assets') addedAssets.add(basename(rel))
     } catch (e) {

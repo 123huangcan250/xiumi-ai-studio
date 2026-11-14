@@ -108,6 +108,10 @@ export interface MergeResult {
   envCopied: boolean
 }
 
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) { super(message); this.name = 'ApiError' }
+}
+
 async function req<T>(method: string, url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
   const init: RequestInit = { method, ...(signal ? { signal } : {}) }
   if (body instanceof FormData) init.body = body
@@ -117,7 +121,7 @@ async function req<T>(method: string, url: string, body?: unknown, signal?: Abor
   }
   const res = await fetch(url, init)
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error ?? `${res.status} ${res.statusText}`)
+  if (!res.ok) throw new ApiError(data.error ?? `${res.status} ${res.statusText}`, res.status)
   return data as T
 }
 
@@ -141,7 +145,7 @@ export const api = {
 
   projects: () => req<ProjectSummary[]>('GET', '/api/projects'),
   project: (id: string) => req<Doc>('GET', `/api/projects/${id}`),
-  saveProject: (doc: Doc) => req<{ updatedAt: number }>('PUT', `/api/projects/${doc.id}`, doc),
+  saveProject: (doc: Doc) => req<{ updatedAt: number; revision?: string }>('PUT', `/api/projects/${doc.id}`, doc),
   deleteProject: (id: string) => req('DELETE', `/api/projects/${id}`),
   versions: (id: string) => req<VersionSummary[]>('GET', `/api/projects/${id}/versions`),
   saveVersion: (doc: Doc, label: string) => req<VersionSummary>('POST', `/api/projects/${doc.id}/versions`, { doc, label }),

@@ -19,12 +19,13 @@ import { isRoleId } from '../src/core/roles'
 import { publicAiSettings, resolveDraftProfile, saveAiSettings } from './settings'
 import { importFile } from './importer'
 import { collection, DIRS, ROOT, safeId } from './store'
+import { projectCollection } from './projectStore'
 import { addDraft, uploadContentImage, uploadCover, validateDraft, wechatStatus } from './wechat'
 
 type Doc = { id: string; title: string; updatedAt: number; [k: string]: any }
 type Version = { id: string; projectId: string; label: string; createdAt: number; doc: Doc }
 
-const projects = collection<Doc>(DIRS.projects)
+const projects = projectCollection<Doc>(DIRS.projects)
 const templates = collection<{ id: string; name: string; blocks: unknown[]; themeId?: string; themeOverrides?: unknown; roles?: Record<string, string>; createdAt: number }>(DIRS.templates)
 const themes = collection<{ id: string; name: string }>(DIRS.themes)
 const versionsOf = (pid: string) => collection<Version>(join(DIRS.versions, safeId(pid)))
@@ -245,8 +246,8 @@ app.get('/api/projects/:id', h(async (req, res) => {
 }))
 app.put('/api/projects/:id', h(async (req, res) => {
   const doc = { ...req.body, id: safeId(String(req.params.id)), updatedAt: Date.now() }
-  await projects.put(doc)
-  res.json({ ok: true, updatedAt: doc.updatedAt })
+  const saved = await projects.put(doc)
+  res.json({ ok: true, updatedAt: saved.updatedAt, revision: saved.revision })
 }))
 app.delete('/api/projects/:id', h(async (req, res) => {
   await projects.remove(String(req.params.id))

@@ -12,6 +12,7 @@ import { KIT_ITEMS } from './editor/kitItems'
 import { LeftPanel } from './editor/LeftPanel'
 import { ReplayHost } from './editor/ReplayPreview'
 import { RightPanel } from './editor/RightPanel'
+import { loadIfUnchanged } from './editor/documentNavigation'
 import { emptyDoc, loadCustomThemes, saveNow, useStore } from './editor/store'
 import { listenForAiSettings } from './editor/suggestionQueue'
 import { Toolbar } from './editor/Toolbar'
@@ -91,25 +92,30 @@ export default function App() {
   useShortcuts()
 
   useEffect(() => {
+    let active = true
+    const expected = useStore.getState().doc
     ;(async () => {
       await loadCustomThemes()
+      if (!active) return
       try {
         const list = await api.projects()
-        if (list.length) useStore.getState().load(await api.project(list[0].id))
-        else {
-          useStore.getState().load(emptyDoc())
+        if (!active) return
+        if (list.length) {
+          const initial = await api.project(list[0].id)
+          if (active) loadIfUnchanged(initial, expected)
+        } else if (loadIfUnchanged(emptyDoc(), expected)) {
           await saveNow()
         }
       } catch (e: any) {
-        useStore.getState().notify(`无法连接本地服务：${e.message}（请用 pnpm dev 启动）`, 'error')
+        if (active) useStore.getState().notify(`无法连接本地服务：${e.message}（请用 pnpm dev 启动）`, 'error')
       }
-      setReady(true)
+      if (active) setReady(true)
     })()
     const beforeUnload = (e: BeforeUnloadEvent) => {
       if (useStore.getState().saveStatus !== 'saved') e.preventDefault()
     }
     window.addEventListener('beforeunload', beforeUnload)
-    return () => window.removeEventListener('beforeunload', beforeUnload)
+    return () => { active = false; window.removeEventListener('beforeunload', beforeUnload) }
   }, [])
 
   const onDragStart = (e: DragStartEvent) => {
