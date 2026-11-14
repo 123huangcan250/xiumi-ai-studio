@@ -2,7 +2,7 @@
 // 剪贴板写入方式参考 doocs/md（WTFPL）：ClipboardItem 优先，execCommand 兜底；首尾加零高度段落。
 import { compileDoc, css, REPLAY_ERROR, type CompileResult } from '../core/compiler'
 import { fitRatio } from '../core/photos'
-import { asciiHtml, makeZip, replaceLocalImages, splitForXiumi, xiumiSvgBoxes } from '../core/xiumiExport'
+import { asciiHtml, makeZip, replaceLocalImages, checkedXiumiParts } from '../core/xiumiExport'
 import type { Doc } from '../core/types'
 import { api } from './api'
 
@@ -29,7 +29,10 @@ async function toDataUrl(url: string): Promise<string> {
 }
 
 export async function compileForWechat(doc: Doc, mode: ImageMode, onProgress?: (msg: string) => void): Promise<CompileResult> {
-  const all = collectImageUrls(doc)
+  return compileWechatSources(doc, mode, collectImageUrls(doc), onProgress)
+}
+
+async function compileWechatSources(doc: Doc, mode: ImageMode, all: string[], onProgress?: (msg: string) => void): Promise<CompileResult> {
   // 编辑回放的文字栅格图是 data URL：上传到微信前先存成本地素材，之后和普通图片一样处理
   const glyphs = mode === 'embed' ? [] : all.filter((u) => u.startsWith('data:image/png'))
   const glyphMap: Record<string, string> = {}
@@ -165,7 +168,7 @@ const XIUMI_NOTES = (images: number, parts: number) =>
 /** 秀米导入文件：SVG 加盒子、按长度上限分段、写成纯 ASCII；一个文件直接给 txt，多个打成 zip 并附说明 */
 function xiumiFiles(html: string): { name: string; data: Uint8Array }[] {
   const enc = new TextEncoder()
-  const parts = splitForXiumi(xiumiSvgBoxes(html))
+  const parts = checkedXiumiParts(html)
   return parts.map((p, i) => ({ name: partName(i, parts.length), data: enc.encode(asciiHtml(p)) }))
 }
 
@@ -205,9 +208,20 @@ export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void)
 }
 
 /** 导出给秀米（已配置公众号接口）：本地图片先传到微信图床，全部变成秀米能接受的地址 */
+/** A fresh immutable document snapshot; callers cannot substitute an unchecked document at upload time. */
+export function prepareXiumiUpload(doc: Doc): { parts: number; upload: (onProgress?: (msg: string) => void) => Promise<XiumiDownload> } {
+  const snapshot = structuredClone(doc)
+  const urls = new Set<string>()
+  const source = assertReplayOk(compileDoc(snapshot, { replayPendingImageUpload: true, mapImage: url => { urls.add(url); return url } }))
+  const parts = checkedXiumiParts(source.html).length
+  return { parts, upload: async onProgress => {
+    const { html } = assertReplayOk(await compileWechatSources(snapshot, 'wechat', [...urls], onProgress))
+    // Replay images may be SVG hrefs; rewritten output must pass the final check as well.
+    if (/(?:src="|href="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
+    return xiumiZip(xiumiFiles(html), 0)
+  } }
+}
+
 export async function xiumiUploaded(doc: Doc, onProgress?: (msg: string) => void): Promise<XiumiDownload> {
-  const { html } = await compileForWechat(doc, 'wechat', onProgress)
-  // 编辑回放里的图片是 SVG 的 href，也要检查
-  if (/(?:src="|href="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
-  return xiumiZip(xiumiFiles(html), 0)
+  return prepareXiumiUpload(doc).upload(onProgress)
 }

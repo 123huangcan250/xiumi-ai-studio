@@ -15,12 +15,15 @@ async function drag(page: Page, from: Locator, to: Locator, yRatio = 0.8) {
   await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2)
   await page.mouse.down()
   await page.mouse.move(a.x + a.width / 2 + 12, a.y + a.height / 2 + 12, { steps: 4 })
-  // 开始拖动后文本框的落点区会展开：拖动开始后再量目标位置（和用户看到的一致）
   await expect(page.locator('.app.dragging')).toHaveCount(1)
-  const b = (await to.boundingBox())!
+  // Activating a drag expands the box drop zone and may scroll the canvas.
+  // Measure the live target after that layout change, not before activation.
+  await to.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  let b = (await to.boundingBox())!
   await page.mouse.move(b.x + b.width / 2, b.y + b.height * yRatio, { steps: 12 })
-  // 像用户一样在落点停一下再松手
-  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+  await to.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+  b = (await to.boundingBox())!
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height * yRatio, { steps: 4 })
   await page.mouse.up()
   // dnd-kit 在拖动结束后 50 毫秒内会吞掉点击（防止松手被当成点击）：等过这段时间再做下一步
   await expect(page.locator('.app.dragging')).toHaveCount(0)

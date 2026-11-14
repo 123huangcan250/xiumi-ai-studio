@@ -70,7 +70,7 @@ describe('request parameters third-party services reject', () => {
   it('drops or rewrites exactly what the error names', () => {
     expect(adjustWire(start, "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.")).toMatchObject({ tokenField: 'max_completion_tokens' })
     expect(adjustWire(start, "Unsupported value: 'temperature' does not support 0.4")).toMatchObject({ temperature: false })
-    expect(adjustWire(start, 'Unknown parameter: reasoning_effort')).toMatchObject({ effort: false })
+    expect(adjustWire(start, 'Unknown parameter: reasoning_effort')).toMatchObject({ effort: true, json: false })
     expect(adjustWire(start, 'reasoning_effort rejected', true)).toMatchObject({ json: false }) // 检测时不去掉思考强度，退回去掉 JSON 模式
     expect(adjustWire(start, 'response_format json_object is not supported')).toMatchObject({ json: false })
     expect(adjustWire(start, 'max_tokens is too large: 8000. This model supports at most 4096 completion tokens')).toMatchObject({ maxTokens: 4096 })
@@ -81,35 +81,35 @@ describe('request parameters third-party services reject', () => {
     const replies = [
       json({ error: { message: "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead." } }, 400),
       json({ error: { message: "'temperature' does not support 0.4 with this model" } }, 400),
-      json({ error: { message: 'Unknown parameter: reasoning_effort' } }, 400),
+      json({ error: { message: 'Unknown parameter: response_format' } }, 400),
       json({ choices: [{ message: { content: '{"ok":true}' } }] }),
     ]
     vi.stubGlobal('fetch', async (_url: string, init: any) => {
       bodies.push(JSON.parse(init.body))
       return replies.shift()!
     })
-    const text = await chatText('sys', 'user', { profile: profile({ reasoningEffort: 'high', extraBody: '{"enable_thinking":false,"model":"evil","messages":[]}', maxOutputTokens: 4000 }) })
+    const text = await chatText('sys', 'user', { profile: profile({ extraBody: '{"enable_thinking":false,"model":"evil","messages":[]}', maxOutputTokens: 4000 }) })
     expect(text).toBe('{"ok":true}')
     expect(bodies).toHaveLength(4)
-    expect(bodies[0]).toMatchObject({ model: 'm1', max_tokens: 4000, temperature: 0.4, reasoning_effort: 'high', enable_thinking: false, response_format: { type: 'json_object' } })
+    expect(bodies[0]).toMatchObject({ model: 'm1', max_tokens: 4000, temperature: 0.4, enable_thinking: false, response_format: { type: 'json_object' } })
     expect(bodies[1]).toHaveProperty('max_completion_tokens', 4000)
     expect(bodies[1]).not.toHaveProperty('max_tokens')
     expect(bodies[2]).not.toHaveProperty('temperature')
-    expect(bodies[3]).not.toHaveProperty('reasoning_effort')
+    expect(bodies[3]).not.toHaveProperty('response_format')
     expect(bodies.every((b) => b.model === 'm1' && b.messages.length === 2)).toBe(true)
   })
-  it('sends effort as output_config to anthropic and drops the temperature a model refuses', async () => {
+  it('sends effort as output_config to anthropic without incompatible temperature', async () => {
     const bodies: any[] = []
-    const replies = [json({ error: { message: '`temperature` may only be set to 1 for this model' } }, 400), json({ content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: 'hi' }] })]
+    const replies = [json({ content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: 'hi' }] })]
     vi.stubGlobal('fetch', async (_url: string, init: any) => {
       bodies.push(JSON.parse(init.body))
       return replies.shift()!
     })
     const text = await chatText('s', 'u', { profile: profile({ provider: 'anthropic', baseUrl: 'https://api.anthropic.com', reasoningEffort: 'xhigh' }) })
     expect(text).toBe('hi')
-    expect(bodies[0]).toMatchObject({ temperature: 0.4, output_config: { effort: 'xhigh' } })
-    expect(bodies[1]).not.toHaveProperty('temperature')
-    expect(bodies[1]).toMatchObject({ output_config: { effort: 'xhigh' } })
+    expect(bodies).toHaveLength(1)
+    expect(bodies[0]).not.toHaveProperty('temperature')
+    expect(bodies[0]).toMatchObject({ output_config: { effort: 'xhigh' } })
   })
   it('keeps real errors and does not loop forever', async () => {
     vi.stubGlobal('fetch', async () => json({ error: { message: 'invalid api key' } }, 401))

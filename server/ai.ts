@@ -1,6 +1,8 @@
 // AI 提供方抽象：OpenAI 兼容接口（DeepSeek / 通义 / Kimi / 智谱 / MiniMax / MiMo / 豆包 / OpenAI / Gemini / Ollama…）或 Anthropic。
 // 密钥只在服务端读取；所有输出都要求是 JSON，再由调用方校验。
 import { getProfile, type AiProfile } from './settings'
+import { fetchModels, type ModelInfo } from './aiModels'
+import { PROTECTED_AI_PARAMETERS } from '../src/core/aiParameters'
 
 export interface AiStatus {
   enabled: boolean
@@ -36,6 +38,9 @@ interface ChatOpts {
   effort?: string
   /** 服务拒绝思考强度时不要悄悄去掉它，直接报错（检测时需要知道哪些强度被拒绝） */
   keepEffort?: boolean
+  /** Capability probes only need an accepted request, not a complete answer. */
+  allowTruncated?: boolean
+  signal?: AbortSignal
   timeoutMs?: number
 }
 
@@ -50,14 +55,14 @@ async function readError(res: Response) {
 }
 
 /** 请求里这些字段不能被“额外参数”改掉 */
-const PROTECTED = new Set(['model', 'messages', 'system', 'stream', 'tools', 'tool_choice'])
+const PROTECTED = new Set<string>(PROTECTED_AI_PARAMETERS)
 
 /** 配置里的额外请求参数（JSON 对象），去掉不允许覆盖的字段 */
 export function extraBodyOf(p: AiProfile): Record<string, unknown> {
   if (!p.extraBody) return {}
   try {
     const o = JSON.parse(p.extraBody)
-    return Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {}).filter(([k]) => !PROTECTED.has(k)))
+    return Object.fromEntries(Object.entries(o && typeof o === 'object' && !Array.isArray(o) ? o : {}).filter(([k]) => !PROTECTED.has(k)))
   } catch {
     return {}
   }
@@ -73,9 +78,12 @@ interface Wire {
 }
 
 /** 400 报错里点名了哪个参数，就去掉（或改写）哪个；没有可调整的返回 null */
-export function adjustWire(w: Wire, message: string, keepEffort = false): Wire | null {
+export function adjustWire(w: Wire, message: string, keepEffort = true): Wire | null {
   const m = message.toLowerCase()
-  if (w.tokenField === 'max_tokens' && /max_completion_tokens/.test(m)) return { ...w, tokenField: 'max_completion_tokens' }
+  // Compatible providers may support reasoning_effort with the older token field.
+  // Only rewrite on an explicit parameter rejection, not an output-budget error.
+  if (w.tokenField === 'max_completion_tokens' && /max_completion_tokens/.test(m) && /unsupported|unknown|unrecognized|unexpected|not supported|not allowed|not permitted/.test(m)) return { ...w, tokenField: 'max_tokens' }
+  if (w.tokenField === 'max_tokens' && /max_completion_tokens/.test(m) && /unsupported|not supported|use |must|required|only supports/.test(m)) return { ...w, tokenField: 'max_completion_tokens' }
   if (w.temperature && /temperature/.test(m)) return { ...w, temperature: false }
   if (w.effort && !keepEffort && /reasoning|effort|thinking/.test(m)) return { ...w, effort: false }
   if (w.json && /response_format|json_object|json_schema|json mode|json_mode/.test(m)) return { ...w, json: false }
@@ -91,12 +99,17 @@ export function adjustWire(w: Wire, message: string, keepEffort = false): Wire |
 
 async function sendAdaptive(send: (w: Wire) => Promise<Response>, start: Wire, keepEffort: boolean): Promise<Response> {
   let w = start
+  const attempted = new Set<string>()
   for (let i = 0; i < 6; i++) {
+    attempted.add(JSON.stringify(w))
     const res = await send(w)
     if (res.ok) return res
     const message = await readError(res)
     const next = res.status === 400 || res.status === 422 ? adjustWire(w, message, keepEffort) : null
-    if (!next) throw Object.assign(new Error(`AI 请求失败 ${res.status}: ${message}`), { status: 502 })
+    if (!next && w.effort && keepEffort && (res.status === 400 || res.status === 422) && /reasoning|effort|thinking/i.test(message) && /unsupported|not supported|not allowed|unknown|unrecognized|invalid|must be|不支持|无效/i.test(message)) {
+      throw Object.assign(new Error(`该模型拒绝了配置的思考强度。请在 AI 模型设置中清空“思考强度”后重试，或选择该模型支持的强度。配置未被自动修改。服务返回 ${res.status}: ${message}`), { status: 502 })
+    }
+    if (!next || attempted.has(JSON.stringify(next))) throw Object.assign(new Error(`AI 请求失败 ${res.status}: ${message}`), { status: 502 })
     w = next
   }
   throw Object.assign(new Error('AI 请求失败：参数被服务反复拒绝'), { status: 502 })
@@ -104,27 +117,32 @@ async function sendAdaptive(send: (w: Wire) => Promise<Response>, start: Wire, k
 
 /** 调用模型，返回文本。OpenAI 兼容接口或 Anthropic */
 export async function chatText(system: string, user: string, opts: ChatOpts = {}): Promise<string> {
+  opts.signal?.throwIfAborted()
   const p = opts.profile ?? (await getProfile(opts.profileId))
+  opts.signal?.throwIfAborted()
   if (!p || !p.baseUrl || !p.model) throw Object.assign(new Error('尚未配置 AI 模型：请在「AI 模型设置」中添加'), { status: 503 })
   const ctrl = new AbortController()
+  const cancel = () => ctrl.abort(opts.signal?.reason)
+  opts.signal?.addEventListener('abort', cancel, { once: true })
   const timeout = opts.timeoutMs ?? 180_000
   const timer = setTimeout(() => ctrl.abort(), timeout)
-  const effort = opts.effort ?? p.reasoningEffort ?? ''
-  const wanted = opts.maxTokens ?? 8000
-  const start: Wire = {
-    json: p.jsonMode && p.provider !== 'anthropic',
-    tokenField: 'max_tokens',
-    temperature: true,
-    effort: Boolean(effort),
-    maxTokens: p.maxOutputTokens ? Math.min(wanted, p.maxOutputTokens) : wanted,
-  }
-  const extra = extraBodyOf(p)
   try {
+    const effort = opts.effort ?? p.reasoningEffort ?? ''
+    const wanted = opts.maxTokens ?? 8000
+    const start: Wire = {
+      json: p.jsonMode && p.provider !== 'anthropic',
+      tokenField: effort && p.provider !== 'anthropic' && new URL(p.baseUrl).hostname === 'api.openai.com' ? 'max_completion_tokens' : 'max_tokens',
+      temperature: !effort,
+      effort: Boolean(effort),
+      maxTokens: p.maxOutputTokens ? Math.min(wanted, p.maxOutputTokens) : wanted,
+    }
+    const extra = extraBodyOf(p)
     if (p.provider === 'anthropic') {
       const res = await sendAdaptive(
         (w) =>
-          fetch(`${p.baseUrl}/v1/messages`, {
+          fetch(`${anthropicBase(p.baseUrl)}/messages`, {
             method: 'POST',
+            redirect: 'error',
             signal: ctrl.signal,
             headers: { 'content-type': 'application/json', 'x-api-key': p.apiKey, 'anthropic-version': '2023-06-01' },
             body: JSON.stringify({
@@ -138,15 +156,18 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
             }),
           }),
         start,
-        Boolean(opts.keepEffort),
+        Boolean(effort) || Boolean(opts.keepEffort),
       )
       const data: any = await res.json()
+      ctrl.signal.throwIfAborted()
+      if (!opts.allowTruncated && data.stop_reason === 'max_tokens') throw new Error('AI 已响应，但输出达到 token 上限；请降低思考强度或减少输入后重试')
       return data.content?.map((c: any) => c.text ?? '').join('') ?? ''
     }
     const res = await sendAdaptive(
       (w) =>
-        fetch(`${p.baseUrl}/chat/completions`, {
+        fetch(`${p.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
           method: 'POST',
+          redirect: 'error',
           signal: ctrl.signal,
           headers: { 'content-type': 'application/json', ...(p.apiKey ? { authorization: `Bearer ${p.apiKey}` } : {}) },
           body: JSON.stringify({
@@ -163,20 +184,41 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
           }),
         }),
       start,
-      Boolean(opts.keepEffort),
+      Boolean(effort) || Boolean(opts.keepEffort),
     )
     const data: any = await res.json()
+    ctrl.signal.throwIfAborted()
+    if (!opts.allowTruncated && data.choices?.[0]?.finish_reason === 'length') throw new Error('AI 已响应，但输出达到 token 上限；请降低思考强度或减少输入后重试')
     return data.choices?.[0]?.message?.content ?? ''
   } catch (e: any) {
+    if (opts.signal?.aborted) throw opts.signal.reason
     if (e.name === 'AbortError') throw Object.assign(new Error(`AI 请求超时（${Math.round(timeout / 1000)} 秒）`), { status: 504 })
     throw e
   } finally {
     clearTimeout(timer)
+    opts.signal?.removeEventListener('abort', cancel)
   }
 }
 
 export async function chatJson(system: string, user: string, opts: ChatOpts = {}): Promise<any> {
   return extractJson(await chatText(system, user, opts))
+}
+
+export type DiscoveredModel = ModelInfo
+
+function anthropicBase(base: string) {
+  return base.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1'
+}
+
+export async function discoverModels(p: AiProfile): Promise<DiscoveredModel[]> {
+  return fetchModels(p)
+}
+
+export function testConnection(profile: AiProfile): Promise<any> {
+  return chatJson('只输出 JSON。', '请输出 {"ok":true,"model":"你的模型名称"}', {
+    // Some models reason by default even without an explicit effort setting.
+    profile, maxTokens: 4096, temperature: 0,
+  })
 }
 
 export const OUTLINE_SYSTEM = `你是资深的微信公众号主编。把用户提供的文稿整理为结构化大纲，用于自动排版。
@@ -232,7 +274,7 @@ export const EDIT_SYSTEM =`你是微信公众号排版助手。你只能通过�
 - {"op":"setTheme","themeId":主题id,"reason":"原因"}
 - {"op":"setMeta","title":"","digest":"","reason":"原因"}
 模块类型与字段：
-cover{kicker,title,subtitle,meta,variant:auto|hero|band|minimal}
+cover{kicker,title,subtitle,meta,titleAlign:auto|left|center|right,variant:auto|hero|band|minimal}（仅将封面标题居中时，update props.titleAlign 为 center，不改文案、图片或 variant）
 heading{index,title,subtitle,variant:auto|number|bar|pill|underline}
 paragraph{content:"文本，可用 **加粗**，换行分段",align:left|justify|center}
 card{title,content:"文本",variant:auto|border|fill|accent}

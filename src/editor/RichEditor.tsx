@@ -23,7 +23,7 @@ export function RichEditor({ value, theme, onChange, onDone, fontSize }: Props) 
       TextStyle,
       Color,
       Highlight.configure({ multicolor: true }),
-      TextAlign.configure({ types: ['paragraph'] }),
+      TextAlign.configure({ types: ['paragraph', 'heading'] }),
     ],
     content: value,
     autofocus: 'end',
@@ -41,6 +41,7 @@ export function RichEditor({ value, theme, onChange, onDone, fontSize }: Props) 
   const st = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
+      align: ['left', 'center', 'right', 'justify'].find((textAlign) => e?.isActive({ textAlign })) ?? 'justify',
       bold: e?.isActive('bold') ?? false,
       italic: e?.isActive('italic') ?? false,
       underline: e?.isActive('underline') ?? false,
@@ -55,7 +56,7 @@ export function RichEditor({ value, theme, onChange, onDone, fontSize }: Props) 
   if (!editor) return null
   const c = theme.colors
   const btn = (label: string, active: boolean, run: () => void, title: string) => (
-    <button type="button" className={active ? 'on' : ''} title={title} onMouseDown={(e) => (e.preventDefault(), run())}>
+    <button type="button" className={active ? 'on' : ''} title={title} aria-pressed={active} onMouseDown={(e) => e.preventDefault()} onClick={run}>
       {label}
     </button>
   )
@@ -77,9 +78,9 @@ export function RichEditor({ value, theme, onChange, onDone, fontSize }: Props) 
         <span className="sep" />
         {btn('• 列表', st?.bullet ?? false, () => chain().toggleBulletList().run(), '无序列表')}
         {btn('1. 列表', st?.ordered ?? false, () => chain().toggleOrderedList().run(), '有序列表')}
-        {btn('居左', editor.isActive({ textAlign: 'left' }), () => chain().setTextAlign('left').run(), '居左')}
-        {btn('居中', editor.isActive({ textAlign: 'center' }), () => chain().setTextAlign(editor.isActive({ textAlign: 'center' }) ? 'justify' : 'center').run(), '居中（再点一次恢复两端对齐）')}
-        {btn('居右', editor.isActive({ textAlign: 'right' }), () => chain().setTextAlign('right').run(), '居右')}
+        {([['left', '左对齐'], ['center', '居中'], ['right', '右对齐'], ['justify', '两端对齐']] as const).map(([align, label]) => (
+          <span key={align}>{btn(label, st?.align === align, () => chain().setTextAlign(align).run(), label)}</span>
+        ))}
         {btn('链接', st?.link ?? false, () => {
           if (editor.isActive('link')) return chain().unsetLink().run()
           const href = prompt('链接地址（非公众号文章链接在微信中会转为文字）')

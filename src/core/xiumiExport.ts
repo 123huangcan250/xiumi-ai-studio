@@ -126,6 +126,15 @@ export function splitForXiumi(html: string, limit = XIUMI_LIMIT): string[] {
   return parts
 }
 
+/** Refuse a file Xiumi would silently truncate; do not alter indivisible text/SVG. */
+export function checkedXiumiParts(html: string): string[] {
+  const parts = splitForXiumi(xiumiSvgBoxes(html))
+  if (parts.some(part => xiumiLength(part) > XIUMI_LIMIT)) {
+    throw new Error('秀米导出已停止：仍有单个段落、SVG 或图片内容超过导入长度上限。请手动拆分过长段落或 SVG 后重试；也可使用通用 HTML 导出。')
+  }
+  return parts
+}
+
 const LOCAL_IMAGE =/(src="|url\((?:&quot;|["']?))(\/media\/[^"'&)]*(?:&amp;[^"'&)]*)*)/g
 
 /**

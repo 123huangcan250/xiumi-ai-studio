@@ -1,5 +1,6 @@
 // 工作区：只缩放文章不缩放界面、拖动调整侧栏宽度、右侧栏改文字保留空格并设对齐、AI 只改选中的模块
 import { expect, test, type Page } from '@playwright/test'
+import { scopeEditResult } from '../../server/aiEdit'
 
 const rich = (text: string) => ({ type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text }] }] })
 const para = (id: string, text: string) => ({ id, type: 'paragraph', props: { content: rich(text), align: 'justify' } })
@@ -106,7 +107,7 @@ test('右侧栏改原文片段的文字：空格保留，可设居左居中居�
   await expect(page.getByTestId('align-t0-left')).toHaveClass(/on/)
 })
 
-test('选中模块后，AI 只改选中的模块', async ({ page }) => {
+test('默认严格策略：选中模块后混合越界建议整批拒绝', async ({ page }) => {
   await seed(page, 'AI 范围', [para('p1', '第一段内容'), para('p2', '第二段内容'), para('p3', '第三段内容')])
   await page.route('**/api/ai/status', (r) => r.fulfill({ json: { enabled: true, provider: 'openai', model: 'm', name: '测试模型', profileId: 'x' } }))
   const bodies: any[] = []
@@ -126,13 +127,12 @@ test('选中模块后，AI 只改选中的模块', async ({ page }) => {
   await page.reload()
   await page.locator('[data-block-id="p2"]').click({ position: { x: 3, y: 3 } })
   await page.getByTestId('tab-ai').click()
-  await expect(page.getByTestId('ai-scope')).toContainText('只改选中的模块')
-  await expect(page.getByTestId('ai-scope')).toContainText('第二段内容')
-  await page.getByPlaceholder(/把这一段改得更简洁/).fill('改简洁')
+  await expect(page.getByLabel('修改范围')).toHaveValue('selection')
+  await page.getByPlaceholder(/例如：把第二章/).fill('改简洁')
   await page.getByRole('button', { name: '生成修改建议' }).click()
   await expect(page.getByTestId('proposal')).toBeVisible()
-  await expect(page.locator('.proposal .op')).toHaveCount(1)
-  await expect(page.getByTestId('proposal')).toContainText('已忽略 2 条')
+  await expect(page.locator('.proposal .op')).toHaveCount(0)
+  await expect(page.getByTestId('proposal')).toContainText('已忽略 3 条')
   await expect(page.getByTestId('proposal')).toContainText('修改其他模块不在选中的模块上')
   expect(bodies[0].context.focus).toEqual({ id: 'p2', type: 'paragraph' })
   // 其他模块只给一行摘要，选中的才给完整内容
@@ -141,10 +141,64 @@ test('选中模块后，AI 只改选中的模块', async ({ page }) => {
   expect(bodies[0].context.blocks[1]).toHaveProperty('props')
 
   // 切回整篇文章：所有修改都接受
-  await page.getByTestId('ai-scope-all').check()
+  await page.getByLabel('修改范围').selectOption('document')
   await page.getByRole('button', { name: '生成修改建议' }).click()
   await expect(page.locator('.proposal .op')).toHaveCount(3)
   expect(bodies[1].context.focus).toBeUndefined()
+})
+
+test('过滤策略保留合规操作、显示服务端忽略数量，接受时不改其他模块', async ({ page }) => {
+  await seed(page, '过滤范围', [para('p1', '第一段内容'), para('p2', '第二段内容'), para('p3', '第三段内容')])
+  await page.route('**/api/ai/status', route => route.fulfill({ json: { enabled: true, provider: 'openai', model: 'm', name: '测试模型', profileId: 'x' } }))
+  await page.route('**/api/ai/edit', route => {
+    const body = route.request().postDataJSON()
+    return route.fulfill({ json: scopeEditResult({ summary: '合规修改', ops: [
+      { op: 'update', id: 'p2', props: { content: '改后的第二段' } },
+      { op: 'update', id: 'p1', props: { content: '不该修改' } },
+      { op: 'setMeta', title: '不该改标题' },
+      { op: 'insert', index: 1, block: { type: 'paragraph', props: { content: '紧前插入' } } },
+      { op: 'insert', index: 2, block: { type: 'paragraph', props: { content: '紧后插入' } } },
+    ] }, body.selectedId, body.context, 'filter') })
+  })
+  await page.reload()
+  await page.locator('[data-block-id="p2"]').click({ position: { x: 3, y: 3 } })
+  await page.getByTestId('tab-ai').click()
+  await page.getByLabel('AI 修改指令').fill('精简并补上前后段落')
+  await page.getByRole('button', { name: '生成修改建议' }).click()
+  await expect(page.locator('.proposal .op')).toHaveCount(3)
+  await expect(page.getByTestId('proposal')).toContainText('已忽略 2 条')
+  await expect(page.locator('[data-block-id="p2"]')).toContainText('第二段内容')
+  await page.getByTestId('accept-all').click()
+  await expect(page.locator('[data-block-id="p2"]')).toContainText('改后的第二段')
+  await expect(page.locator('[data-block-id="p1"]')).toContainText('第一段内容')
+  await expect(page.locator('[data-block-id="p3"]')).toContainText('第三段内容')
+  await expect(page.locator('.title-input')).toHaveValue('过滤范围')
+  const texts = await page.locator('.phone [data-block-id]').allTextContents()
+  expect(texts.join('|')).toMatch(/第一段内容[\s\S]*紧前插入[\s\S]*改后的第二段[\s\S]*紧后插入[\s\S]*第三段内容/)
+})
+
+test('过滤策略允许文本框内子模块更新和删除，但不改框外内容', async ({ page }) => {
+  await seed(page, '框内范围', [para('outside', '框外保持不变'), { id: 'box', type: 'box', props: { title: '选中的文本框', label: '', variant: 'plate', children: [para('child', '框内原文'), para('sibling', '框内可删除')] } }])
+  await page.route('**/api/ai/status', route => route.fulfill({ json: { enabled: true, provider: 'openai', model: 'm', name: '测试模型', profileId: 'x' } }))
+  await page.route('**/api/ai/edit', route => {
+    const body = route.request().postDataJSON()
+    return route.fulfill({ json: scopeEditResult({ summary: '精简文本框', ops: [
+      { op: 'update', id: 'child', props: { content: '框内修改成功' } },
+      { op: 'remove', id: 'sibling' },
+      { op: 'update', id: 'outside', props: { content: '不该修改' } },
+    ] }, body.selectedId, body.context, 'filter') })
+  })
+  await page.reload()
+  await page.locator('[data-block-id="box"]').click({ position: { x: 3, y: 3 } })
+  await page.getByTestId('tab-ai').click()
+  await page.getByLabel('AI 修改指令').fill('精简文本框')
+  await page.getByRole('button', { name: '生成修改建议' }).click()
+  await expect(page.locator('.proposal .op')).toHaveCount(2)
+  await expect(page.getByTestId('proposal')).toContainText('已忽略 1 条')
+  await page.getByTestId('accept-all').click()
+  await expect(page.locator('[data-block-id="child"]')).toContainText('框内修改成功')
+  await expect(page.locator('[data-block-id="sibling"]')).toHaveCount(0)
+  await expect(page.locator('[data-block-id="outside"]')).toContainText('框外保持不变')
 })
 
 test('AI 模型设置：从上游取模型列表和参数，检测思考强度并保存', async ({ page }) => {
@@ -162,19 +216,17 @@ test('AI 模型设置：从上游取模型列表和参数，检测思考强度�
   await page.getByTestId('ai-add-preset').selectOption('custom')
   await page.getByPlaceholder('https://…/v1').fill('http://127.0.0.1:5999/v1')
   await page.getByPlaceholder('粘贴密钥').fill('test-key-123456')
-  await page.getByPlaceholder('粘贴密钥').press('Tab') // 密钥填完离开输入框就自动读取模型列表
-  await expect(page.getByTestId('ai-model-note')).toContainText('已从上游获取 2 个模型')
-  await expect(page.locator('datalist option')).toHaveCount(2)
+  await page.getByTestId('ai-load-models').click()
+  await expect(page.getByTestId('ai-model-note')).toContainText('2 个模型')
+  await expect(page.getByRole('listbox', { name: '可用模型' })).toBeVisible()
 
-  await page.getByTestId('ai-model').fill('big-model')
+  await page.getByRole('listbox', { name: '可用模型' }).selectOption('big-model')
   await expect(page.getByTestId('ai-context')).toHaveValue('262144')
   await expect(page.getByTestId('ai-max-output')).toHaveValue('32768')
   // 还没检测时给常见值；检测后只剩模型接受的
-  await expect(page.getByTestId('ai-effort').locator('option')).toHaveCount(5)
   await page.getByTestId('ai-probe-effort').click()
   await expect(page.getByTestId('ai-effort-note')).toContainText('接受：low、high')
-  await expect(page.getByTestId('ai-effort').locator('option')).toHaveText(['默认（不发送，用模型自己的设置）', 'low（低）', 'high（高）'])
-  await page.getByTestId('ai-effort').selectOption('high')
+  await page.getByTestId('ai-effort').fill('high')
   // 额外参数不是 JSON 对象时提示
   await page.getByText('高级：额外的请求参数').click()
   await page.getByTestId('ai-extra-body').fill('[1]')

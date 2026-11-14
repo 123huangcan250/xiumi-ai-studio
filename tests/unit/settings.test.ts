@@ -39,6 +39,22 @@ describe('ai settings', () => {
     expect((await settings.getProfile())?.name).toBe('B')
     expect((await settings.getProfile('a'))?.name).toBe('A')
   })
+  it('does not reuse saved secrets at another origin or provider', async () => {
+    const saved = await settings.saveAiSettings({ activeId: 'a', profiles: [{ id: 'a', provider: 'openai', baseUrl: 'https://one.example/v1', apiKey: 'test-secret', model: 'm' }] })
+    await expect(settings.resolveDraftProfile({ ...saved.profiles[0], baseUrl: 'https://two.example/v1' })).rejects.toThrow('重新输入')
+    await expect(settings.resolveDraftProfile({ ...saved.profiles[0], provider: 'anthropic' })).rejects.toThrow('重新输入')
+    await expect(settings.saveAiSettings({ activeId: 'a', profiles: [{ ...saved.profiles[0], baseUrl: 'https://two.example/v1' }] })).rejects.toThrow('重新输入')
+    expect((await settings.resolveDraftProfile({ ...saved.profiles[0], baseUrl: 'https://one.example/custom/v1' })).apiKey).toBe('test-secret')
+    expect((await settings.resolveDraftProfile({ ...saved.profiles[0], baseUrl: 'https://two.example', apiKey: 'new-test-key' })).apiKey).toBe('new-test-key')
+  })
+  it('persists validated context and reasoning settings', async () => {
+    await settings.saveAiSettings({ activeId: 'a', profiles: [{ id: 'a', baseUrl: 'https://one.example/v1', apiKey: 'test-key', contextWindow: 128000, reasoningEffort: 'high' }] })
+    expect(await settings.getProfile('a')).toMatchObject({ contextWindow: 128000, reasoningEffort: 'high' })
+    const draft = await settings.resolveDraftProfile({ contextWindow: -1, reasoningEffort: 'not a valid effort' })
+    expect(draft.contextWindow).toBe(0)
+    expect(draft.reasoningEffort).toBe('')
+  })
+
   it('stores effort, context window, output limit and extra parameters, and cleans untrusted values', async () => {
     const saved = await settings.saveAiSettings({
       activeId: 'e',
@@ -53,8 +69,31 @@ describe('ai settings', () => {
     expect(f).toMatchObject({ reasoningEffort: '', extraBody: '' })
     expect(g.extraBody).toBe('')
     // 临时测试的配置：没传的字段沿用已保存的
-    const draft = await settings.resolveDraftProfile({ id: 'e', baseUrl: 'http://e', model: 'm2' })
+    const draft = await settings.resolveDraftProfile({ id: 'e', baseUrl: 'http://e', model: 'm' })
     expect(draft).toMatchObject({ reasoningEffort: 'high', contextWindow: 128000, efforts: ['low', 'high', 'medium'] })
     expect(await settings.resolveDraftProfile({ id: 'e', reasoningEffort: '' })).toMatchObject({ reasoningEffort: '' })
+    expect(await settings.resolveDraftProfile({ id: 'e', model: 'm2' })).toMatchObject({ reasoningEffort: '', contextWindow: 0, maxOutputTokens: 0, efforts: [] })
   })
+  it('retains saved provider for partial drafts and blocks implicit provider changes when saving', async () => {
+    await settings.saveAiSettings({ activeId: 'claude', profiles: [{ id: 'claude', provider: 'anthropic', baseUrl: 'https://example.com/v1', apiKey: 'secret', model: 'claude' }] })
+    expect(await settings.resolveDraftProfile({ id: 'claude' })).toMatchObject({ provider: 'anthropic', apiKey: 'secret' })
+    await expect(settings.saveAiSettings({ activeId: 'claude', profiles: [{ id: 'claude', baseUrl: 'https://example.com/v1' }] })).rejects.toThrow('重新输入')
+  })
+  it('preserves valid custom effort spelling', async () => {
+    expect(await settings.resolveDraftProfile({ reasoningEffort: 'Custom_Effort_2' })).toMatchObject({ reasoningEffort: 'Custom_Effort_2' })
+  })
+
+})
+
+
+it.each(['http://localhost:11434/v1', 'https://one.example/v1', ''])('clears an explicitly empty saved key at %s without touching other profiles', async (baseUrl) => {
+  const saved = await settings.saveAiSettings({ activeId: 'a', profiles: [
+    { id: 'a', provider: 'openai', baseUrl: 'https://one.example/v1', apiKey: 'old-key', model: 'm' },
+    { id: 'b', provider: 'openai', baseUrl: 'https://two.example/v1', apiKey: 'other-key', model: 'n' },
+  ] })
+  const cleared = { ...saved.profiles[0], baseUrl, apiKey: '' }
+  expect((await settings.resolveDraftProfile(cleared)).apiKey).toBe('')
+  await settings.saveAiSettings({ activeId: 'a', profiles: [cleared, saved.profiles[1]] })
+  expect((await settings.getProfile('a'))?.apiKey).toBe('')
+  expect((await settings.getProfile('b'))?.apiKey).toBe('other-key')
 })

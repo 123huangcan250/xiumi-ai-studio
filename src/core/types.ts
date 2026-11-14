@@ -47,7 +47,7 @@ export interface PicItem {
 }
 
 export interface BlockPropsMap {
-  cover: { kicker: string; title: string; subtitle: string; meta: string; image?: ImageRef; variant: 'auto' | 'hero' | 'band' | 'minimal' }
+  cover: { titleAlign?: 'auto' | 'left' | 'center' | 'right'; kicker: string; title: string; subtitle: string; meta: string; image?: ImageRef; variant: 'auto' | 'hero' | 'band' | 'minimal' }
   heading: { index: string; title: string; subtitle: string; variant: 'auto' | 'number' | 'bar' | 'pill' | 'underline' }
   paragraph: { content: RichText; align: 'left' | 'justify' | 'center' | 'right' }
   card: { title: string; content: RichText; variant: 'auto' | 'border' | 'fill' | 'accent' }
@@ -144,9 +144,13 @@ export interface Theme extends ThemeTokens {
   description: string
 }
 
+/** Selected AI edits default to filtering; explicit strict mode rejects mixed batches atomically. */
+export type SelectionPolicy = 'strict' | 'filter'
+export interface InsertAnchor { id: string; side: 'before' | 'after' }
+
 /** AI 与程序化修改统一使用的操作；AI 永远不直接产出 HTML */
 export type DocOp =
-  | { op: 'insert'; index: number; block: Block; reason?: string }
+  | { op: 'insert'; index: number; block: Block; anchor?: InsertAnchor; reason?: string }
   /** 原文片段只能按文字槽位修改：slots 为槽位 id → 新文字，props.html 由 slots 计算 */
   | { op: 'update'; id: string; props: Record<string, any>; slots?: Record<string, string>; reason?: string }
   | { op: 'remove'; id: string; reason?: string }

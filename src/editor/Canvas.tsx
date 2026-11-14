@@ -2,6 +2,8 @@ import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { blockTextFields } from '../core/blockTextEditing'
+import { BlockTextEditor } from './BlockTextEditor'
 import { blockLabel, blockMeta } from '../core/blocks'
 import { BOX_GAP, blockGap, compileBlock, rootStyle } from '../core/compiler'
 import { expandPick, fragmentHtml, insertionAnchor, pickElement, placeFragment } from '../core/fragments'
@@ -297,7 +299,8 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
     opacity: isDragging ? 0.4 : 1,
   }
   const canRich = RICH_TYPES.has(block.type)
-  const canEdit = canRich || block.type === 'html'
+  const canText = blockTextFields(block).length > 0
+  const canEdit = canRich || block.type === 'html' || canText
   const startEdit = () => canEdit && setEditing(block.id)
   // 以前导入的版块常把整节内容（标题、正文、轮播）放在一个模块里，拆开后才能单独选中和收藏
   const splitBlock = () => {
@@ -311,6 +314,9 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
   let body = block.type === 'box' ? <BoxBody block={block} theme={theme} /> : block.type === 'replay' ? <ReplayCanvasBody block={block} /> : <BlockHtml block={block} theme={theme} inBox={inBox} />
   if (picking && block.type === 'html') body = <FragmentPicker block={block} theme={theme} onDone={() => setPicking(null)} />
   else if (editing && block.type === 'html') body = <HtmlEditor block={block} onDone={() => setEditing(null)} />
+  else if (editing && canText) {
+    body = <>{body}<BlockTextEditor block={block} onChange={(props, field) => updateProps(block.id, props, `${block.id}:${field}`)} onDone={() => setEditing(null)} /></>
+  }
   else if (editing && canRich) {
     const p: any = block.props
     const editor = (
@@ -347,7 +353,7 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
         e.stopPropagation()
         select(block.id)
       }}
-      onDoubleClick={startEdit}
+      onDoubleClick={(e) => { e.stopPropagation(); startEdit() }}
       {...attributes}
       role="group"
       tabIndex={-1}

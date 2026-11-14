@@ -54,7 +54,7 @@
 
 这些功能依赖外部服务，打包不能替代它们的前提条件。
 
-- **AI 模型**：工具栏「⚙ AI 模型」添加 DeepSeek、通义千问、Kimi、智谱、豆包、OpenAI、Claude、Gemini 或任意 OpenAI 兼容接口，填写服务商的 API 密钥。需要联网，费用按服务商计。密钥只保存在本机，界面上打码显示。填好地址和密钥后会自动读取上游的模型列表（模型名称框里直接选），并带出上下文长度、最大输出等参数；「检测支持的强度」会逐个试探这个模型接受哪些思考强度（会发几条极短的请求），选中的强度随每次请求发送；第三方接口有特殊开关时，可在「高级」里填额外的请求参数（JSON）。服务拒绝某个参数（如 temperature、max_tokens、reasoning_effort）时会按报错自动去掉重试。
+- **AI 模型**：工具栏「⚙ AI 模型」添加 DeepSeek、通义千问、Kimi、智谱、豆包、OpenAI、Claude、Gemini 或任意 OpenAI 兼容接口，填写服务商的 API 密钥。需要联网，费用按服务商计。密钥只保存在本机，界面上打码显示。填好地址和密钥后会自动读取上游的模型列表（模型名称框里直接选），并带出上下文长度、最大输出等参数；「检测支持的强度」会逐个试探这个模型接受哪些思考强度（会发几条极短的请求），选中的强度随每次请求发送；第三方接口有特殊开关时，可在「高级」里填额外的请求参数（JSON）。输出长度字段仅按服务明确错误切换；显式思考强度不会静默移除，服务拒绝时显示错误。
 - **公众号草稿箱 / 微信图床**：「💾 数据」→「公众号接口」打开配置文件，填写 `WECHAT_APPID`、`WECHAT_APPSECRET`，保存后重启程序。还需要在公众号后台「设置与开发 → 基本配置」把本机出口 IP 加入白名单，并且账号要有草稿箱接口权限。推送前会再次确认，只创建草稿，不会群发。
 
 ### 发布到公众号或秀米
@@ -95,7 +95,7 @@
 
 ## 开发与打包
 
-需要 Node.js ≥ 22 与 pnpm。源码运行时数据在仓库的 `data/`，配置在仓库根目录的 `.env`（参考 `.env.example`）。
+需要 Node.js ≥ 22.19 与 pnpm 12.6.0（与 CI 一致）。源码运行时数据在仓库的 `data/`，配置在仓库根目录的 `.env`（参考 `.env.example`）。
 
 ```bash
 pnpm install
@@ -122,3 +122,9 @@ tests/         unit（Vitest）与 e2e（Playwright）
 
 - [P0 调研与技术选型](docs/01-research.md) · [微信兼容性测试](docs/03-wechat-compat-test.md) · [秀米互通实测](docs/05-xiumi-compat-probe.md) · [多 Agent 协作流程](docs/04-multi-agent-workflow.md) · [编辑回放：接入说明](docs/edit-replay/INTEGRATION.md) · [编辑回放：兼容性清单](docs/edit-replay/COMPAT.md)
 - [第三方声明](THIRD_PARTY_NOTICES.md)；打包产物的 `app/licenses` 内含 Node.js 与全部生产依赖的许可文本
+
+### 源码兼容性与 AI 边界
+
+Node.js ≥22.19 沿用 undici 8 声明的支持范围，不表示已验证所有较低版本无法运行。推荐 Node 24；源码与 CI 使用 pnpm 12.6.0。
+
+选中范围默认 filter；需要整批拒绝语义时显式设置 AI_SELECTION_POLICY=strict。自动输入建议默认关闭，开启后发送当前范围上下文并可能产生 API 费用。真实 DeepSeek / 通义联调仍待完成，详见 [模型与选区说明](docs/ai-models-and-selection.md)。

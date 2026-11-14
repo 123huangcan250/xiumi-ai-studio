@@ -51,7 +51,13 @@ export async function importFile(buf: Buffer, name: string): Promise<{ text: str
           return { src: `/media/${a.file}` }
         }),
       },
-    )
+    ).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : ''
+      if (/end of central directory|corrupted zip|invalid zip|can't find.*(?:document|file)|could not find.*(?:document|file)/i.test(message)) {
+        throw Object.assign(new Error('无法读取这个 Word 文件。文件可能已损坏或不是有效的 .docx，请用 Word 重新另存为 .docx 后再导入，或改用 Markdown/TXT。'), { status: 400 })
+      }
+      throw error
+    })
     let md = htmlToMarkdown(value)
     // Word 没有一级标题时，把第一段当作标题
     if (!/^# /m.test(md)) md = md.replace(/^(?!!\[)(.+)$/m, '# $1')

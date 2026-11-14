@@ -1,9 +1,9 @@
 import { create } from 'zustand'
 import { cloneBlock, createBlock, newId, normalizeBlocks } from '../core/blocks'
-import { applyOp, limitToSelection, validateOp } from '../core/ops'
+import { applyOp, limitToSelection, orderInsert, validateOp } from '../core/ops'
 import { allThemes, registerTheme } from '../core/themes'
 import { findBlock, insertBlocksAt, insertionPoint, moveBlockTo, removeBlockById, replaceBlockWith, TOP_ONLY, updateBlock } from '../core/tree'
-import type { Block, BlockType, Doc, DocOp, Theme } from '../core/types'
+import type { Block, BlockType, Doc, DocOp, SelectionPolicy, Theme } from '../core/types'
 import { api } from './api'
 
 const HISTORY_LIMIT = 100
@@ -16,6 +16,9 @@ export interface Proposal {
   summary: string
   items: ProposalItem[]
   errors: string[]
+  /** Server-filtered operations are already absent from items; do not count them twice. */
+  ignoredOps: number
+  selectionPolicy: SelectionPolicy
   /** 生成提案时的文档，用于显示差异 */
   base: Doc
 }
@@ -62,7 +65,7 @@ interface State {
   undo: () => void
   redo: () => void
   /** selectedId：用户选中了模块时，只接受落在这个模块上的操作 */
-  propose: (summary: string, rawOps: any[], selectedId?: string | null) => void
+  propose: (summary: string, rawOps: any[], selectedId?: string | null, options?: { policy?: SelectionPolicy; ignoredOps?: number }) => void
   resolveProposal: (index: number | 'all', status: 'accepted' | 'rejected') => void
   clearProposal: () => void
   refreshThemes: () => void
@@ -209,18 +212,21 @@ export const useStore = create<State>((set, get) => ({
     set({ doc: future[0], future: future.slice(1), past: [...past, doc], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
   },
 
-  propose(summary, rawOps, selectedId) {
+  propose(summary, rawOps, selectedId, options) {
+    const policy = options?.policy === 'filter' ? 'filter' : 'strict'
+    const count = options?.ignoredOps
+    const ignoredOps = typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : 0
     const base = get().doc
     const items: ProposalItem[] = []
     const errors: string[] = []
-    const scoped = limitToSelection(base, selectedId, rawOps)
+    const scoped = limitToSelection(base, selectedId, rawOps, policy)
     for (const op of scoped.dropped) errors.push(`${OP_NAME[op?.op as string] ?? '未知操作'}不在选中的模块上`)
     for (const raw of scoped.ops) {
       const { op, error } = validateOp(base, raw)
       if (op) items.push({ op, status: 'pending' })
       else errors.push(error!)
     }
-    set({ proposal: { summary, items, errors, base } })
+    set({ proposal: { summary, items, errors, base, ignoredOps, selectionPolicy: policy } })
   },
   resolveProposal(index, status) {
     const { proposal, doc, commit } = get()
@@ -228,20 +234,26 @@ export const useStore = create<State>((set, get) => ({
     const targets = index === 'all' ? proposal.items.map((_, i) => i).filter((i) => proposal.items[i].status === 'pending') : [index]
     let next = doc
     const items = [...proposal.items]
+    const errors = [...proposal.errors]
     for (const i of targets) {
+      if (!items[i] || items[i].status !== 'pending') continue
       if (status === 'accepted') {
         // 用户可能在提案之后改过文档：按当前文档重新校验
-        const { op } = validateOp(next, items[i].op)
+        const { op, error } = validateOp(next, items[i].op)
         if (!op) {
           items[i] = { ...items[i], status: 'rejected' }
+          errors.push(error ?? '操作已失效，请重新生成修改建议')
           continue
         }
-        next = applyOp(next, op)
+        const accepted = (list: ProposalItem[]) => list.filter(item => item.status === 'accepted').map(item => item.op)
+        next = applyOp(next, orderInsert(next, op, accepted(items.slice(0, i)), accepted(items.slice(i + 1))))
+        // Retain the original selection anchor and the actual newly generated block IDs.
+        items[i] = { ...items[i], op }
       }
       items[i] = { ...items[i], status }
     }
     if (next !== doc) commit(next)
-    set({ proposal: { ...proposal, items } })
+    set({ proposal: { ...proposal, items, errors } })
   },
   clearProposal: () => set({ proposal: null }),
   refreshThemes: () => set({ themes: allThemes() }),

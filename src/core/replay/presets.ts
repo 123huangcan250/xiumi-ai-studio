@@ -309,4 +309,3 @@ export function renderItem(ti: TimedItem, ctx: RenderCtx): string {
 export function renderItemStatic(ti: TimedItem, ctx: RenderCtx): string {
   return `<g>${itemBody(ti, ctx)}</g>`
 }
-

@@ -15,6 +15,8 @@ const WX_IMAGE = /^https:\/\/mmbiz\.(qpic|qlogo)\.cn\//
 export interface LintOptions {
   /** 方案 A：允许 id 与 url(#id)（需真机确认） */
   idsAllowed: boolean
+  /** Upload preflight only: managed media must still pass strict final lint after rewriting. */
+  pendingLocalImages?: boolean
 }
 
 export function lintReplaySvg(svg: string, opts: LintOptions): LintResult {
@@ -51,6 +53,7 @@ export function lintReplaySvg(svg: string, opts: LintOptions): LintResult {
   for (const m of svg.matchAll(/\s(?:xlink:)?href="([^"]*)"/g)) {
     const u = m[1].replace(/&amp;/g, '&')
     if (u.startsWith('#')) continue
+    if (opts.pendingLocalImages && u.startsWith('/media/')) continue
     if (WX_IMAGE.test(u)) continue
     if (u.startsWith('data:')) inline++
     else if (/^(\/media\/|https?:\/\/(localhost|127\.0\.0\.1))/.test(u)) local++

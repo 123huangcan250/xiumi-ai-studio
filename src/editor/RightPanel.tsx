@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
+import { blockLabel } from '../core/blocks'
 import { compileDoc, variantUrl } from '../core/compiler'
-import { blockMeta } from '../core/blocks'
 import { applyOps, describeOp, summarize } from '../core/ops'
 import { QUICK_ACTIONS, aiContext } from '../core/quickActions'
 import { analyzeStyle, themeFromReport, type StyleReport } from '../core/styleExtract'
@@ -8,6 +8,9 @@ import { getTheme, registerTheme, resolveTheme } from '../core/themes'
 import type { Theme, ThemeTokens } from '../core/types'
 import { api, type AiStatus } from './api'
 import { CoverDesigner } from './CoverDesigner'
+import { readSuggestionPreference, saveSuggestionPreference } from './suggestionPreference'
+import { SuggestionInput } from './SuggestionInput'
+import { instructionSuggestions } from './suggestionQueue'
 import { PropsForm } from './PropsForm'
 import { selectedBlock, useStore } from './store'
 import { PhonePreview } from './Toolbar'
@@ -107,6 +110,8 @@ function ThemePanel() {
 }
 
 function AiPanel() {
+  const selected = useStore(selectedBlock)
+  const [scope, setScope] = useState<'selection' | 'document'>('selection')
   const doc = useStore((s) => s.doc)
   const proposal = useStore((s) => s.proposal)
   const { propose, resolveProposal, clearProposal, notify } = useStore.getState()
@@ -114,10 +119,25 @@ function AiPanel() {
   const [instruction, setInstruction] = useState('')
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<string | null>(null)
-  // 选中了模块时默认只让 AI 改这个模块；也可以切回整篇文章
-  const selected = useStore(selectedBlock)
-  const [wholeDoc, setWholeDoc] = useState(false)
-  const focusId = selected && !wholeDoc ? selected.id : null
+  const [autoSuggest, setAutoSuggest] = useState(readSuggestionPreference)
+  const autoSuggestHintId = useId()
+  const selectionSummary = selected ? summarize(selected).replace(/\s+/g, ' ').trim() : ''
+  const [suggestion, setSuggestion] = useState({ key: '', text: '', error: '' })
+  const selectedId = scope === 'selection' ? selected?.id : undefined
+  // Strip image URLs and rich-text metadata, and send only selected content in selection mode.
+  const context = useMemo(() => autoSuggest ? aiContext(selectedId && selected ? { ...doc, blocks: [selected] } : doc) : null, [autoSuggest, doc, selected, selectedId])
+  const suggestionRevision = instructionSuggestions.revision
+  const contextKey = useMemo(() => context ? JSON.stringify([doc.id, context, selectedId, ai?.profileId, ai?.model, ai?.provider, suggestionRevision]) : '', [doc.id, context, selectedId, ai?.profileId, ai?.model, ai?.provider, suggestionRevision])
+  useEffect(() => {
+    if (!autoSuggest || !ai?.enabled || instruction || busy || !context?.blocks.length) return
+    const controller = new AbortController()
+    const timer = setTimeout(() => {
+      instructionSuggestions.get(contextKey, () => api.aiSuggestInstruction(context, ai.profileId, selectedId, controller.signal), controller.signal)
+        .then((text) => { if (!controller.signal.aborted) setSuggestion({ key: contextKey, text, error: '' }) })
+        .catch(() => { if (!controller.signal.aborted) setSuggestion({ key: contextKey, text: '', error: '自动建议暂不可用，可以直接输入修改要求。' }) })
+    }, 1500)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [autoSuggest, ai, instruction, busy, context, contextKey, selectedId])
   useEffect(() => {
     const load = () => api.aiStatus().then(setAi).catch(() => setAi(null))
     load()
@@ -128,8 +148,9 @@ function AiPanel() {
     if (!instruction.trim()) return
     setBusy(true)
     try {
-      const r = await api.aiEdit(aiContext(doc, focusId), instruction)
-      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [], focusId)
+      const r = await api.aiEdit(aiContext(doc, selectedId), instruction, undefined, selectedId)
+      if (useStore.getState().doc !== doc) throw new Error('文档已在请求期间发生变化，请重新生成修改建议')
+      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [], selectedId, { policy: r.selectionPolicy, ignoredOps: r.ignoredOps })
     } catch (e: any) {
       notify(e.message, 'error')
     } finally {
@@ -144,27 +165,17 @@ function AiPanel() {
         {ai?.enabled ? `当前模型：${ai.name} / ${ai.model}` : '尚未配置 AI 模型。以下规则动作可离线使用。'}{' '}
         <button className="link" onClick={() => window.dispatchEvent(new Event('open-ai-settings'))}>{ai?.enabled ? '切换' : '去配置'}</button>
       </p>
-      {selected ? (
-        <div className="ai-scope" role="radiogroup" aria-label="修改范围" data-testid="ai-scope">
-          <label className="check">
-            <input type="radio" name="ai-scope" checked={!wholeDoc} onChange={() => setWholeDoc(false)} data-testid="ai-scope-selected" />
-            <span>只改选中的模块：{blockMeta(selected.type).label}「{(selected.type === 'html' ? selected.props.label : summarize(selected)).replace(/\s+/g, ' ').slice(0, 14) || '无文字'}」</span>
-          </label>
-          <label className="check">
-            <input type="radio" name="ai-scope" checked={wholeDoc} onChange={() => setWholeDoc(true)} data-testid="ai-scope-all" />
-            <span>整篇文章</span>
-          </label>
-        </div>
-      ) : (
-        <p className="hint">没有选中模块，AI 会面向整篇文章。在画布上点选一个模块，就可以只让 AI 改它。</p>
-      )}
-      <textarea
-        rows={3}
-        placeholder={ai?.enabled ? (focusId ? '例如：把这一段改得更简洁；补一句时间地点；换成更活泼的语气' : '例如：把第二章改成时间轴；给开头加一张数据卡片；整体语气更活泼但不改事实') : '配置大模型后可输入自然语言指令'}
-        value={instruction}
-        disabled={!ai?.enabled}
-        onChange={(e) => setInstruction(e.target.value)}
-      />
+      <label className="field"><span>修改范围</span>
+        <select value={selected ? scope : 'document'} onChange={(e) => setScope(e.target.value as 'selection' | 'document')} disabled={busy}>
+          {selected && <option value="selection">仅选中模块：{blockLabel(selected)}{selectionSummary && ` · ${selectionSummary.slice(0, 40)}${selectionSummary.length > 40 ? '…' : ''}`}</option>}
+          <option value="document">全文</option>
+        </select>
+      </label>
+      <p className="hint">{selected && scope === 'selection' ? '仅生成选中模块的修改建议，其他模块不会被修改。' : '当前范围为全文；在画布点选一个模块后，可切换为仅修改选中模块。'}</p>
+      <label className="hint"><input type="checkbox" aria-describedby={autoSuggestHintId} checked={autoSuggest} onChange={(e) => { saveSuggestionPreference(e.target.checked); setAutoSuggest(e.target.checked) }} /> 自动生成输入建议</label>
+      <p id={autoSuggestHintId} className="hint">默认关闭。开启后会将当前范围的文稿发送到已配置的当前模型，可能产生 API 费用；当前页面的建议请求间隔至少 30 秒。不发送图片文件。</p>
+      <SuggestionInput value={instruction} onChange={setInstruction} disabled={!ai?.enabled || busy} suggestion={autoSuggest && suggestion.key === contextKey ? suggestion.text : ''} />
+      {autoSuggest && suggestion.key === contextKey && suggestion.error && <p className="hint" role="status">{suggestion.error}</p>}
       <button className="primary wide" disabled={!ai?.enabled || busy} onClick={run}>{busy ? 'AI 思考中…' : '生成修改建议'}</button>
       <h4>规则动作</h4>
       <div className="quick-grid">
@@ -178,7 +189,8 @@ function AiPanel() {
             <b>{proposal.summary}</b>
             <button className="link" onClick={clearProposal}>关闭</button>
           </div>
-          {proposal.errors.length > 0 && <p className="warn">已忽略 {proposal.errors.length} 条无效操作：{proposal.errors.join('；')}</p>}
+          {proposal.selectionPolicy === 'filter' && <p className="hint">服务端已启用过滤模式：保留范围内的操作，越界操作会被忽略；请审阅部分修改是否仍符合意图。</p>}
+          {(proposal.ignoredOps + proposal.errors.length) > 0 && <p className="warn">已忽略 {proposal.ignoredOps + proposal.errors.length} 条无效操作：{[...(proposal.ignoredOps ? [`服务端过滤了 ${proposal.ignoredOps} 条越界操作`] : []), ...proposal.errors].join('；')}</p>}
           {proposal.items.map((it, i) => {
             const d = describeOp(proposal.base, it.op)
             return (

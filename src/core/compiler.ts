@@ -11,6 +11,8 @@ import type { Block, Doc, ImageRef, RichNode, RichText, Theme } from './types'
 export { css, esc }
 
 export interface CompileOptions {
+  /** Source preflight only; never enable for the final export. */
+  replayPendingImageUpload?: boolean
   /** 把（已附加裁切参数的）图片地址映射为最终地址：绝对 URL / base64 / mmbiz URL */
   mapImage?: (url: string) => string
   /** 非公众号文章链接的处理方式；微信会过滤外链，默认转成文字 */
@@ -83,10 +85,39 @@ class Ctx implements KitCtx {
 
 // ---------- 富文本 ----------
 
-function renderInline(n: RichNode, ctx: Ctx): string {
-  if (n.type === 'hardBreak') return '<br>'
-  if (n.type !== 'text') return (n.content ?? []).map((x) => renderInline(x, ctx)).join('')
-  let html = esc(n.text ?? '')
+/** Whitespace belongs to a visual line, not to each differently marked text node. */
+function renderInlines(nodes: RichNode[], ctx: Ctx): string {
+  const leaves: RichNode[] = []
+  const visit = (node: RichNode) => {
+    if (node.type === 'text' || node.type === 'hardBreak') leaves.push(node)
+    else (node.content ?? []).forEach(visit)
+  }
+  nodes.forEach(visit)
+  const hardBreaks = new Set<number>()
+  let position = 0
+  const source = leaves.map(node => {
+    if (node.type === 'hardBreak') { hardBreaks.add(position++); return '\n' }
+    const text = node.text ?? ''
+    position += text.length
+    return text
+  }).join('')
+  let offset = 0
+  return leaves.map(node => {
+    if (node.type === 'hardBreak') { offset++; return '<br>' }
+    const text = node.text ?? ''
+    const preserved = text.replace(/ +/g, (spaces, local: number) => {
+      const start = offset + local, end = start + spaces.length
+      const atEdge = start === 0 || end === source.length || hardBreaks.has(start - 1) || hardBreaks.has(end)
+      const repeated = spaces.length > 1 || source[start - 1] === ' ' || source[end] === ' '
+      return atEdge || repeated ? '\u00a0'.repeat(spaces.length) : spaces
+    })
+    offset += text.length
+    return renderInline(node, ctx, esc(preserved).replaceAll('\u00a0', '&nbsp;'))
+  }).join('')
+}
+
+function renderInline(n: RichNode, ctx: Ctx, textHtml: string): string {
+  let html = textHtml
   let linkHref: string | undefined
   // 加粗默认用主题色；文字设了颜色时以文字颜色为准（加粗标签在内层，它的颜色会盖住外层）
   const textColor = safeColor(n.marks?.find((m) => m.type === 'textStyle')?.attrs?.color)
@@ -137,21 +168,21 @@ export function renderRich(rich: RichText | undefined, ctx: Ctx, align = 'justif
     const mb = last ? 0 : gap
     const nodeAlign = n.attrs?.textAlign ?? align
     if (n.type === 'paragraph') {
-      const inner = (n.content ?? []).map((x) => renderInline(x, ctx)).join('')
+      const inner = renderInlines(n.content ?? [], ctx)
       out.push(ctx.p(inner || '<br>', { 'margin-bottom': mb, 'text-align': nodeAlign }))
     } else if (n.type === 'heading') {
-      const inner = (n.content ?? []).map((x) => renderInline(x, ctx)).join('')
-      out.push(ctx.p(inner, { 'margin-bottom': mb, 'font-weight': 700, 'font-size': ctx.t.h2Size - 1, color: ctx.c.primary }))
+      const inner = renderInlines(n.content ?? [], ctx)
+      out.push(ctx.p(inner, { 'margin-bottom': mb, 'text-align': nodeAlign, 'font-weight': 700, 'font-size': ctx.t.h2Size - 1, color: ctx.c.primary }))
     } else if (n.type === 'bulletList' || n.type === 'orderedList') {
       // 微信对 ul/ol 的缩进处理不稳定，统一渲染为带符号的段落
       ;(n.content ?? []).forEach((li, j) => {
         const marker = n.type === 'bulletList' ? '●' : `${j + 1}.`
-        const inner = (li.content ?? []).map((x) => (x.content ?? []).map((y) => renderInline(y, ctx)).join('')).join('<br>')
+        const inner = (li.content ?? []).map((x) => renderInlines(x.content ?? [], ctx)).join('<br>')
         const isLast = j === (n.content?.length ?? 0) - 1
         out.push(
           ctx.p(
             `<span style="${css({ color: ctx.c.primary, 'font-size': n.type === 'bulletList' ? 9 : ctx.t.fontSize, 'margin-right': 8, 'vertical-align': n.type === 'bulletList' ? 'middle' : false })}">${marker}</span>${inner}`,
-            { 'margin-bottom': isLast ? mb : 6, 'padding-left': 4 },
+            { 'margin-bottom': isLast ? mb : 6, 'padding-left': 4, 'text-align': li.content?.[0]?.attrs?.textAlign ?? nodeAlign },
           ),
         )
       })
@@ -176,7 +207,7 @@ const R: Renderers = {
     const v = p.variant === 'auto' ? t.coverVariant : p.variant
     const img = p.image ? `<img src="${esc(ctx.img(p.image, '16:10'))}" alt="" style="${css({ width: '100%', display: 'block', 'border-radius': v === 'band' ? 0 : t.imageRadius })}">` : ''
     const title = (extra: Record<string, any> = {}) =>
-      ctx.p(esc(p.title), { 'font-size': t.h1Size, 'font-weight': 700, 'line-height': 1.4, 'font-family': ctx.headingFont, 'letter-spacing': 1, ...extra })
+      ctx.p(esc(p.title), { 'font-size': t.h1Size, 'font-weight': 700, 'line-height': 1.4, 'font-family': ctx.headingFont, 'letter-spacing': 1, ...extra, 'text-align': p.titleAlign && p.titleAlign !== 'auto' ? p.titleAlign : undefined })
     const sub = (extra: Record<string, any> = {}) => (p.subtitle ? ctx.p(esc(p.subtitle), { color: c.muted, 'font-size': t.fontSize - 1, ...extra }) : '')
     const meta = (extra: Record<string, any> = {}) => (p.meta ? ctx.p(esc(p.meta), { color: c.muted, 'font-size': t.smallSize, 'letter-spacing': 1, ...extra }) : '')
     const kicker = (extra: Record<string, any> = {}) => (p.kicker ? ctx.p(esc(p.kicker), { 'font-size': t.smallSize, 'letter-spacing': 2, 'font-weight': 700, ...extra }) : '')
@@ -498,7 +529,7 @@ export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = 
 /** 编辑回放：每个模块用自己的 id 前缀，避免同一篇里多个回放的 id 冲突（点击开始方案） */
 export function compileReplay(block: Extract<Block, { type: 'replay' }>, opts: CompileOptions = {}, showCursors?: boolean): ReplayOutput {
   const props = opts.replaySvgText && block.props.textMode !== 'svg-text' ? { ...block.props, textMode: 'svg-text' as const } : block.props
-  return renderReplay(props, { mapImage: opts.mapImage, showCursors, idPrefix: `rp${block.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 6)}` })
+  return renderReplay(props, { pendingLocalImages: opts.replayPendingImageUpload, mapImage: opts.mapImage, showCursors, idPrefix: `rp${block.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 6)}` })
 }
 
 export interface CompileResult {
