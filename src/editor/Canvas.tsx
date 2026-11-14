@@ -21,6 +21,7 @@ import { openCollect, setInlineTarget } from './componentActions'
 import { ErrorBoundary } from './ErrorBoundary'
 import { ReplayCanvasBody } from './ReplayPreview'
 import { useStore } from './store'
+import { ReviewProvider, ReviewBlock, ReviewSlot } from './InlineReview'
 
 /** "a:b;c:d" → React style 对象 */
 export function styleObj(s: string): React.CSSProperties {
@@ -271,7 +272,7 @@ function BoxBody({ block, theme }: { block: Block<'box'>; theme: Theme }) {
       <div style={styleObj(parts.body)} className="box-body">
         <SortableContext items={children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {children.map((c, i) => (
-            <BlockView key={c.id} block={c} theme={theme} gap={i === children.length - 1 ? 0 : BOX_GAP} parentId={block.id} />
+            <ReviewBlock key={c.id} id={c.id}><BlockView block={c} theme={theme} gap={i === children.length - 1 ? 0 : BOX_GAP} parentId={block.id} /></ReviewBlock>
           ))}
         </SortableContext>
         <div ref={setNodeRef} className={`box-drop ${isOver ? 'over' : ''} ${children.length ? '' : 'empty'}`} data-testid="box-drop">
@@ -515,7 +516,7 @@ export function Canvas() {
   const photoDrag = usePhotoDrag(scroller)
   const [zoom, setZoom] = useCanvasZoom()
   return (
-    <div className="canvas-wrap">
+    <ReviewProvider><div className="canvas-wrap">
       <div className="canvas-scroll" ref={scroller} onClick={() => select(null)} {...photoDrag}>
         <div className="phone" style={zoom === 1 ? undefined : { zoom }} data-zoom={zoom}>
           <div className="phone-head">
@@ -525,9 +526,10 @@ export function Canvas() {
           <div className="article" style={styleObj(rootStyle(theme))} data-testid="canvas">
             <SortableContext items={doc.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
               {doc.blocks.map((b, i) => (
-                <BlockView key={b.id} block={b} theme={theme} gap={blockGap(b, doc.blocks[i + 1], theme)} />
+                <div key={b.id} className="review-position"><ReviewSlot beforeId={b.id} /><ReviewBlock id={b.id}><BlockView block={b} theme={theme} gap={blockGap(b, doc.blocks[i + 1], theme)} /></ReviewBlock></div>
               ))}
             </SortableContext>
+            <ReviewSlot />
             <div ref={setNodeRef} className={`drop-end ${isOver ? 'over' : ''}`}>
               {doc.blocks.length ? '拖入模块到此处，或在左侧点击添加' : '从左侧拖入模块，或使用「AI 一键排版」导入文稿'}
             </div>
@@ -539,6 +541,6 @@ export function Canvas() {
         <button className="zoom-val" title="恢复 100%（Ctrl + 0）" onClick={() => setZoom(1)} data-testid="zoom-reset">{Math.round(zoom * 100)}%</button>
         <button title="放大（Ctrl + 滚轮向上 / Ctrl + +）" onClick={() => setZoom((z) => z + 0.1)} disabled={zoom >= ZOOM_MAX} data-testid="zoom-in">＋</button>
       </div>
-    </div>
+    </div></ReviewProvider>
   )
 }

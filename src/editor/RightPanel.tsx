@@ -1,7 +1,8 @@
+import { previewProposal } from './proposalSafety'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { blockLabel } from '../core/blocks'
 import { compileDoc, variantUrl } from '../core/compiler'
-import { applyOps, describeOp, summarize } from '../core/ops'
+import { summarize } from '../core/ops'
 import { QUICK_ACTIONS, aiContext } from '../core/quickActions'
 import { analyzeStyle, themeFromReport, type StyleReport } from '../core/styleExtract'
 import { getTheme, registerTheme, resolveTheme } from '../core/themes'
@@ -147,10 +148,11 @@ function AiPanel() {
   const run = async () => {
     if (!instruction.trim()) return
     setBusy(true)
+    const expectedVersion = useStore.getState().proposalVersion
     try {
       const r = await api.aiEdit(aiContext(doc, selectedId), instruction, undefined, selectedId)
       if (useStore.getState().doc !== doc) throw new Error('文档已在请求期间发生变化，请重新生成修改建议')
-      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [], selectedId, { policy: r.selectionPolicy, ignoredOps: r.ignoredOps })
+      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [], selectedId, { policy: r.selectionPolicy, ignoredOps: r.ignoredOps, expectedVersion })
     } catch (e: any) {
       notify(e.message, 'error')
     } finally {
@@ -191,30 +193,13 @@ function AiPanel() {
           </div>
           {proposal.selectionPolicy === 'filter' && <p className="hint">服务端已启用过滤模式：保留范围内的操作，越界操作会被忽略；请审阅部分修改是否仍符合意图。</p>}
           {(proposal.ignoredOps + proposal.errors.length) > 0 && <p className="warn">已忽略 {proposal.ignoredOps + proposal.errors.length} 条无效操作：{[...(proposal.ignoredOps ? [`服务端过滤了 ${proposal.ignoredOps} 条越界操作`] : []), ...proposal.errors].join('；')}</p>}
-          {proposal.items.map((it, i) => {
-            const d = describeOp(proposal.base, it.op)
-            return (
-              <div key={i} className={`op ${it.status}`}>
-                <div className="op-title">{d.title}</div>
-                {it.op.reason && <div className="op-reason">{it.op.reason}</div>}
-                {d.before && <div className="diff del">− {d.before.slice(0, 160)}</div>}
-                {d.after && <div className="diff add">＋ {d.after.slice(0, 160)}</div>}
-                {it.status === 'pending' ? (
-                  <div className="op-actions">
-                    <button onClick={() => resolveProposal(i, 'rejected')}>拒绝</button>
-                    <button className="primary" onClick={() => resolveProposal(i, 'accepted')}>接受</button>
-                  </div>
-                ) : (
-                  <div className="op-state">{it.status === 'accepted' ? '已接受' : '已拒绝'}</div>
-                )}
-              </div>
-            )
-          })}
+          <p className="hint">修改建议已在正文原模块下方展开；绿色接受、红色拒绝。接受后的修改可撤销。</p>
+          <p className="hint" role="status" data-testid="review-progress" tabIndex={-1}>已接受 {proposal.items.filter(item => item.status === 'accepted').length} · 已拒绝 {proposal.items.filter(item => item.status === 'rejected').length} · 待审阅 {pending.length}</p>
           {pending.length > 0 && (
             <div className="op-actions all">
-              <button onClick={() => setPreview(compileDoc(applyOps(doc, pending.map((p) => p.op))).html)}>预览效果</button>
-              <button onClick={() => resolveProposal('all', 'rejected')}>全部拒绝</button>
-              <button className="primary" onClick={() => resolveProposal('all', 'accepted')} data-testid="accept-all">全部接受（{pending.length}）</button>
+              <button onClick={() => setPreview(compileDoc(previewProposal(proposal, doc)).html)}>预览效果</button>
+              <button onClick={() => resolveProposal('all', 'rejected', proposal)}>全部拒绝</button>
+              <button className="primary" onClick={() => resolveProposal('all', 'accepted', proposal)} data-testid="accept-all">全部接受（{pending.length}）</button>
             </div>
           )}
           <p className="hint">接受后的修改可用 Ctrl+Z 撤销。</p>
