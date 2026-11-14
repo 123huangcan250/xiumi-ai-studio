@@ -1,0 +1,147 @@
+import { expect, test, type Page } from '@playwright/test'
+import { createBlock } from '../../src/core/blocks'
+
+async function open(page: Page, ops: unknown[], customBlocks?: unknown[]) {
+  const id = `inline-review-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const blocks = [
+    { id: 'a', type: 'paragraph', props: { content: '<p>Original complete paragraph</p>', align: 'left' } },
+    { id: 'b', type: 'paragraph', props: { content: '<p>Second original paragraph</p>', align: 'left' } },
+  ]
+  const response = await page.request.put(`/api/projects/${id}`, { data: { id, title: 'Inline review fixture', author: '', digest: '', themeId: 'minimal-magazine', blocks: customBlocks ?? blocks, createdAt: Date.now(), updatedAt: Date.now() } })
+  expect(response.ok()).toBe(true)
+  await page.route('**/api/projects', route => route.fulfill({ json: [{ id, title: 'Inline review fixture' }] }))
+  await page.route('**/api/ai/status', route => route.fulfill({ json: { enabled: true, name: 'Synthetic review', model: 'synthetic' } }))
+  await page.route('**/api/ai/suggest-instruction', route => route.fulfill({ json: { suggestion: '' } }))
+  await page.route('**/api/ai/edit', route => route.fulfill({ json: { summary: 'Inline suggestions', ops, selectionPolicy: 'strict', ignoredOps: 0 } }))
+  await page.goto('/')
+  await expect(page.locator('.title-input')).toHaveValue('Inline review fixture')
+  return id
+}
+async function generate(page: Page) {
+  const properties = page.getByRole('button', { name: '属性', exact: true })
+  if (await properties.isVisible()) await properties.click()
+  await page.getByTestId('tab-ai').click()
+  await page.getByPlaceholder(/例如：把第二章/).fill('Apply the requested complete changes')
+  await page.getByRole('button', { name: '生成修改建议', exact: true }).click()
+  await expect(page.getByTestId('proposal')).toContainText('Inline suggestions')
+  const canvas = page.getByRole('button', { name: '画布', exact: true })
+  if (await canvas.isVisible()) await canvas.click()
+}
+for (const [width, height] of [[1440, 900], [1024, 768], [390, 844]]) {
+  test(`whole red original and green replacement remain operable at ${width}`, async ({ page }) => {
+    test.skip(width < 1440 && process.env.XIUMI_RESPONSIVE_COMBINATION !== '1', 'Requires PR8 responsive shell; narrow upstream retains desktop layout')
+    await page.setViewportSize({ width, height })
+    const id = await open(page, [{ op: 'update', id: 'a', props: { content: 'Full suggested paragraph with visible replacement text' } }])
+    const original = page.locator('[data-block-id="a"]')
+    const handle = await original.elementHandle()
+    await generate(page)
+    await expect(page.locator('.review-original-red')).toHaveCount(1)
+    const suggestion = page.locator('.review-suggestion')
+    await expect(suggestion).toBeVisible()
+    expect(await handle!.evaluate(node => node.isConnected)).toBe(true)
+    await expect(suggestion.locator('iframe')).toHaveAttribute('sandbox', 'allow-same-origin')
+    await expect(suggestion.frameLocator('iframe').locator('body')).toContainText('Full suggested paragraph with visible replacement text')
+    const originalBox = (await original.boundingBox())!, suggestionBox = (await suggestion.boundingBox())!
+    expect(suggestionBox.y).toBeGreaterThanOrEqual(originalBox.y + originalBox.height)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+    for (const button of await suggestion.locator('button').all()) {
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    }
+    await page.screenshot({ path: `test-results/inline-review-${width}.png`, fullPage: true })
+    const accept = suggestion.getByRole('button', { name: '接受', exact: true })
+    await accept.focus(); await page.keyboard.press('Enter')
+    await expect(original).toContainText('Full suggested paragraph with visible replacement text')
+    await expect(suggestion).toHaveCount(0)
+    await expect(page.getByTestId('save-status')).toHaveText('已保存')
+    const saved = await (await page.request.get(`/api/projects/${id}`)).json()
+    expect(JSON.stringify(saved)).not.toMatch(/review-suggestion|review-frame|review-bubble/)
+    await page.locator('.phone-head').click(); await page.keyboard.press('Control+z')
+    await expect(original).toContainText('Original complete paragraph')
+    await expect(page.locator('.review-suggestion')).toHaveCount(0)
+  })
+}
+test('insert and delete suggestions remain visible without replacing original blocks until accepted', async ({ page }) => {
+  await open(page, [{ op: 'insert', index: 1, block: { type: 'paragraph', props: { content: 'Inserted complete module' } } }, { op: 'remove', id: 'b' }])
+  await generate(page)
+  const cards = page.locator('.review-suggestion')
+  await expect(cards).toHaveCount(2)
+  await expect(page.locator('[data-block-id="b"]')).toContainText('Second original paragraph')
+  await expect(cards.nth(0).frameLocator('iframe').locator('body')).toContainText('Inserted complete module')
+  await expect(cards.nth(1)).toContainText('不会替换为新内容')
+  await cards.nth(0).getByRole('button', { name: '接受', exact: true }).click()
+  await expect(page.getByTestId('canvas')).toContainText('Inserted complete module')
+  await cards.getByRole('button', { name: '拒绝', exact: true }).click()
+  await expect(page.locator('[data-block-id="b"]')).toHaveCount(1)
+  await expect(cards).toHaveCount(0)
+})
+
+test('long suggestions resize after image/font load while original image controls remain independent', async ({ page }) => {
+  test.skip(process.env.XIUMI_RESPONSIVE_COMBINATION !== '1', 'Requires full PR8/PR12 responsive image-control combination')
+  const longText = '完整的长段落，需要可读且不截断。'.repeat(300)
+  await page.route('**/media/review-height.svg*', async route => {
+    await new Promise(resolve => setTimeout(resolve, 100))
+    await route.fulfill({ contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><rect width="600" height="900" fill="#aaa"/></svg>' })
+  })
+  await open(page, [{op:'move',id:'picture',to:0}], [{id:'picture',type:'html',props:{label:'图文原稿',html:`<section><img src="/media/review-height.svg"><p>${longText}</p></section>`}}])
+  await generate(page)
+  const frame=page.locator('.review-frame'), body=frame.contentFrame().locator('body')
+  await expect(body).toContainText(longText)
+  await expect.poll(async()=>frame.contentFrame().locator('img').evaluate(img=>(img as HTMLImageElement).complete)).toBe(true)
+  await frame.contentFrame().locator('body').evaluate(()=>document.fonts.ready)
+  await expect.poll(async()=>(await frame.evaluate(el=>el.getBoundingClientRect().height))-(await body.evaluate(el=>el.scrollHeight))).toBeGreaterThanOrEqual(0)
+  await page.locator('[data-block-id="picture"] .block-html img').click()
+  const resize=page.getByTestId('image-resize-handle');await expect(resize).toBeVisible()
+  await resize.focus();await page.keyboard.press('Home')
+  await expect(page.locator('.review-accept')).toBeDisabled()
+  await expect(page.locator('.review-suggestion [role="status"]')).toContainText('变化')
+  await page.locator('.review-reject').scrollIntoViewIfNeeded();await page.locator('.review-reject').click()
+  await expect(page.locator('[data-block-id="picture"]')).toHaveCount(1)
+})
+test('an active real rich editor survives proposal appearance and typing makes only its conflicting suggestion stale', async ({ page }) => {
+  await open(page,[{op:'update',id:'a',props:{content:'Replacement text'}}])
+  await page.locator('[data-block-id="a"]').dblclick()
+  const editor=page.locator('[data-block-id="a"] .tiptap')
+  await expect(editor).toBeVisible()
+  const node=await editor.elementHandle()
+  await generate(page)
+  expect(await node!.evaluate(el=>el.isConnected)).toBe(true)
+  await expect(page.locator('.review-accept')).toBeEnabled()
+  await editor.click();await page.keyboard.press('End');await page.keyboard.type(' manual change')
+  await expect(editor).toContainText('manual change')
+  await expect(page.locator('.review-accept')).toBeDisabled()
+  await expect(page.locator('.review-suggestion [role="status"]')).toContainText('变化')
+  expect(await node!.evaluate(el=>el.isConnected)).toBe(true)
+})
+
+test('tap plus zero-hold loop is a frozen final review, without changing original playback', async ({ page }) => {
+ const replay=createBlock('replay');replay.id='replay';replay.props.playback.trigger='tap';replay.props.playback.loop={hold:0}
+ const id=await open(page,[{op:'move',id:'replay',to:0}],[replay])
+ await generate(page)
+ const frame=page.locator('.review-frame')
+ await expect(frame.contentFrame().locator('body')).not.toContainText('点击开始回放')
+ await expect(page.locator('.review-suggestion')).toContainText('静态成稿')
+ await expect.poll(()=>frame.contentFrame().locator('body').evaluate(body=>{
+   const roots=Array.from(body.querySelectorAll('[data-review-freeze] svg')).filter(svg=>!svg.parentElement?.closest('svg')) as SVGSVGElement[]
+   return roots.length>0 && roots.every(svg=>svg.animationsPaused() && svg.getCurrentTime()>0)
+ })).toBe(true)
+ await expect(page.getByTestId('replay-open')).toBeVisible()
+ await page.screenshot({path:'test-results/inline-review-replay-static.png',fullPage:true})
+ await page.locator('.review-accept').click()
+ await expect(page.getByTestId('save-status')).toHaveText('已保存')
+ const saved=await(await page.request.get(`/api/projects/${id}`)).json()
+ expect(saved.blocks[0].props.playback.trigger).toBe('tap');expect(saved.blocks[0].props.playback.loop).toEqual({hold:0})
+})
+
+test('desktop long suggestion follows actual loaded image and font height without clipping', async ({ page }) => {
+ const text='Long complete readable suggestion. '.repeat(300)
+ await page.route('**/media/review-long.svg*', route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><rect width="600" height="900" fill="#aaa"/></svg>'}))
+ await open(page,[{op:'move',id:'long',to:0}],[{id:'long',type:'html',props:{label:'Long original',html:`<section><img src="/media/review-long.svg"><p>${text}</p></section>`}}])
+ await generate(page)
+ const frame=page.locator('.review-frame'),body=frame.contentFrame().locator('body')
+ await expect(body).toContainText(text)
+ await expect.poll(()=>frame.contentFrame().locator('img').evaluate(img=>(img as HTMLImageElement).complete)).toBe(true)
+ await body.evaluate(()=>document.fonts.ready)
+ await expect.poll(async()=>(await frame.evaluate(el=>el.getBoundingClientRect().height))-(await body.evaluate(el=>el.scrollHeight))).toBeGreaterThanOrEqual(0)
+ await page.locator('.review-reject').scrollIntoViewIfNeeded();await page.locator('.review-reject').click()
+ await expect(page.locator('[data-block-id="long"]')).toHaveCount(1)
+})

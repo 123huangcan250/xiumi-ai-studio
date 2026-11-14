@@ -38,7 +38,7 @@ test('proposal acceptance does not overwrite a manual edit to its target', async
   await expect(card).toContainText('Manual card title')
   await expect(card).not.toContainText('Suggested card title')
   await expect(page.getByTestId('proposal')).toContainText('变化')
-  await expect(page.getByTestId('proposal').locator('.op.rejected')).toHaveCount(1)
+  await expect(page.getByTestId('review-progress')).toContainText('已拒绝 1')
 })
 
 test('proposal accepts its title while retaining independently edited card content', async ({ page }) => {
@@ -52,7 +52,7 @@ test('proposal accepts its title while retaining independently edited card conte
   await page.getByTestId('accept-all').click()
   await expect(card).toContainText('Suggested card title')
   await expect(card).toContainText('Independent manual body')
-  await expect(page.getByTestId('proposal').locator('.op.accepted')).toHaveCount(1)
+  await expect(page.getByTestId('review-progress')).toContainText('已接受 1')
 })
 
 test('undo and redo preserve content history without reviving accepted review actions', async ({ page }) => {
