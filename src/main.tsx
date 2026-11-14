@@ -1,10 +1,17 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { ColorModeProvider } from './editor/ColorModeControl'
 import { canvasEnv, setReplayEnv } from './core/replay'
 import { ErrorBoundary } from './editor/ErrorBoundary'
 import { saveNow, useStore } from './editor/store'
 import './styles.css'
+import './theme/fonts/fonts.css'
+import './help.css'
+import './color-mode.css'
+import './editorial-dark.css'
+import './editorial-layout.css'
+import './editorial-upstream.css'
 
 /** 最外层兜底：任何未捕获的渲染错误都显示可恢复的提示，而不是白屏 */
 function Crashed({ error, reset }: { error: Error; reset: () => void }) {
@@ -35,7 +42,7 @@ setReplayEnv(canvasEnv(document))
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary fallback={(error, reset) => <Crashed error={error} reset={reset} />}>
-      <App />
+      <ColorModeProvider><App /></ColorModeProvider>
     </ErrorBoundary>
   </StrictMode>,
 )

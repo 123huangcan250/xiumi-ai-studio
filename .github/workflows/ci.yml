@@ -33,6 +33,10 @@ jobs:
       - run: pnpm exec playwright install chromium
       - run: pnpm sample
       - run: pnpm e2e --update-snapshots=none
+      - name: Editorial shell dark and responsive scenarios
+        run: pnpm exec playwright test --config playwright.shell.config.ts --update-snapshots=none
+        env:
+          SHELL_PHASE: 'after'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
@@ -40,4 +44,6 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            test-results-shell/
+            visual-evidence/editorial-shell/
           retention-days: 7

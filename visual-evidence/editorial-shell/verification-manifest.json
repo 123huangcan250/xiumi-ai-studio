@@ -1,0 +1,1690 @@
+{
+  "results": {
+    "upstreamBrowser": "42/43 first full run; 1 replay passed after restoring inherited upstream screenshot tolerance",
+    "mixedTests": "610/610 (53 files), not strict-unit coverage",
+    "build": 0,
+    "types": 0,
+    "lint": 0,
+    "shellBrowser": "9/9 final run"
+  },
+  "base": "aec2e753522d1ea6dc90cb51f2080606c0e71b92",
+  "node": "24.19.0",
+  "limitations": [
+    "No strict-unit >90% claim",
+    "No new complete 43-case run after test-config correction",
+    "No snapshot changes or test retries",
+    "No packaged EXE or physical touch/screen-reader session"
+  ],
+  "sourceFiles": [
+    {
+      "path": "server/ai.ts",
+      "sha256": "31353B0C7BED13ACFD84F042C5ED607871FC741C11BF1BFA4447FD342FEE9313"
+    },
+    {
+      "path": "server/aiEdit.ts",
+      "sha256": "511D9EEBE51EC439119A9A938D3E377FCCE1D69B90E82C280EF8C0EE81BC5304"
+    },
+    {
+      "path": "server/aiModels.ts",
+      "sha256": "3C137DA5B4E99F88E34CA399C1BEF9E27E736E86F041F4CD6F3C5F3FCAFFD08C"
+    },
+    {
+      "path": "server/aiSuggestion.ts",
+      "sha256": "AF05E1F21EC03531CA4F2444A331F0DDE97CBAA882D209C028D7981151625FAE"
+    },
+    {
+      "path": "server/app.ts",
+      "sha256": "6109346BC02CC4C2D923597D60F2D1E06905D4D178736E69E0762F5945B42B1E"
+    },
+    {
+      "path": "server/assets.ts",
+      "sha256": "7782D42BB8100D07DD616293888FA273BBB9100489B6796BB0385737FCB1E900"
+    },
+    {
+      "path": "server/components.ts",
+      "sha256": "B47D871827E7789FC9226F8F1BD6683D8B6E307951740FC3EA5EBA9F71569507"
+    },
+    {
+      "path": "server/dataTools.ts",
+      "sha256": "EC37EAB18CCA4AEF58A271C2159526529C43EC806EA567C5AE474F92487F098A"
+    },
+    {
+      "path": "server/importer.ts",
+      "sha256": "2CF3FF90FA8678D2DF56CF5A781F2F5B50F91232147EE1FBEE7BD933EFF7A822"
+    },
+    {
+      "path": "server/index.ts",
+      "sha256": "2E7402C5B998673D757A1D1C2FC97658C13B1483EBD45949FB3EA43889331C00"
+    },
+    {
+      "path": "server/launcher.ts",
+      "sha256": "B67375C4BE9C7F05E4F6D7F338F1EFD211E37A029545B21428FB2899CF22CB20"
+    },
+    {
+      "path": "server/log.ts",
+      "sha256": "966EC6F95B1071B995AA3B2A93C10B681614B40F50073A114876D57CAF535242"
+    },
+    {
+      "path": "server/net.ts",
+      "sha256": "A9C2CBAFBA9A518FE10DACCD619C667C21BAE3826B20941A5434E1D7E91CEBBD"
+    },
+    {
+      "path": "server/paths.ts",
+      "sha256": "CB98FC44DE6DFF9F379459A6BEB294D9BB314AB1ECDED8B4ABBDF95AB3F4B46A"
+    },
+    {
+      "path": "server/settings.ts",
+      "sha256": "E50B5F6C3358F4BD48016EB9ED47122FEE79B8529E1BACE8EDDF9341367C7907"
+    },
+    {
+      "path": "server/store.ts",
+      "sha256": "E2874D34931B29BA95BF55226B888DB3950F4B70513D1E5F50087000AC04B562"
+    },
+    {
+      "path": "server/wechat.ts",
+      "sha256": "859E62162F94CF37BE2865A7E6F9E22593ED46F3086E4BA56EEBA7D612A9DB26"
+    },
+    {
+      "path": "src/App.tsx",
+      "sha256": "4697A81C0099F3CD2DB27B76A958F657C9F0921591E54627616FA1FAC738A552"
+    },
+    {
+      "path": "src/color-mode.css",
+      "sha256": "C2D61634FECEE6958F8FCE959FC7400E8F11B67C4E7605D2E2B94C2D6088B7AF"
+    },
+    {
+      "path": "src/core/aiDesign.ts",
+      "sha256": "FB9D39D7298E6DB1A70D40CB9671640ED1299A48691C59A257E8C7AEB5ECCF90"
+    },
+    {
+      "path": "src/core/aiParameters.ts",
+      "sha256": "1D40EF5B7CA63463359BFF79DC53FDCB981F02EB356B84F0286DB051C7975C50"
+    },
+    {
+      "path": "src/core/assemble.ts",
+      "sha256": "4666F8541E01B414FF046084D78913C0DE5D8770F75972F8293124D78637755E"
+    },
+    {
+      "path": "src/core/blocks.ts",
+      "sha256": "9123BF19B13D668C60F7476277AE2549CD60002753E43D554E7AE4E94EDEB2F5"
+    },
+    {
+      "path": "src/core/blockTextEditing.ts",
+      "sha256": "9B26F5BCBED14E541D37D13C08E8E605C8A5F61E77C64A0C17FD1FB8AFFCD02B"
+    },
+    {
+      "path": "src/core/color.ts",
+      "sha256": "27254ECAD51DD2460BEF09CBB4E6EB0C3492E1DC4F3BBD5C6FA2AEDA29044DA6"
+    },
+    {
+      "path": "src/core/compiler.ts",
+      "sha256": "0E147F65BD4BFDC310F4DC01C3924503582A725384B0FE370FBB74D2BA6B7F03"
+    },
+    {
+      "path": "src/core/components.ts",
+      "sha256": "C51840FCFF2C41D980C11F6CF7AAD038D7F24A33916A5E7F2E1C325ED205510F"
+    },
+    {
+      "path": "src/core/copy.ts",
+      "sha256": "471CBBAD6592499C2E293BDB082657C20D3B669139B35E943C8F0C92B2B26B0F"
+    },
+    {
+      "path": "src/core/enrich.ts",
+      "sha256": "0DD663CB737DCD8C76371ADF75B6BACEC8E9CF021D8AA5F7D64639EFB8CDCA15"
+    },
+    {
+      "path": "src/core/exporters.ts",
+      "sha256": "F2AE7C0C9B9E0FF2608731313F2BFC61547FE7792053C62FC6ED3B06803E3BA9"
+    },
+    {
+      "path": "src/core/fluid.ts",
+      "sha256": "ACB37E25101A51DAF90BEC46C4D35FFBD84D3643B7186AC19897B5A9E82EC8BE"
+    },
+    {
+      "path": "src/core/fragments.ts",
+      "sha256": "844A449E42B82283FAB4E532F7E8F7A79851013646B1D47F99789270548DE769"
+    },
+    {
+      "path": "src/core/images.ts",
+      "sha256": "AD6A27BB76458AFDA44E90F76556BD045BFFDCE101ABDA70A420AA29F30B7CE3"
+    },
+    {
+      "path": "src/core/kit.ts",
+      "sha256": "657ADDEDCF434EB4FCB8B224232BCF543EA650218692936214ED7428731C28A3"
+    },
+    {
+      "path": "src/core/layouts.ts",
+      "sha256": "1163D39A3C3512603872CF47EA2AFDD4DC24AE8C5B2BAA5C25F27ABEC0E4CE56"
+    },
+    {
+      "path": "src/core/ops.ts",
+      "sha256": "950F6CE9D5BE57041F7429B6B44A4FC0F79C93B2B3E93A8BE044BFD5DB76E2A7"
+    },
+    {
+      "path": "src/core/outline.ts",
+      "sha256": "C576887B018A2FD8846D53AC8A44A58DDE0D603A75C0525A52D4F847CC187BA2"
+    },
+    {
+      "path": "src/core/photoPlan.ts",
+      "sha256": "8834625532723910509A2EE691F44F02A8DD4E8D7ABA17ECD2CE968AE21DB293"
+    },
+    {
+      "path": "src/core/photos.ts",
+      "sha256": "33604359BDCAF8196297555F95063DCAA6806C392F8DB5BFEA481DB361614325"
+    },
+    {
+      "path": "src/core/quickActions.ts",
+      "sha256": "33921E5863170FDD71B1FA36FECB1B17B8EC64F2AA1EA802B02DC14823592364"
+    },
+    {
+      "path": "src/core/recolor.ts",
+      "sha256": "A81E9E1647DF73DE242E098FD074F708CCB56E21F544477420EE711660B662EE"
+    },
+    {
+      "path": "src/core/replay/cursors.ts",
+      "sha256": "BE1CB8A2DFAD42D5FD2FF2A42EA1746E070ED992A5CC7A85C7283F175972A562"
+    },
+    {
+      "path": "src/core/replay/draw.ts",
+      "sha256": "876A098F8B3C3AD4247A0E4A7EA9F6AA9CB508A5FA028C8F41136B7C84BD1594"
+    },
+    {
+      "path": "src/core/replay/index.ts",
+      "sha256": "DDA53181B56DCEB16A2C893675C579FE3FBF67555F5868B27F03C68AC73EF795"
+    },
+    {
+      "path": "src/core/replay/layout.ts",
+      "sha256": "E6E3ED114CD860973AD2A0D7C0306EF8215DC2407E1A39F78E93D7CF44B2A658"
+    },
+    {
+      "path": "src/core/replay/lint.ts",
+      "sha256": "E3CC9565246094F5D45448124C2C720C3E7D8A02D80C156D90F0EB640AD58A96"
+    },
+    {
+      "path": "src/core/replay/pace.ts",
+      "sha256": "5B13F53A1186653C704DC8AAD2F7FC889A536B459858FD43228E695C3CEA666E"
+    },
+    {
+      "path": "src/core/replay/presets.ts",
+      "sha256": "3A5FFE544F02ECAC0E7D1E246F66F834EC8DD29B7F58C00194E7985F0203D9F7"
+    },
+    {
+      "path": "src/core/replay/render.ts",
+      "sha256": "F3E5294E98B44F32CA50B1876040BF3BF04447D7AFF99611D3B4E98A361A29B0"
+    },
+    {
+      "path": "src/core/replay/sample.ts",
+      "sha256": "4C5BAD5F9D9C3A6B11CADC9664EFEE0758A5771CF1F136A4BD36A6FC4C332297"
+    },
+    {
+      "path": "src/core/replay/schedule.ts",
+      "sha256": "381F63E9A66CF908FAC34816FC9938450BE3981B0D7BB8A9CF22D6F2E37B813A"
+    },
+    {
+      "path": "src/core/replay/schema.ts",
+      "sha256": "E2FE6CDD2E377ADCEEB06CB9F8B6BA7C3BEDC7D5F94956D5728AEA11E6465959"
+    },
+    {
+      "path": "src/core/replay/smil.ts",
+      "sha256": "FEB96A97C4BCED45ED43014DCEED5C6BB2D4103C20A2C2AD307C84ACD20FBD6D"
+    },
+    {
+      "path": "src/core/replay/text.ts",
+      "sha256": "85E694EC4F78C50D3BF0BB318CB23898058A7E4476B711D79E01A7BEF24B474C"
+    },
+    {
+      "path": "src/core/replay/types.ts",
+      "sha256": "A81313854B620F2E23AB610C565F8435FF08F328EC3CB93C06B7E239028BB964"
+    },
+    {
+      "path": "src/core/richtext.ts",
+      "sha256": "805CD76A85740F707EB13E4F5C547B0DBFF9FE1572DC38C29083B187BECC2FE8"
+    },
+    {
+      "path": "src/core/roles.ts",
+      "sha256": "6B2E5096D63D45766C404500F404FEE3A93511E1D629EA10644FD8915E9FA802"
+    },
+    {
+      "path": "src/core/sanitize.ts",
+      "sha256": "C1FC52DC54040BFAD9174421E0E23A04C3832EBDA90DB279EEC289DE199BD228"
+    },
+    {
+      "path": "src/core/slots.ts",
+      "sha256": "BF58C85DEF68BE7FC6E8C8D7A1715F1DF77B96CCBEE24DFFB00E1B3CA85639E6"
+    },
+    {
+      "path": "src/core/style.ts",
+      "sha256": "B254F2BD502C35B167F1F8E69D72AB043BCD1AB5C452151D7B10CE6216EBF80A"
+    },
+    {
+      "path": "src/core/styleExtract.ts",
+      "sha256": "D3CD2C06876E2A50946E72505CE85247074575332F7E717B79AC3328636085E3"
+    },
+    {
+      "path": "src/core/templateFill.ts",
+      "sha256": "B7133F8CA675BA12E859F656D7D140F569D1D0B3FD81D330E0C4F9EC076B8087"
+    },
+    {
+      "path": "src/core/themes.ts",
+      "sha256": "6F7E374052BFC61199B5F199BF4615A8458ADF5C0C304D8C8DAEFEED64C8C966"
+    },
+    {
+      "path": "src/core/tree.ts",
+      "sha256": "F6B88460624847B86D43BCA708EFB5EF4FEB953D7ECBEDBA7AE667FA279E206A"
+    },
+    {
+      "path": "src/core/types.ts",
+      "sha256": "8B90DF5B4F036102F7205351ABC98825DF12F926345CE160D6BDE91677BF170C"
+    },
+    {
+      "path": "src/core/wxImport.ts",
+      "sha256": "1CFE42C144C088FC2B85D305324E9B1D2C49537CDC8159D37DB495AF6E14B1CB"
+    },
+    {
+      "path": "src/core/xiumiExport.ts",
+      "sha256": "3DDB5B1030EC5A86C59B4643814A598F352EEFFEB6352A6035CBD46C045F8885"
+    },
+    {
+      "path": "src/editor/aiPresets.ts",
+      "sha256": "A5C38AA9DF861DD0BD87B2F0795C72497206CB231F7D24471D7263A7730D914F"
+    },
+    {
+      "path": "src/editor/AiSettingsModal.tsx",
+      "sha256": "972421101CEFD37DF1D36F4A617E21E44A93D9BC5E5594E5F805EFC6D6655435"
+    },
+    {
+      "path": "src/editor/api.ts",
+      "sha256": "7E6A4FD7862157124A25BC0D6308A7CB8D280C8117A9161C0B0AB444BB03C4BC"
+    },
+    {
+      "path": "src/editor/ArticleImport.tsx",
+      "sha256": "0BD4671996B1F65775F0ACCBE39F3A4175FF9533A2AA93B7166C1671527F9FC1"
+    },
+    {
+      "path": "src/editor/BlockTextEditor.tsx",
+      "sha256": "6B9F0CF169878947BF5AC42D9E387A61E573D4464A0FD62760440BBCB9C80782"
+    },
+    {
+      "path": "src/editor/Canvas.tsx",
+      "sha256": "1EFC7070E20CC7612F379978F31F56C36A13EEA7C45F683F5EF7F90D51C63943"
+    },
+    {
+      "path": "src/editor/CollectModal.tsx",
+      "sha256": "E8C0EEBA981A643AF272E3EE1821E8164A2A0FC87A935A7372BCD87A77F96AED"
+    },
+    {
+      "path": "src/editor/colorMode.ts",
+      "sha256": "4B3DE12F77D69D0BA8315682284DCD87D52B5F76E827DE8516507CEFCFB31E6B"
+    },
+    {
+      "path": "src/editor/ColorModeControl.tsx",
+      "sha256": "0647918E65E5ED52C5B6EE89938B02E237BE601820822544C45FBEFC9331AECE"
+    },
+    {
+      "path": "src/editor/ColorPicker.tsx",
+      "sha256": "14F0D0334AEB2DF3C27BCA287315B27CA4C42E755CA57B62358D612837AC2559"
+    },
+    {
+      "path": "src/editor/componentActions.ts",
+      "sha256": "10EC59C743CD7DC9A7A75C7AD33465D189475F0CAABDF96E75B24B676F60159B"
+    },
+    {
+      "path": "src/editor/ComponentLibrary.tsx",
+      "sha256": "8B8D20CA0E540EFB0E63DA1FBF9B4F22CF573CA2CB6A18F7A0EEB17C363929F9"
+    },
+    {
+      "path": "src/editor/Copywriter.tsx",
+      "sha256": "DB8B6A9C57747DAAA6A26D219BDDE16943B8565D4E28568918516B4F3CA0A272"
+    },
+    {
+      "path": "src/editor/CoverDesigner.tsx",
+      "sha256": "829FF77FA914F4D3315F7991880BE7B949EDABB046784771989D5B962A9B7FA0"
+    },
+    {
+      "path": "src/editor/CoverTitleAlignment.tsx",
+      "sha256": "80D2A074E3900F9A50DA1CE77CBC42BB95C13F0E9BA4B960B5A4049548C2A7ED"
+    },
+    {
+      "path": "src/editor/CropModal.tsx",
+      "sha256": "9927713A64436C972C11482555E94D2301999C8B7D6C9AD356554C26E854769A"
+    },
+    {
+      "path": "src/editor/DataModal.tsx",
+      "sha256": "BEE736A4B24384E25D0D7240FB2FA001D4A1CC1F43D74EE33128D1F3BA6755A0"
+    },
+    {
+      "path": "src/editor/ErrorBoundary.tsx",
+      "sha256": "031470B4AD7E4C767389C193DA4C00B62C353A853E808AB0E687329E18956874"
+    },
+    {
+      "path": "src/editor/fluidize.ts",
+      "sha256": "145E0EAD6E2BB24B8215EDDA1F802F7955A1294509C02AAAF9AA0CD450D08267"
+    },
+    {
+      "path": "src/editor/Help.tsx",
+      "sha256": "46909EEC1D480EC12687CE3AB1611C246CF969939B1A847A33C14C9FBA90FBAF"
+    },
+    {
+      "path": "src/editor/ImportWizard.tsx",
+      "sha256": "1C3F4E63C36429EECF917E763FE5FF9320A225BEEDB317B188F1728A5F5A982B"
+    },
+    {
+      "path": "src/editor/kitItems.ts",
+      "sha256": "C225A27A24A15229EDB6A12BE35C918F43E891E85DEFF11BAE6E8FE1855EF60C"
+    },
+    {
+      "path": "src/editor/KitPicker.tsx",
+      "sha256": "B0C461841D0D9F36D0D473181A6126BF6C42AD96DFDB30CD6E4A4F1CA20B25B1"
+    },
+    {
+      "path": "src/editor/LeftPanel.tsx",
+      "sha256": "351841FDC7C3DB7A5ACFBC9017FC20D2AB0CE5E1D65D959C9210D07FF28AF51F"
+    },
+    {
+      "path": "src/editor/Modal.tsx",
+      "sha256": "46C16B2EF2DDE943CE809465343A0ABBCE03604650678FD1068458B11664917C"
+    },
+    {
+      "path": "src/editor/PhotoPlanner.tsx",
+      "sha256": "0A906CDC9183B4F2D53843088206E1F7F487DC8D03B7126B21F0717908087EF4"
+    },
+    {
+      "path": "src/editor/PlanIssues.tsx",
+      "sha256": "75D96E717DCC028D7764C0C36A6163890C9FFF7CA12EF1FC6CB8EA7F02175B28"
+    },
+    {
+      "path": "src/editor/PropsForm.tsx",
+      "sha256": "01604D2DF3A1C33C72E9A558D801D4F884AC6850B2A1FD7AE7D447F961E5196B"
+    },
+    {
+      "path": "src/editor/ReplayPanel.tsx",
+      "sha256": "BCC3958A3A3D8CCCD0DDF0C6C343F1B70403A734652FF22C945C42A380C4FCEE"
+    },
+    {
+      "path": "src/editor/ReplayPreview.tsx",
+      "sha256": "B7E13D059D00A3B31081051BEB6A44F3556F1F84BBF28A6251C016724588E64F"
+    },
+    {
+      "path": "src/editor/RichEditor.tsx",
+      "sha256": "99FD3FD837A5791F73FE230774071184181CF4C12C4D1BDE808101158232A924"
+    },
+    {
+      "path": "src/editor/RightPanel.tsx",
+      "sha256": "1EE69BC9CC388BD5F914F6B6BDA3D248061C554D8325B13B63AC83C4983275D4"
+    },
+    {
+      "path": "src/editor/RoleSelect.tsx",
+      "sha256": "F416BFF491AF025E753A69C09B30079B7922EE443AE4A29A28437A7BCDF8DEED"
+    },
+    {
+      "path": "src/editor/store.ts",
+      "sha256": "E692C2DE65BA76C1AAD98B74C65A351054C30C5E7F8D6AA988CCC330727B37E1"
+    },
+    {
+      "path": "src/editor/SuggestionInput.tsx",
+      "sha256": "A58EDAE96D657E2C7DDA52A8BF4E6FB8C68795A163350D3F57F63560E65BFF2C"
+    },
+    {
+      "path": "src/editor/suggestionPreference.ts",
+      "sha256": "470031D220B2A8E248CA4589C5753F6CB03D2534C711F5C6BF7D265D7CD69596"
+    },
+    {
+      "path": "src/editor/suggestionQueue.ts",
+      "sha256": "721BF4406758E58EE782DA3206B92D5C83F5B433787B028581E3BF5BFCE8C0AA"
+    },
+    {
+      "path": "src/editor/TemplateModules.tsx",
+      "sha256": "F90E68FFF927ECB42209C0006DFD864FE3FF5A63D09590CCE554D4CF52E51371"
+    },
+    {
+      "path": "src/editor/Toolbar.tsx",
+      "sha256": "38C3CFF20EC05D82550ADCFDD0215DEAA14A88019B7B2BB293A746E5A3B1E6F2"
+    },
+    {
+      "path": "src/editor/ToolbarMenu.tsx",
+      "sha256": "A658D711CD331658F444CE7E34C617C4DB2D3C9467F59D9045A02B8C0CF19613"
+    },
+    {
+      "path": "src/editor/UiIcon.tsx",
+      "sha256": "C9DA1882040F8DF24957B1AFDA30160DFA52F90F1B9F5A6C4AB8EA5654909D98"
+    },
+    {
+      "path": "src/editor/wechatOutput.ts",
+      "sha256": "18F7D0054BEEB9F229B031AAE3AE8F14CB081B33C133530A8ECFD361CAF8C5FB"
+    },
+    {
+      "path": "src/editor/Workspace.tsx",
+      "sha256": "0978BBDABEED18D1BC561994DF8466EABD0D2FCB8015E62B7B67006926896B4E"
+    },
+    {
+      "path": "src/editor/zoom.ts",
+      "sha256": "AA54ADA94C26756F156155584A47592DCB661AA9CCB577AD984D3BDADEFF59E9"
+    },
+    {
+      "path": "src/editorial-dark.css",
+      "sha256": "3D06DCFEB1F8C1E719DCFBF9AB1E26E64A89BC6C0BB40AB8B6F34217D3226FEB"
+    },
+    {
+      "path": "src/editorial-layout.css",
+      "sha256": "EC4380B07EE70DD0B4A9BD77A390F086BEB0C48DFB85D7528973D14C61BA5AF8"
+    },
+    {
+      "path": "src/editorial-upstream.css",
+      "sha256": "7E14746AE1C0D4568994A5851F9C62D39767F8D4598AAD8056C3BE1CD8309CC2"
+    },
+    {
+      "path": "src/help.css",
+      "sha256": "1F23330973CEEEF6461ECA4CF1CA2B2581C921932B35821E661906D61DE7D4E8"
+    },
+    {
+      "path": "src/main.tsx",
+      "sha256": "1D6E64577267E3308EE05E598E85FE497E6917C50E98850D667C732B7187E875"
+    },
+    {
+      "path": "src/styles.css",
+      "sha256": "E25C0069FE068EFCED6F1C682838C678150DCC86017A38D9D58196351E8507B8"
+    },
+    {
+      "path": "src/theme/fonts/fonts.css",
+      "sha256": "12846103900C59E3CEF42AE56D7E164649FDB8AECEE89D0EA60A2E78DAB6770E"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-100-wght-normal.woff2",
+      "sha256": "2C5DDF9CDFAD73AFB5235E06BC8ED3B5C627849200D673978148700C78F84160"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-101-wght-normal.woff2",
+      "sha256": "A33308BF652E64AC2884BFE830996E933322B939B915BB823FD47383580664AD"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-102-wght-normal.woff2",
+      "sha256": "4EA85E144CB385CE086B21B307730D3FDB70A587AAF350B12D0C4C2F13E66D27"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-103-wght-normal.woff2",
+      "sha256": "1BFDB1F001006C62434577B60064C3EC0562E4A68191ACBC7FEEBA4B303BF095"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-104-wght-normal.woff2",
+      "sha256": "1E716B78655E396075808BE52A9E749DF1B6B5D17BD0CCEDC6DCB89586903737"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-105-wght-normal.woff2",
+      "sha256": "ADE910A27A4BD65BAED59A8A86A3A6A80F6083DAA7123BB9FF32DA15E56FDA9D"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-106-wght-normal.woff2",
+      "sha256": "D31C838EB0E43043109BD6DDC23C295C340FC50F9A2F2381076AE8C0FA7F980B"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-107-wght-normal.woff2",
+      "sha256": "D8D9B5FD2B266FDF3F6855444E7769E54F39806E48994E7FE5E0C4ACE9553C81"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-108-wght-normal.woff2",
+      "sha256": "12FCC1175CB6370ACB056743F4FEA7FDDE85B6376ADA2F15DFBAB59F02B45988"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-109-wght-normal.woff2",
+      "sha256": "85EBC9985C665DD55346EBC78B93F8D8EF6FF972D78AFC288B75D697A242D780"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-110-wght-normal.woff2",
+      "sha256": "51785F4A4D2A011D877052CAB1BC4C36CABCC4E186ED0176214061C174B7F024"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-111-wght-normal.woff2",
+      "sha256": "AAA67A70F5E8B351C558E32345093FDFD86F089726B3B86D84B58DE6A2475104"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-112-wght-normal.woff2",
+      "sha256": "34E76675CEFFD89824FB130D7649DC92DF9E57843A73B9996D405BAA2FF9ECFF"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-113-wght-normal.woff2",
+      "sha256": "40290D98D5C121BDBB1909E39C9C0242EAE3A5A88F1BBE302857E525B90056DF"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-114-wght-normal.woff2",
+      "sha256": "C49B2EB658A0C2D76DE9A279945DE30BF32ACD8FDD6D56CF84AEA9C6B14AACAE"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-115-wght-normal.woff2",
+      "sha256": "6C0CDA055B31066FB60058AC30EDE37F6F9CA02265C2E1A84AEE81175F567FA8"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-116-wght-normal.woff2",
+      "sha256": "002E502515BEE8B9EFA1B17ABF7E52B51D4CFA20538AE2B2BD82AC52E1153F5E"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-117-wght-normal.woff2",
+      "sha256": "3D7CED7101C03DFA9BF0E60460A1B91FC6F1166FB33F718506E8110BB12E74A7"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-118-wght-normal.woff2",
+      "sha256": "F26330CE4056382832C0F2A0D7F411E0B4140FC87937E8865D91664410CFB98C"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-119-wght-normal.woff2",
+      "sha256": "09B9FA5A9521FBECCB8267A5ABE7443C83CBE25B32EB15B00DE316D913235525"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-21-wght-normal.woff2",
+      "sha256": "0C5AFC8752B151A444CCB3B21D740CC8E429347EA52BD4CF9D22B73937624BBF"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-22-wght-normal.woff2",
+      "sha256": "B15B23E18F7B765BD08D12D13210C0AF8D32BEE34712BC3152D0B386D043EC04"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-23-wght-normal.woff2",
+      "sha256": "A8F6664D83439CD5D329E9B35A54FB4D9D3786E80D3EAEBBAEAC24E3ACF950FC"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-24-wght-normal.woff2",
+      "sha256": "FC59757DB66129052CD8E4248045F92F8273B37F719BE2A058A55859DE190A0E"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-25-wght-normal.woff2",
+      "sha256": "074E6162A8BA4F9CF25881DA25CE522BB949C1E2516142746DAF85471BC48A9C"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-26-wght-normal.woff2",
+      "sha256": "68074245BA1EA9745CAD9CF3780B69C9DEF3568891296E44D60E070E45DF7B7A"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-27-wght-normal.woff2",
+      "sha256": "4E0DAFAA26D924F5612A138A34A817AA06B8F72BAD9798FE64D221FB13001D31"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-28-wght-normal.woff2",
+      "sha256": "31BB7FACF7A62EE189026F7FF725B9C4639C712762036394C2996DB140549746"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-29-wght-normal.woff2",
+      "sha256": "67D137F738BC8294A0365F60661E31B33A6E534D56D7E5ED6982D5E6FFA5663C"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-30-wght-normal.woff2",
+      "sha256": "12ACD771479C93C76F064A81447266C349D6A33D2F1893D5413C6303B1156FEF"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-31-wght-normal.woff2",
+      "sha256": "DEF5793483C7ABC922DE654BC16262646C9AE263819E663990B52FD56A3D5D69"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-32-wght-normal.woff2",
+      "sha256": "2D884D1CFD97C6F72518A2D690573E4130B0B707423F25963D7CC975388ADF3E"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-33-wght-normal.woff2",
+      "sha256": "02FD273486D8E0C876B3B5D2C3C131B9CE85058196EE3ED77C7D38A7A10E139C"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-34-wght-normal.woff2",
+      "sha256": "13A18E443A4BF6557E252A63061914CE19C4BE018C9B16EAF5C75842EE88BAF5"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-35-wght-normal.woff2",
+      "sha256": "68413E3F3E5B912EFD25702281AAE9ACB37C9920BB7BB941404506AB520ADD49"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-36-wght-normal.woff2",
+      "sha256": "21B841E271833161FE5F70A2052399E79FAAC029667ABDCDFFE81F260F2CE6B5"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-37-wght-normal.woff2",
+      "sha256": "BCBDF5FD7899C7ED192A0C89DE9C6C92477BE74B8C2343E74914359BFD32A10F"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-38-wght-normal.woff2",
+      "sha256": "CA375E4A6ECC230333656AD11081B26E6B8F3240F4160E22F75150D4FDDDCC9F"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-39-wght-normal.woff2",
+      "sha256": "E73A947FA1FB1A7385E9D654FA0FE7DD8A2241E9B73282F67941C650C94DE326"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-4-wght-normal.woff2",
+      "sha256": "29634170D5EB07F460A9EB1B2D0EF126AD0B5EF705E4C25191FD5794DC930D4D"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-40-wght-normal.woff2",
+      "sha256": "2F186187CFD9A546D199AAC41FBAED1241A47A7D5AAD1804F98127506AF80340"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-41-wght-normal.woff2",
+      "sha256": "7E2A21F95E969165FF32E2FDAB8422B489D2C7B0F899F69BFC83D71872CDE2AF"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-42-wght-normal.woff2",
+      "sha256": "C53279F786DDE3590BAF0343D080FAD8C7BD976E9DCCECD2ADEA893CFAD2F99A"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-43-wght-normal.woff2",
+      "sha256": "A98FFA0839E353EB7E768084E27892596616F6A3D8BB65C94202898BCCB1FD68"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-44-wght-normal.woff2",
+      "sha256": "AA1A541DFACFCAD0C66FB7F9DD4F9C12CE729D98311336C634702D066AABBBC2"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-45-wght-normal.woff2",
+      "sha256": "EA12AAA5635E53EAF7429500BE57E9E8A6030E0906F985426412A1303761F77F"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-46-wght-normal.woff2",
+      "sha256": "D4A75AA10EB4487DCD94FF2009EF0F185D35F0E3264FA87532887C5C1517C816"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-47-wght-normal.woff2",
+      "sha256": "D5C48BD3B5502918ADF253C96909F27BE4EDA7653FC0254A6564557B516CB2E1"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-48-wght-normal.woff2",
+      "sha256": "C4F53F8B05FA6350AC20F8A12B550F9634ED31B084DC50B1263F2080E392B9F7"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-49-wght-normal.woff2",
+      "sha256": "2418A76F14F6299B160AF41CD283ED529B0030E2448B2EC11895EA5009561E25"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-5-wght-normal.woff2",
+      "sha256": "08F7B17FB6A88382277DFA1B6969F1F0B73A1F87819713849BB9E1FF6017088E"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-50-wght-normal.woff2",
+      "sha256": "050CBF869048801588356D05F1145C601DDB9063A9E9FD241BBD0997A5CA263F"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-51-wght-normal.woff2",
+      "sha256": "48810DF68807CB9A06052DAA52495183575373DC1F3294CCE7739A6F37FF25CF"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-52-wght-normal.woff2",
+      "sha256": "BF40713C12D0AE841B4CBE9D487724E4EE780FDB84844A96BA8EBAE6B79A3191"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-53-wght-normal.woff2",
+      "sha256": "13B6821EB6534F1AC72A4BAB506DE7012BEC7FE0B9BB0A73733D5C798DD45E29"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-54-wght-normal.woff2",
+      "sha256": "DB60EE4C755151C036004E39BDE39FA9676C6A9D1753D9842AE1A7B2E5899B83"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-55-wght-normal.woff2",
+      "sha256": "70105493871B782981352A0CF696487AFC098A69A4708D87A7931607FE15A128"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-56-wght-normal.woff2",
+      "sha256": "CC5FE9A6DEDD91E7B95482713B12C84D99A04F90D5124E50DB3EFA9F2450923F"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-57-wght-normal.woff2",
+      "sha256": "3A4BDDF6442271BE898390E29E344183F5F10A97EEFA04595C9537F535F34927"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-58-wght-normal.woff2",
+      "sha256": "B4A952B513CA0E1B594A856E5398D1E40D69B0BF220825210955FDE747FAA8D0"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-59-wght-normal.woff2",
+      "sha256": "0557109D55C77FF9C9B5C9732D732C5328BD0B61038CFFE611D9D62B26DED420"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-6-wght-normal.woff2",
+      "sha256": "675FF09731B49AEFF9031C6D8EDB3D54766AEC64E4C6C699BE5766729E4DAD98"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-60-wght-normal.woff2",
+      "sha256": "105D09095364787B4EEF08ECD4FAA975D66AD3CE2BE43BB968DD37B9285E6667"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-61-wght-normal.woff2",
+      "sha256": "21C21D2375925F742573EDC50E3BCA85A63350BF1D5D566D2D762F8CE2B259D9"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-62-wght-normal.woff2",
+      "sha256": "D532C89A0DA063C68CE871A7F85FA75448EFC3089335E012F107D80618512FD4"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-63-wght-normal.woff2",
+      "sha256": "0897654D316342CDF37BB3D16FCF1A51FDCC38FCF1FB39880B5D3F17E87BF7DE"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-64-wght-normal.woff2",
+      "sha256": "D490960A491521936B84A4BE078A9570444960A2DC73C584B802D2C9C8FBA1C1"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-65-wght-normal.woff2",
+      "sha256": "086958B9F441A2BA9FCA76E9AC4924BC4ACB60559BD5620D348C707FF154EE83"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-66-wght-normal.woff2",
+      "sha256": "50C8A455F282618211DACD6A0A30C1DEE510D6D46EEA9BE79937B24E69CB0353"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-67-wght-normal.woff2",
+      "sha256": "54FC8C9ECA1C929480B2C090907DFD9D42875CEC49989B0737AF2B6A60097F29"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-68-wght-normal.woff2",
+      "sha256": "3ED406CEB43B6F73A6A42AD9E8B2A9AAB96FD6603BAB5B73A908CA53F0D354A8"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-69-wght-normal.woff2",
+      "sha256": "C7D1F5B0F95F358DEE4CF9E76EDA5C0465EB9D0F4E21A13EF39D0CF8761E5B9D"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-70-wght-normal.woff2",
+      "sha256": "8474823A5264BFDEE208FD16E2E5F3FE689E8EB18941446678426DC5F1264D19"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-71-wght-normal.woff2",
+      "sha256": "734DA1DCC260CA6CC29C9E42078125AE8E4583FBC1F7CC76D82572A73767F04D"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-72-wght-normal.woff2",
+      "sha256": "71D3DA5B2D0E05B8899E271AAA49982FA73A589168BE26A8350FF6F79F20BFD7"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-73-wght-normal.woff2",
+      "sha256": "92F8B99DC1A79089D18B1684447E31EF62ABF48DE736555CF5840B781AEB9D56"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-74-wght-normal.woff2",
+      "sha256": "5C8FAF77FE0277B9E59904396FDF3FE24088BCB2DECFC5729895B279C53754F6"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-75-wght-normal.woff2",
+      "sha256": "216C1C94EE016DB46F8D1DC5C51F402215DBF9013FBF9F60F3DB3901F9A3B035"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-76-wght-normal.woff2",
+      "sha256": "8A31272BF31F9340747866AD1A59FF6073BF92FE802E2BA5A531F6A8AAC2A42B"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-77-wght-normal.woff2",
+      "sha256": "BC249F82F40EC61D6EC096C748603FDB4E946ADAF659392B06C6810169E81513"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-78-wght-normal.woff2",
+      "sha256": "26210C38CCEE9B53194481BED1DFC1AA4F74810D5672B2E7ED6A2E44B169835D"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-79-wght-normal.woff2",
+      "sha256": "DB79DF334235F3D72CC0A7E625BFEE1C3D6A76104AF15E0814C4926CEEE6188E"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-80-wght-normal.woff2",
+      "sha256": "C9CE6E0654379A2DD291A6F29323FF2D7F06156389FFB3E4D087A9D211887A6B"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-81-wght-normal.woff2",
+      "sha256": "9958D614924FA54DE4F661FEBD02C1DE787EF640D58970E4D928E1ECD7C17990"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-82-wght-normal.woff2",
+      "sha256": "2129264EF35C203E3A2C2BC16ABC437C110C57006D108FF107AD775DC7EA1E39"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-83-wght-normal.woff2",
+      "sha256": "24A037CBB07CB4DE1F92993A9CEDA16BA4483F1D63F6F529EA26AE44F01243FD"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-84-wght-normal.woff2",
+      "sha256": "E1B9B9AEE81A74FC4EC19E1709C64A0042D9D898A2F00F6C3B2012564B6A4783"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-85-wght-normal.woff2",
+      "sha256": "CCE97C39B9304C87E55ED84D511D479AFD3343B91C04B3AC7BDC5BEB9ECF709D"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-86-wght-normal.woff2",
+      "sha256": "55FD1A42AB8ACE744691B59C535499AD22B22C7C98B1D69A22FE101A2CD9B0E9"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-87-wght-normal.woff2",
+      "sha256": "40292A14F8F52ACCB05252B7EC7C68E00F35781D2A726223BEC1685EEE6312B5"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-88-wght-normal.woff2",
+      "sha256": "008F38DB74BC1C346BA8F4D6065DD41D0FE33A4ED2F9909CB880B81C5A3F9334"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-89-wght-normal.woff2",
+      "sha256": "74A75243AA93EB61367A28D217CE82B76C6CF9E86D0F23FD96708BFD91B68F46"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-90-wght-normal.woff2",
+      "sha256": "80D51F95AFBEBCBED0CC53985FBCE43EEC3A37C8EC88B08D316C56A32AA77843"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-91-wght-normal.woff2",
+      "sha256": "7BF857D9D1285675FE572E64F968AE1F3213DA7654FFD335633FB5B39493C057"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-97-wght-normal.woff2",
+      "sha256": "7671F7B32D4C5C11BA72DF9E6B9A18A6441F863AADE2623AC0562EBD34B82BC7"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-98-wght-normal.woff2",
+      "sha256": "94E55B60E87BFB909709592144002C0B10A4214612EA512B38BB719C9EF45C49"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-99-wght-normal.woff2",
+      "sha256": "6B2D1065F737C83608088C2E241C605683D94C6160121CA976496507EBC6CC94"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-cyrillic-wght-normal.woff2",
+      "sha256": "811E869A2B23FF46086EEFF6FA59185BB1AA982F5BCD8D34DB51E10EA8E5F7E1"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-latin-ext-wght-normal.woff2",
+      "sha256": "0049F7154DCC3FA0D585F80383B232CB9E497084EE77E10519747D668DB3CB55"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-latin-wght-normal.woff2",
+      "sha256": "CF5346B0747CD71123C8F74DA0AD41FC0F63EDA07B9D8E0382E00882AE743733"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/files/noto-sans-sc-vietnamese-wght-normal.woff2",
+      "sha256": "310E65DA63933201C3381173106418442DE6441742594001290B4056ABBC9ED8"
+    },
+    {
+      "path": "src/theme/fonts/noto-sans-sc/LICENSE.txt",
+      "sha256": "1EFBDC9CB2D98AAA844574B5123F8D5233532C214BA259E1536E1D5702D058A1"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-100-wght-normal.woff2",
+      "sha256": "FED9F7A5C10A94CBE0A7E6789512607A1ABDF797AC9C6D1F2462E6BCA2573734"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-101-wght-normal.woff2",
+      "sha256": "5054480A15959F80C101094A5D9EB749A0C8C5654E17B3219E16F7A5ABE006E0"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-102-wght-normal.woff2",
+      "sha256": "6D6AEDCF1F83747C7B38F7045470BA70B3352B162616313C7923A6BBDE81915C"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-103-wght-normal.woff2",
+      "sha256": "C94541DA7C8EC39D9F581019203B36F53C719151623281CC14EC9984731A1F47"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-104-wght-normal.woff2",
+      "sha256": "3F24940446111010A3117AE4054C7265F9D90BFD8ACC16C41A7C9092150FDE3D"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-105-wght-normal.woff2",
+      "sha256": "F43C00B1E7E213ADD01D19EECF6EF2E8A96F7087B46B908DF407490B72FE09D9"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-106-wght-normal.woff2",
+      "sha256": "1066B4DC2F377882ADC40E8501B1FDF1AB020A6AED5522503E5B1FADFE36281A"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-107-wght-normal.woff2",
+      "sha256": "C5026C625C58B58B56E629FAF50CB622AA9F03AB223EAAAB89033B6BA5960AAB"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-108-wght-normal.woff2",
+      "sha256": "4665F9383F65A4FB003C53808F5B91D1E93FCCCD3D2D8C799CFDA6E3D14656D7"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-109-wght-normal.woff2",
+      "sha256": "45838BA623192DEEF4A4A71D1C1DDCA77EA5B3281B96E3017972CE14E2F10F6D"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-110-wght-normal.woff2",
+      "sha256": "1A109586FCC58C9DAA102480DC0DE03623A59BE55A8726B3C7A83F19475F2F13"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-111-wght-normal.woff2",
+      "sha256": "8164AF476B514E30654ECF3AA34EDEECBAD209782F4B026964032E4F594A2881"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-112-wght-normal.woff2",
+      "sha256": "675553F67DDA471CCC684B734A07DB465FB6BB9EC1CE5A70B6D6B0F9A36A7A26"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-113-wght-normal.woff2",
+      "sha256": "1594E53F4AB5FE067F7BA108B65A71ED07B2FB9DA68AF01349B4966C871E4D36"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-114-wght-normal.woff2",
+      "sha256": "F402C381CB2EB5C6D1E65A8BAE7629B5CB97FAAA42759AF6874F6D33FCC98273"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-115-wght-normal.woff2",
+      "sha256": "A56A7E1D3EFA7E7A4B30B086153398D3ED87A2B984551C046B614C03B4C3F9CD"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-116-wght-normal.woff2",
+      "sha256": "06AD3CCC929AA35FFB271C64BA4B1A8A14C8A2076B583EB2B32C7169F74C33C3"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-117-wght-normal.woff2",
+      "sha256": "FD992A95C6A01DE7BFB520C01CA4AD20C60CB5A91F0FB21CF46FE1E13E78FD2B"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-118-wght-normal.woff2",
+      "sha256": "B75A2DA2189E8DB96E83563B650FB04466CA9284D28A1E27FF4D4AAAEE5D13B6"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-119-wght-normal.woff2",
+      "sha256": "25412EDFFA19AD8BAF75508052EC4B5C8ECFCF75384F98B67CEA291886F8D0C4"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-21-wght-normal.woff2",
+      "sha256": "C56FED07BAA5368C483C00D7963847CAF0F9AFF18BC78561FE8B14DB7171B572"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-22-wght-normal.woff2",
+      "sha256": "4E943FDD06982AC9A81D192846DAB76A2797321C990774600DC65FF8FE1D4E68"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-23-wght-normal.woff2",
+      "sha256": "E50204D9C99DEE1B284A8F5C9508295FE6209C54E089BA7146813360D9C17713"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-24-wght-normal.woff2",
+      "sha256": "03DE62BC4C94FCF00AD2A87ED76731C95B0852B0B41C9028844E1A05C06082C0"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-25-wght-normal.woff2",
+      "sha256": "9FA23B6CF30829D06600BDA44F2B5D31880D088EF9BD5626AAF4557941457C10"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-26-wght-normal.woff2",
+      "sha256": "158A0BE2CBBA07D17824A5BA52319A3F914C59857F4BD70A332596BBE1B1128F"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-27-wght-normal.woff2",
+      "sha256": "DC5909D502DE13C096A9D4B6F674433F2DA1EF62F71CCE1E3F43BE499F1A4A52"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-28-wght-normal.woff2",
+      "sha256": "93DAEB451EDFE65DAD18A468CC90933D6A5FC79E9411CE28027BACBFD7BFA0B8"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-29-wght-normal.woff2",
+      "sha256": "D4BA29A42D58E9C71F523225D6C2257E231E4D3FE92B720BBCBF99DD08ADD33C"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-30-wght-normal.woff2",
+      "sha256": "106E18D90034E75630790AD203BC69850747BF96C0A398B96BD88BCAA81E9480"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-31-wght-normal.woff2",
+      "sha256": "B9DF2CE5D328A524975728C051385E14C1C823798E084C1227101ED4ACC6174A"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-32-wght-normal.woff2",
+      "sha256": "87FDAD598FB7AB598784E43F87F1DA2C5476F88E4A5A9ABA56ABC73973449A42"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-33-wght-normal.woff2",
+      "sha256": "A1E18C863C00AB7E6F17FDDCC42B193FB94CCB5E3E01EE394A189C149AEF447E"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-34-wght-normal.woff2",
+      "sha256": "BA9FBD7FDBF7CCE92C1A95946A7AD7B10FF9D3098403174B2B2B11BA6B282EB0"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-35-wght-normal.woff2",
+      "sha256": "0EB731D70AA1F4966DFFFAB308B3FB11975886FD5375F45CE6B16F1EAEBAFB83"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-36-wght-normal.woff2",
+      "sha256": "B36A86AA9D07AE91A379EF0661F723C323677FB9106457318B1194D5C5F7CBC9"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-37-wght-normal.woff2",
+      "sha256": "5B42C53AA93CC2A7FD855C85A5CA733D4DA8D06984DF8B4C9B2B76CE1090BC80"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-38-wght-normal.woff2",
+      "sha256": "60BAE2B9A8BF65E1B4C1A06D529079CEA1824BBAB0A37840469F24B698880AAB"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-39-wght-normal.woff2",
+      "sha256": "EF454FCA50875C2536BFBCF4E0B540F456C012A61D08FF778EA4E3E640BD938B"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-4-wght-normal.woff2",
+      "sha256": "92B93561D8AF27754352918934377DC09ECBF91D2D65A0951FB1D60895367330"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-40-wght-normal.woff2",
+      "sha256": "5392252C91BD0707D647DF33A9A279501A029388C7882A0AD420A40B760E5A62"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-41-wght-normal.woff2",
+      "sha256": "0F39F0BBE9A7A450B994C3C3BD9AA0627AE2DEA8D36B67FC5A3554830F28005E"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-42-wght-normal.woff2",
+      "sha256": "2DB79FD3AA1D48C07E30664553E9D1DDB9FC4C23FDF02D48C63E094EBF275A5D"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-43-wght-normal.woff2",
+      "sha256": "7E94834579A87AC5BBEAE3C8D0CFC33206D7E0FC85E7C59568F75358FB000C44"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-44-wght-normal.woff2",
+      "sha256": "3F116C05FBB0ABC3FBA86BB85B4426ECA3A41650D2763ED4C5B31FE8B28F752E"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-45-wght-normal.woff2",
+      "sha256": "6B583A41D620C6B504CE9D451FDBB8E08D073B2573E46D444820959647D7F3E0"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-46-wght-normal.woff2",
+      "sha256": "1581AF3BBB4E78F52DB3B1078A85595E0FFA30EE334B7DBB49BAF42BA9FBB28A"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-47-wght-normal.woff2",
+      "sha256": "A491A10A853D1FB3480D4471A275FD8824726B0E1A795FE8A98EB946001AC80E"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-48-wght-normal.woff2",
+      "sha256": "CAD6D79EF7A000ED533559C080E92351797BB90D800243FA3A25C7064A3CE93E"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-49-wght-normal.woff2",
+      "sha256": "CA078411DDF19A164747D6E2220B0B2022F08E1682A1DC660A8902DA13F2B0E0"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-5-wght-normal.woff2",
+      "sha256": "7610E185AB6D54A3D50860F45DAC1DB9614E70ACF4FDE1CC419B85B48AD1BD4F"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-50-wght-normal.woff2",
+      "sha256": "80938D29C0EFDBD634308AC52ECBBDA6707A0B3E3B7D1C84E197C28A6C8C837B"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-51-wght-normal.woff2",
+      "sha256": "6E0E93E30AC6E513FFDB1E5DDC50337E81C5F33D54BC3BB0E044113F228F5727"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-52-wght-normal.woff2",
+      "sha256": "6F05DD92F2F040024ED6F401C03A78EC8F8058313ECAB04B6FF195A0041A4A5A"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-53-wght-normal.woff2",
+      "sha256": "039698B9BC16DB3439B86528C88C369086ED237F7BAA13873CA33A0922EDCE18"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-54-wght-normal.woff2",
+      "sha256": "2263F0841A3499DD34793A4B21C831760BCAE5582B047CBCAB0B55CF9B105AB5"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-55-wght-normal.woff2",
+      "sha256": "C940BED82B2192C9A436AF93A8AE990C9E66D1384376F56878C3906C6DE35353"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-56-wght-normal.woff2",
+      "sha256": "373D1B4D724F4EE5FA02EB5EE5474033A914A990D966F2ABBB36C96682E5E993"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-57-wght-normal.woff2",
+      "sha256": "A8E46481396F2A9E4AC4875B64645F26E4E9FF185A8503C2402C2BC9BF46219C"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-58-wght-normal.woff2",
+      "sha256": "4FB8AC1D7A95C72AA66DE7673A352E3E8B9046FFA90C444D0F961221F7052E40"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-59-wght-normal.woff2",
+      "sha256": "F69A03144D47D4987530030ECEFF2C2C4E37388CE5E45976A7A15F4DCD849D30"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-6-wght-normal.woff2",
+      "sha256": "ABA77127699E71BC7D13FD80C4EAAEBCB5065862590F6DFBB05BA14BB0C0D2D8"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-60-wght-normal.woff2",
+      "sha256": "952351694A0ADA3A721A73DECD3AFEAC99FAC4637E0DBD2AF987C7E147205FF1"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-61-wght-normal.woff2",
+      "sha256": "90A9D9858975F1C073521AF5DF9A7286356FF78397D274CFE7B64CB97F719920"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-62-wght-normal.woff2",
+      "sha256": "854A14F63241E795BC8A17E64D472F09C834A02F9B59258637063AABCA530070"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-63-wght-normal.woff2",
+      "sha256": "9D345B17AD128918A7D4EEA67714A376F8840FFDC82B77DA8DBC416071491F65"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-64-wght-normal.woff2",
+      "sha256": "AB7AEF1B30A10F6643F3271CB55E64C49E6D8C4B91A2E68287196CDE66AD7614"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-65-wght-normal.woff2",
+      "sha256": "24F7302E65F8ADAEC36D642AA8CAF68CDF4C50C91E54F75E9E535382366766B4"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-66-wght-normal.woff2",
+      "sha256": "5C818243CE70B138C5E7EDD2798F92D311D8D9158EB60BAD6C4F5CEBE4D46FC6"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-67-wght-normal.woff2",
+      "sha256": "A4557AB88BBC6BB5272D315402D2448F92A7E53BDF3E89F1D839E95E5B67999A"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-68-wght-normal.woff2",
+      "sha256": "BCA8897BBF2EE33D854E2D2CB19A31C66D549C2EB585AF439E905378486DF29E"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-69-wght-normal.woff2",
+      "sha256": "52740303931D8B85AB9529076BF835AEAF877C56E47AEAD612281BC128318282"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-70-wght-normal.woff2",
+      "sha256": "B677122AEA77998B4B6C991CC0268585A48690A9347BD17057AC589728176C5D"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-71-wght-normal.woff2",
+      "sha256": "6B91A10ABB4A03D31C63D528F6EF6B0FCDF4DBE7C030D67E1943F6139C115D73"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-72-wght-normal.woff2",
+      "sha256": "713D2BB29DB38602E97E272BDAFA666C5B426B7B779DBF3BEB32313FD95B8551"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-73-wght-normal.woff2",
+      "sha256": "C5CBBB60E77F863AF35524EC5A6674F5CE15735F05746923CAA8D07E99B55886"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-74-wght-normal.woff2",
+      "sha256": "365512FFC9E2717C81CF5D9AF42646426D657D5494B4FD04501A5BEB0AF6F2E7"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-75-wght-normal.woff2",
+      "sha256": "F0E12F7E577876BF2D554E924F0A2BBCE375B647D885A568B37DD5B042133AD1"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-76-wght-normal.woff2",
+      "sha256": "F0DBE158FA641CC4297AF81A4D44D2A9A2B775A32A96D4F665D62820EE2E6562"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-77-wght-normal.woff2",
+      "sha256": "CFABB52E72825965EC66B18BC1BAB646D150206F2A3AA6D4FA6F29040058515E"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-78-wght-normal.woff2",
+      "sha256": "2101D62AF080D6803513F4FE5D91ABA6831B61BC95ED172DACE75CAA2A5B8C2D"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-79-wght-normal.woff2",
+      "sha256": "A5FDBB67E3DADEBDA5B447C1707FE47A2D9E40F095FB22DEDC63AADF969D6609"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-80-wght-normal.woff2",
+      "sha256": "0A97BD54C22ADD0CE1FD54256F20BCAFA92B8DB870B3F80CEFD3672DA29EB3AE"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-81-wght-normal.woff2",
+      "sha256": "5945538DCBFC11C1DB2D573E1A0889C33B90B45D8445CB9CE1F18B38DB36336C"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-82-wght-normal.woff2",
+      "sha256": "45F3ED82E9BD8231532B58A0DE47D0B26FBE8E4CEBA610615903E346E5213263"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-83-wght-normal.woff2",
+      "sha256": "BF628DB08549CBF5090C3486717D5121D48AF1D82C79B6AB181ED9B49BA5E31B"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-84-wght-normal.woff2",
+      "sha256": "60E71123F0B838BF4FD52CB5DE5E3D6AF8E48C8F7F32481A39DA625D1E63FD2E"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-85-wght-normal.woff2",
+      "sha256": "D8F48BBF844EADBAA2E3DB648ED6889CCB8083572437EB6F0F717F9097B9E45B"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-86-wght-normal.woff2",
+      "sha256": "A07D70EAB2F78B6978C9E3E93056C5C3AFDF649940959FA78CF345DD35B1F7A9"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-87-wght-normal.woff2",
+      "sha256": "50751CD23B3787EFF2AF23D3B9676B13CB5263E750A72FD258328F5812520B08"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-88-wght-normal.woff2",
+      "sha256": "45CB9A16CBC13EFF333B49BFA5C63F0478078AC6BDC327DE9D69BDB6CDD8CE2B"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-89-wght-normal.woff2",
+      "sha256": "BA142270184772C2BBC1985BF88E42D05E9462B14163001B8C253765C3F1D55E"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-90-wght-normal.woff2",
+      "sha256": "5968DD127304A59F1E2EA36B875F3702DADB0A229BC87A9053727C26807A15DC"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-91-wght-normal.woff2",
+      "sha256": "B86248889E23ABA82FFA3E7327BF94EB44A73CA14E74DD3587848FF5ADC1CACF"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-97-wght-normal.woff2",
+      "sha256": "91923C87F9F32C46056285E69B1009FBB71C0BD27A1A1F9D386BC9248217606F"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-98-wght-normal.woff2",
+      "sha256": "26B9DEC17F125371D5F5089F89DE39094A11F98FFEBB061011158D7E4AA602D0"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-99-wght-normal.woff2",
+      "sha256": "7BF7C8FD9809004CBA36338A94C338CFFBCE66069C2B091A7472E0B4DFA6B041"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-cyrillic-wght-normal.woff2",
+      "sha256": "D6E6ED7B0A14B508F94072AEA3BB29ABE236FD012BA6174B49292A6C900718E6"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-latin-ext-wght-normal.woff2",
+      "sha256": "B07E7E5E090ED9220E5FD4AFC6A22339A77F63F79F1F7AC010E3B05A8849C5CE"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-latin-wght-normal.woff2",
+      "sha256": "BE8C3C315592FBEDA0F6ACBE9914A0B4C1DA1B7E30889DDAB5E145D346AE4928"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/files/noto-serif-sc-vietnamese-wght-normal.woff2",
+      "sha256": "9826143BB6278155DE4F76910FD6EC34FE450385DD0D85DF10E4497BB174EAC7"
+    },
+    {
+      "path": "src/theme/fonts/noto-serif-sc/LICENSE.txt",
+      "sha256": "1EFBDC9CB2D98AAA844574B5123F8D5233532C214BA259E1536E1D5702D058A1"
+    },
+    {
+      "path": "src/theme/fonts/PROVENANCE.json",
+      "sha256": "8019FAFE7E79747176A05A743347A3237A929BAD29B386851D8C68A0707750D2"
+    }
+  ],
+  "sourceUnchangedAcrossGate": true,
+  "testFiles": [
+    {
+      "path": "tests/e2e/acceptance.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "57D474EE75D61625943AE0F7A9AA3EFA885DD33FC81F86A70A10FE304C1C3FB8"
+    },
+    {
+      "path": "tests/e2e/ai-issues.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "8D636510D02FA5B64125E19DA745769014F47121735ADBFBADC6CEF3A5A5DE51"
+    },
+    {
+      "path": "tests/e2e/block-text-editing.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "554652C1F190072EC22227B42E1ABA233CDE1BE1AACBD0D5C004AD8701C69A08"
+    },
+    {
+      "path": "tests/e2e/components.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "45823B3F93EBBB5601C9A462B4FA65A816199F37BCB3CDCBF925F22D7D6634C3"
+    },
+    {
+      "path": "tests/e2e/cover-alignment.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "BE8F49B9DA47668A8CAB8CA0C4D3DFBB347A90A8CF2227B2925403DCD066DB3A"
+    },
+    {
+      "path": "tests/e2e/data.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "62E5C307FE4A3192D046053DFA6ED09A8D50710BE196C1518151D96C51477470"
+    },
+    {
+      "path": "tests/e2e/editing-ux.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "4E9FADA59B3E1B6D062F014FF178496B64145FB22B0D1448C7E81F410FFD8CB5"
+    },
+    {
+      "path": "tests/e2e/enrich.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "59B9FDE3B6938B1250DFAF2BB3D7BA2C0291EA8E8670C38A725FE007314BDCB6"
+    },
+    {
+      "path": "tests/e2e/features.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "8B77849F611D07599E1F226000A891A0811000E4E77B3E69A39357E40A03ACA4"
+    },
+    {
+      "path": "tests/e2e/import-errors.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "52FA84A29C34264E0AB55B54018EC7604BADB589B4251137F0C9EFFEA7D825B2"
+    },
+    {
+      "path": "tests/e2e/input-suggestions.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "AFEBC0ECB3C9C9FB54E93DD7E642819405F2DF8A2903CC8E9476B5CCA0C1632A"
+    },
+    {
+      "path": "tests/e2e/kit.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "73007CEE2CD7567C7110187918F96C3671E87526D73A409CC2EE5B5C06ABD2FB"
+    },
+    {
+      "path": "tests/e2e/replay.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "4EA83A1C6691580037BFE1E0B479C652A1F5E698E4B4CF9226473AAEF7F58F95"
+    },
+    {
+      "path": "tests/e2e/text-color.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "F2D1DE8315077F49CD665303C3AADC0CC24BCD3BAEFD625EE0F9BAEA213E58FA"
+    },
+    {
+      "path": "tests/e2e/workspace.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "A15E238CAB8E3C9BF986F8844B8397871306388E6C89215A0BCC3A779AA2267D"
+    },
+    {
+      "path": "tests/e2e/xiumi-limits.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "E330F83D4E9BE1EB41E4BBD3C32B74C24BFA98C487E865E39A2BA2A9D3242BCA"
+    },
+    {
+      "path": "tests/shell/editorial-shell.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "AE26527C5C825640FA07098A9A4AD1373A90C5D571CCBD671B9B9CC0CF99E79C"
+    },
+    {
+      "path": "tests/shell/upstream-text-color.spec.ts",
+      "layer": "browser-e2e",
+      "sha256": "29470D1B4E3B48BDA251F12C1FF592C13925006112298761E0A1155231FAA974"
+    },
+    {
+      "path": "tests/unit/aiCancellation.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "480FE3D3563064353927EB03FD988821080F93368109B97E1EB85221E22B6D3A"
+    },
+    {
+      "path": "tests/unit/aiClientModels.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "1229B3B8DC4874222DF87B3FB0705127FEF9FA283A63C62BFCF3C7FACC156F2F"
+    },
+    {
+      "path": "tests/unit/aiDesign.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "D0555201BD4C3988326E9B0EBA440F0DE9F85923B9269C114DE0AF3388C1018D"
+    },
+    {
+      "path": "tests/unit/aiModels.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "3BC253F558BC2931C3C29F87A158D687177976A10689C68EAF90335AE6829228"
+    },
+    {
+      "path": "tests/unit/aiProfiles.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "1A91D10B98CEBF4CABD714D18AABDE4084A8308E1788DC4A57B72892A08387D1"
+    },
+    {
+      "path": "tests/unit/aiSelection.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "245F7B882780A49D855391BC3072D491E9B7EB133C7B247AD92EC4AD6D41DC9F"
+    },
+    {
+      "path": "tests/unit/aiSelectionStore.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "B9FE8F4B53831D2B4CF9F1285826990D8D0554AF8562D9EDC95517805BA799FB"
+    },
+    {
+      "path": "tests/unit/aiSettingsUi.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "9F31AF6522C5562A314540C5A1DD20736B73849E8169E1DF0488C53896469BF3"
+    },
+    {
+      "path": "tests/unit/aiSuggestion.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "76A88CA22241C6DC7431709073BF558983858782FEB4368593BA504A5CD10267"
+    },
+    {
+      "path": "tests/unit/aiWireSafety.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "3E5BFBFFB0CF722A9C1BE20D4814EF512589459190840C74B4E9716FA848E2F1"
+    },
+    {
+      "path": "tests/unit/appRoutesReview.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "A08E4A2D65D6099EEB4E9A94C0C4C1A68ED74DF08D089E407827C1CEECD82E7B"
+    },
+    {
+      "path": "tests/unit/assemble.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "DFFD27861B0D43015D84730399AA1372526641AA370AF8DE06024C59F88CC3A3"
+    },
+    {
+      "path": "tests/unit/blockTextEditing.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "EF9F5740378D6152CCAB35BB800708AA3E6BEE7D3356BF20F33437B18F6E0DCE"
+    },
+    {
+      "path": "tests/unit/colorMode.test.ts",
+      "layer": "isolated-component-unit",
+      "sha256": "FB166CACC917A8AE0A76FADAA5CF63B83B7DE694ED5C7B741510A1A1392079C2"
+    },
+    {
+      "path": "tests/unit/compilerInlineWhitespace.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "BAABFA222C4EB9A940DCF7BB6A5F0B9E956C09E41119CE534911588AA433D9D0"
+    },
+    {
+      "path": "tests/unit/components.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "2472469384558A12FC41628BF7680C10B0F2B5FC86B6339F4905BE584BAC2D62"
+    },
+    {
+      "path": "tests/unit/core.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "3390246539955C30A5AC86089ACCCAEC0566EA59FE76F9BEC9FB9635C385A7B9"
+    },
+    {
+      "path": "tests/unit/coverAlignment.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "64F5F668C7F17BC580A538DD7783DADB0CC0694A4D5D78A18BBCD2910534C50D"
+    },
+    {
+      "path": "tests/unit/editing-ux.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "B952F02B357914FFFD2C31BA33515C60FC5EBDEF9D961CB65B0992ECEA2E24D2"
+    },
+    {
+      "path": "tests/unit/enrich.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "B229CB2376979D2504EAADD0D123592F75EEFB214DE8A707D058F2D305B66BDA"
+    },
+    {
+      "path": "tests/unit/fetchBoundaries.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "C46F50D56AFD32FA8CE54B6CE84295872CCD93CBC3D3447C74C86717A53784B5"
+    },
+    {
+      "path": "tests/unit/fluid.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "C384615FD81528BF1804543D5CBC95C223E9CD386A3E599DEED882F21513F3E7"
+    },
+    {
+      "path": "tests/unit/helpers.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "CE490EDFCC9CE80E641CFC08B91E90AB269A0A3E7038ECC626D6187070F2C581"
+    },
+    {
+      "path": "tests/unit/imageSelectorCompatibility.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "9457FDE7F19E14E8A0AA18C5A6A179A8F1C402ADEB34A3DBDFF22EEC65988085"
+    },
+    {
+      "path": "tests/unit/import.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "05DAA531A9869643085D26533148D78BD526B64B50892BEDB7A86EB98CC12BC3"
+    },
+    {
+      "path": "tests/unit/importerErrors.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "12785D777416B20CBBB5DE6335C13A28450A61E92AAF623F5EF03BD1994FA550"
+    },
+    {
+      "path": "tests/unit/kit.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "0C7A2BCB836F751C24263634F95BD915A9E644894954A6104EC544927489525D"
+    },
+    {
+      "path": "tests/unit/layout.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "6D6ACDC8A19D2D7CEE7DF10353E5CD252C06DC839E06AC53772A8656FE72DCEB"
+    },
+    {
+      "path": "tests/unit/net.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "0BC1D32759B6DF0DDDBA85DA2FFF18664270174F6A91E5B9884BD57BDB744D86"
+    },
+    {
+      "path": "tests/unit/netPhaseBudgets.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "3BE8AA90039EE69C6B2C20C3A3C05FD24E9BA9276434D679C703016D69A98B88"
+    },
+    {
+      "path": "tests/unit/packagedRuntime.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "6AA81BC071BF7157B9FFE1F1551CB8E68DD361B1CF610C6871F96831771A4C0C"
+    },
+    {
+      "path": "tests/unit/photos.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "224BB1FAF927802D088FC180FA143BB72D5F32E55036E7ED97ABE9B3C0901E2A"
+    },
+    {
+      "path": "tests/unit/quickActions.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "0B8FDF30DDE0D77F5C3AA0508E6BB04A6863E9D428DDB228E58F74AE6F787FEB"
+    },
+    {
+      "path": "tests/unit/redTeam.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "43D98ECE20ADDA5F94C615B594548E83743C1F7E4C25EB5697FF59489780AAF8"
+    },
+    {
+      "path": "tests/unit/regressions.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "09A330FE1F57ACC1BA6A3F436283B3EBE9FEA83493C86DD7FF9D4E57C15BAFFA"
+    },
+    {
+      "path": "tests/unit/replay.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "BCF9888563E240F7C3B99E87A3D64EE7BEA3CB3FFA6E4DF2C54D7EE1BCAA758E"
+    },
+    {
+      "path": "tests/unit/replayUploadFlow.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "984E8C2EBD528E0D0764F86229624A91D24EBC26E414AEC1885062DC88012265"
+    },
+    {
+      "path": "tests/unit/reviewNetwork.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "268F3C7A5BA3C375671A3EA7AC1E2C3D16F6E77FC89992B33F5F26348ABFB9F1"
+    },
+    {
+      "path": "tests/unit/runtime.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "3794BE1AE34EC4CEFC78B76E4AD2F8E57BA3DF5EFB165E37AC4A1D42BB848E29"
+    },
+    {
+      "path": "tests/unit/server.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "DF23905F35DF6060B17AB3BF0F6128CAD80A001D90BFC98619715823FDCDE506"
+    },
+    {
+      "path": "tests/unit/settings.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "0DFFA6FA0281C65418DB62E2F2EC65254BD907B3E712FE54B57140A69B6AA1BA"
+    },
+    {
+      "path": "tests/unit/slots.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "A0641A88F82620D82343485F5EA3CDFF4CC0EAEFAD61880065B8F3733A6C28BD"
+    },
+    {
+      "path": "tests/unit/store.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "0029F34EC02EB7441CCD3770CD50FCFA252998F9BF56D7E079185FD2ABFADEDB"
+    },
+    {
+      "path": "tests/unit/suggestionInput.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "FCA44E60D88DDE91F71E8C6B291D73DB601D94C901B635F4E8FD332A89D3D1A0"
+    },
+    {
+      "path": "tests/unit/suggestionPanel.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "55B14D2CDDE9B89EED25DC4AFE799AD2B9E947B2396B50677277EA08C2E36879"
+    },
+    {
+      "path": "tests/unit/suggestionPreference.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "1401BFBFEE828154CE296499D43AF8D2098B61818A9227F863FC7729F4996C16"
+    },
+    {
+      "path": "tests/unit/suggestionQueue.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "9E1FB777CE67D2DBADF38DC79599DC5A3C2752AB54ABBFF37FF2B292572C8138"
+    },
+    {
+      "path": "tests/unit/templateFill.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "B63419B8F0B9AE26CEC9B8D2ABC4484CEAC0416BC364F309AAD9862473939D88"
+    },
+    {
+      "path": "tests/unit/textColor.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "88463A08043A03559CE3DBD1E24D4F847157AD9639A31B34AF5F2C82B7458EB8"
+    },
+    {
+      "path": "tests/unit/textControls.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "74A47EBB6A5615E67B3CA2F108845F3316E12863B19D7CC67367904DEB5492B6"
+    },
+    {
+      "path": "tests/unit/upstreamReplayBoundary.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "E0ADAB55FA91D8CFD8558844B90AA9BCC5543643E112D501221E6CB3B3CBD54D"
+    },
+    {
+      "path": "tests/unit/upstreamReviewPolicy.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "9763A25002C9E5323602FE7452615E78D8FE738E2914BC4C936AD9FFF3627040"
+    },
+    {
+      "path": "tests/unit/xiumiConfirmation.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "3BBB1200EAF2835ACDE17D5D86EB1348C2D957E565A573E6D6B9B16ADA73B1AC"
+    },
+    {
+      "path": "tests/unit/xiumiLimits.test.ts",
+      "layer": "existing-mixed-not-strictly-classified",
+      "sha256": "B7331582291B4D026D27D8D757B844B845AC2DE57973DA4DFBCCCE1AAF9FD466"
+    },
+    {
+      "sha256": "FCE0E07DB7634D954A44C2D24F9DF41D1D43BCFC3FC0C31CCC63E0C5F7F88960",
+      "layer": "test-configuration-unit",
+      "path": "tests/unit/editorialShellConfig.test.ts"
+    }
+  ],
+  "ciDeterminismFollowup": {
+    "shellDiscovery": 9,
+    "remoteCIPending": true,
+    "devDiscovery": 43,
+    "lint": 0,
+    "configRegressions": "3 red then 3 green",
+    "productionSourceUnchanged": true,
+    "types": 0,
+    "packagedDiscovery": 43
+  }
+}

@@ -1,3 +1,4 @@
+import { UiIcon } from './UiIcon'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { blockLabel } from '../core/blocks'
 import { compileDoc, variantUrl } from '../core/compiler'
@@ -30,7 +31,7 @@ function DocSettings() {
       <div className="field">
         <span>公众号封面（2.35:1）</span>
         {doc.cover ? <img className="cover-preview" src={variantUrl(doc.cover.src, '235:100', 600)} alt="" /> : <p className="hint">尚未设置</p>}
-        <button onClick={() => setDesigning(true)}>🎨 设计封面</button>
+        <button onClick={() => setDesigning(true)}><span className="ui-legacy-icon" aria-hidden="true">🎨 </span><UiIcon name="design" /> 设计封面</button>
       </div>
       <p className="hint">提示：点击画布中的模块即可编辑该模块；双击正文类模块可直接编辑文字。</p>
       {designing && <CoverDesigner onClose={() => setDesigning(false)} />}
