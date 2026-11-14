@@ -1,6 +1,7 @@
+import { resolveProposalItems } from './proposalSafety'
 import { create } from 'zustand'
 import { cloneBlock, createBlock, newId, normalizeBlocks } from '../core/blocks'
-import { applyOp, limitToSelection, orderInsert, validateOp } from '../core/ops'
+import { applyOp, limitToSelection, validateOp } from '../core/ops'
 import { allThemes, registerTheme } from '../core/themes'
 import { findBlock, insertBlocksAt, insertionPoint, moveBlockTo, removeBlockById, replaceBlockWith, TOP_ONLY, updateBlock } from '../core/tree'
 import type { Block, BlockType, Doc, DocOp, SelectionPolicy, Theme } from '../core/types'
@@ -13,6 +14,8 @@ export interface ProposalItem {
   status: 'pending' | 'accepted' | 'rejected'
 }
 export interface Proposal {
+  /** Actual successful structural operations in acceptance order, not item order. */
+  appliedStructure?: DocOp[]
   summary: string
   items: ProposalItem[]
   errors: string[]
@@ -34,6 +37,7 @@ interface State {
   lastCoalesce: { key: string; at: number } | null
   saveStatus: SaveStatus
   saveError: string
+  proposalVersion: number
   proposal: Proposal | null
   themes: Theme[]
   toast: { text: string; kind: 'ok' | 'error' } | null
@@ -65,8 +69,8 @@ interface State {
   undo: () => void
   redo: () => void
   /** selectedId：用户选中了模块时，只接受落在这个模块上的操作 */
-  propose: (summary: string, rawOps: any[], selectedId?: string | null, options?: { policy?: SelectionPolicy; ignoredOps?: number }) => void
-  resolveProposal: (index: number | 'all', status: 'accepted' | 'rejected') => void
+  propose: (summary: string, rawOps: any[], selectedId?: string | null, options?: { policy?: SelectionPolicy; ignoredOps?: number; expectedVersion?: number }) => void
+  resolveProposal: (index: number | 'all', status: 'accepted' | 'rejected', expectedProposal?: Proposal) => void
   clearProposal: () => void
   refreshThemes: () => void
   notify: (text: string, kind?: 'ok' | 'error') => void
@@ -113,6 +117,7 @@ export const useStore = create<State>((set, get) => ({
   lastCoalesce: null,
   saveStatus: 'saved',
   saveError: '',
+  proposalVersion: 0,
   proposal: null,
   themes: allThemes(),
   toast: null,
@@ -135,7 +140,7 @@ export const useStore = create<State>((set, get) => ({
     // 加载时修复历史数据（例如旧版本保存的、字段类型不对的 AI 修改）
     const doc = normalizeDoc(raw)
     const repaired = JSON.stringify(doc.blocks) !== JSON.stringify(raw.blocks)
-    set({ doc, past: [], future: [], selectedId: null, editingId: null, pickingId: null, proposal: null, saveStatus: repaired ? 'dirty' : 'saved', lastCoalesce: null })
+    set({ proposalVersion: get().proposalVersion + 1, doc, past: [], future: [], selectedId: null, editingId: null, pickingId: null, proposal: null, saveStatus: repaired ? 'dirty' : 'saved', lastCoalesce: null })
     if (repaired) {
       saveNow()
       get().notify('已自动修复文档中格式异常的模块')
@@ -204,15 +209,16 @@ export const useStore = create<State>((set, get) => ({
   undo() {
     const { past, doc, future } = get()
     if (!past.length) return
-    set({ doc: past[past.length - 1], past: past.slice(0, -1), future: [doc, ...future], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
+    set({ proposalVersion: get().proposalVersion + 1, proposal: null, doc: past[past.length - 1], past: past.slice(0, -1), future: [doc, ...future], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
   },
   redo() {
     const { past, doc, future } = get()
     if (!future.length) return
-    set({ doc: future[0], future: future.slice(1), past: [...past, doc], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
+    set({ proposalVersion: get().proposalVersion + 1, proposal: null, doc: future[0], future: future.slice(1), past: [...past, doc], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
   },
 
   propose(summary, rawOps, selectedId, options) {
+    if (options?.expectedVersion !== undefined && options.expectedVersion !== get().proposalVersion) return
     const policy = options?.policy === 'filter' ? 'filter' : 'strict'
     const count = options?.ignoredOps
     const ignoredOps = typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : 0
@@ -226,36 +232,16 @@ export const useStore = create<State>((set, get) => ({
       if (op) items.push({ op, status: 'pending' })
       else errors.push(error!)
     }
-    set({ proposal: { summary, items, errors, base, ignoredOps, selectionPolicy: policy } })
+    set({ proposalVersion: get().proposalVersion + 1, proposal: { summary, items, errors, base, ignoredOps, selectionPolicy: policy } })
   },
-  resolveProposal(index, status) {
+  resolveProposal(index, status, expectedProposal) {
     const { proposal, doc, commit } = get()
-    if (!proposal) return
-    const targets = index === 'all' ? proposal.items.map((_, i) => i).filter((i) => proposal.items[i].status === 'pending') : [index]
-    let next = doc
-    const items = [...proposal.items]
-    const errors = [...proposal.errors]
-    for (const i of targets) {
-      if (!items[i] || items[i].status !== 'pending') continue
-      if (status === 'accepted') {
-        // 用户可能在提案之后改过文档：按当前文档重新校验
-        const { op, error } = validateOp(next, items[i].op)
-        if (!op) {
-          items[i] = { ...items[i], status: 'rejected' }
-          errors.push(error ?? '操作已失效，请重新生成修改建议')
-          continue
-        }
-        const accepted = (list: ProposalItem[]) => list.filter(item => item.status === 'accepted').map(item => item.op)
-        next = applyOp(next, orderInsert(next, op, accepted(items.slice(0, i)), accepted(items.slice(i + 1))))
-        // Retain the original selection anchor and the actual newly generated block IDs.
-        items[i] = { ...items[i], op }
-      }
-      items[i] = { ...items[i], status }
-    }
-    if (next !== doc) commit(next)
-    set({ proposal: { ...proposal, items, errors } })
+    if (!proposal || (expectedProposal && proposal !== expectedProposal)) return
+    const result = resolveProposalItems(proposal, doc, index, status)
+    if (result.doc !== doc) commit(result.doc)
+    set({ proposal: result.proposal, proposalVersion: get().proposalVersion + 1 })
   },
-  clearProposal: () => set({ proposal: null }),
+  clearProposal: () => set(s => ({ proposal: null, proposalVersion: s.proposalVersion + 1 })),
   refreshThemes: () => set({ themes: allThemes() }),
   notify(text, kind = 'ok') {
     set({ toast: { text, kind } })
