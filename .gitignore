@@ -10,3 +10,6 @@ tsconfig.tsbuildinfo
 release/
 .cache/
 data-e2e-pkg/
+
+data-shell-proof/
+test-results-shell/

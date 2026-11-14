@@ -1,0 +1,6 @@
+.help { display: inline-flex; max-width: 100%; font-weight: inherit; }
+button.help-trigger { font: inherit; font-weight: inherit; color: inherit; padding: 3px 0; border: 0; border-radius: 3px; background: transparent; text-align: left; white-space: normal; }
+button.help-trigger:hover:not(:disabled) { background: transparent; color: var(--brand); }
+.help-trigger:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.help-mark { color: var(--sub); font-weight: normal; }
+.help-note { position: fixed; z-index: 10000; width: 320px; max-width: calc(100vw - 16px); max-height: min(300px, 45vh); overflow: auto; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 20px #0003; background: var(--panel); color: var(--text); font-size: 12px; font-weight: 400; line-height: 1.65; white-space: normal; text-align: left; }

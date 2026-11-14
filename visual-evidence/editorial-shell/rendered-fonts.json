@@ -1,0 +1,24 @@
+[
+  {
+    "selector": ".modal h3",
+    "fonts": [
+      {
+        "familyName": "Noto Serif SC ExtraLight",
+        "postScriptName": "Noto-Serif-SC-ExtraLight-Bold",
+        "isCustomFont": true,
+        "glyphCount": 5
+      }
+    ]
+  },
+  {
+    "selector": "[data-testid=\"download-backup\"]",
+    "fonts": [
+      {
+        "familyName": "Noto Sans SC Thin",
+        "postScriptName": "Noto-Sans-SC-Thin",
+        "isCustomFont": true,
+        "glyphCount": 9
+      }
+    ]
+  }
+]

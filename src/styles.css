@@ -519,3 +519,16 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .rp-asset > img { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; }
 .rp-asset-grid { flex-basis: 100%; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-height: 200px; overflow: auto; }
 .rp-asset-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; cursor: pointer; }
+
+/* Settings chrome only: do not inherit these dimensions into authored content. */
+.modal-body > .ai-settings:not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  grid-template-columns: minmax(160px, 30%) minmax(0, 1fr); min-width: 0;
+}
+.ai-settings :is(.ai-list, .ai-form, .model-picker):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { min-width: 0; }
+.ai-settings :is(input, textarea, select, button, .model-picker-option):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { font-size: 14px; }
+.ai-settings :is(.model-picker-trigger, .model-picker-option):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { min-height: 44px; }
+.ai-settings .hint:not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .modal-body > .ai-settings:not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { grid-template-columns: minmax(0, 1fr); gap: 16px; min-height: 0; }
+  .ai-settings > .ai-list:not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 12px; max-height: 200px; overflow: auto; }
+}
