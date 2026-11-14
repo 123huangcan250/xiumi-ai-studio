@@ -1,10 +1,11 @@
 import { expect, test, type Page } from '@playwright/test'
-import { createBlock } from '../../src/core/blocks'
-import { inlineReviewBlocks, originalText, secondText, suggestedText } from './fixtures/inlineReview'
+import { normalizeBlocks } from '../../src/core/blocks'
+import { inlineReviewBlocks, inlineReviewHtml, inlineReviewReplay, originalText, secondText, suggestedText } from './fixtures/inlineReview'
 
 async function open(page: Page, ops: unknown[], customBlocks?: unknown[]) {
   const id = `inline-review-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  const blocks = inlineReviewBlocks()
+  const blocks = customBlocks ?? inlineReviewBlocks()
+  expect(JSON.stringify(normalizeBlocks(blocks))).toBe(JSON.stringify(blocks))
   const response = await page.request.put(`/api/projects/${id}`, { data: { id, title: '中文稿件就地审阅验收', author: '', digest: '', themeId: 'minimal-magazine', blocks: customBlocks ?? blocks, createdAt: Date.now(), updatedAt: Date.now() } })
   expect(response.ok()).toBe(true)
   const saved = await (await page.request.get(`/api/projects/${id}`)).json()
@@ -15,7 +16,7 @@ async function open(page: Page, ops: unknown[], customBlocks?: unknown[]) {
   await page.route('**/api/ai/edit', route => route.fulfill({ json: { summary: 'Inline suggestions', ops, selectionPolicy: 'strict', ignoredOps: 0 } }))
   await page.goto('/')
   await expect(page.locator('.title-input')).toHaveValue('中文稿件就地审阅验收')
-  await expect(page.locator('.toast')).not.toContainText('已自动修复')
+  await expect(page.locator('.toast').filter({hasText:'已自动修复'})).toHaveCount(0)
   if (!customBlocks) {
     await expect(page.locator('[data-block-id="a"]')).toContainText(originalText)
     await expect(page.locator('[data-block-id="a"]')).not.toContainText('<p>')
@@ -56,6 +57,8 @@ for (const [width, height] of [[1440, 900], [1024, 768], [390, 844]]) {
     await suggestion.frameLocator('iframe').locator('body').evaluate(()=>document.fonts.ready)
     await expect.poll(async()=>(await suggestion.locator('iframe').evaluate(el=>el.getBoundingClientRect().height))-(await suggestion.frameLocator('iframe').locator('body').evaluate(el=>el.scrollHeight))).toBeGreaterThanOrEqual(0)
     await expect(suggestion).not.toContainText('无法安全预览')
+    const readyOriginalBox=(await original.boundingBox())!,readySuggestionBox=(await suggestion.boundingBox())!
+    expect(readySuggestionBox.y).toBeGreaterThanOrEqual(readyOriginalBox.y+readyOriginalBox.height)
     await page.screenshot({ path: `test-results/inline-review-narrow-zh-${width}.png`, fullPage: true })
     await page.locator('.review-position').first().screenshot({path:`test-results/inline-review-pair-zh-${width}.png`})
     const accept = suggestion.getByRole('button', { name: '接受', exact: true })
@@ -92,11 +95,11 @@ test('long suggestions resize after image/font load while original image control
     await new Promise(resolve => setTimeout(resolve, 100))
     await route.fulfill({ contentType:'image/svg+xml', body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><rect width="600" height="900" fill="#aaa"/></svg>' })
   })
-  await open(page, [{op:'move',id:'picture',to:0}], [{id:'picture',type:'html',props:{label:'图文原稿',html:`<section><img src="/media/review-height.svg"><p>${longText}</p></section>`}}])
+  await open(page, [{op:'move',id:'picture',to:0}], [inlineReviewHtml('picture','图文原稿',`<section><img src="/media/review-height.svg"><p>${longText}</p></section>`)])
   await generate(page)
   const frame=page.locator('.review-frame'), body=frame.contentFrame().locator('body')
   await expect(body).toContainText(longText)
-  await expect.poll(async()=>frame.contentFrame().locator('img').evaluate(img=>(img as HTMLImageElement).complete)).toBe(true)
+  await expect.poll(async()=>frame.contentFrame().locator('img').evaluate(img=>(img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth>0)).toBe(true)
   await frame.contentFrame().locator('body').evaluate(()=>document.fonts.ready)
   await expect.poll(async()=>(await frame.evaluate(el=>el.getBoundingClientRect().height))-(await body.evaluate(el=>el.scrollHeight))).toBeGreaterThanOrEqual(0)
   await page.locator('[data-block-id="picture"] .block-html img').click()
@@ -124,7 +127,7 @@ test('an active real rich editor survives proposal appearance and typing makes o
 })
 
 test('tap plus zero-hold loop is a frozen final review, without changing original playback', async ({ page }) => {
- const replay=createBlock('replay');replay.id='replay';replay.props.playback.trigger='tap';replay.props.playback.loop={hold:0}
+ const replay=inlineReviewReplay()
  const id=await open(page,[{op:'move',id:'replay',to:0}],[replay])
  await generate(page)
  const frame=page.locator('.review-frame')
@@ -145,11 +148,11 @@ test('tap plus zero-hold loop is a frozen final review, without changing origina
 test('desktop long suggestion follows actual loaded image and font height without clipping', async ({ page }) => {
  const text='Long complete readable suggestion. '.repeat(300)
  await page.route('**/media/review-long.svg*', route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900"><rect width="600" height="900" fill="#aaa"/></svg>'}))
- await open(page,[{op:'move',id:'long',to:0}],[{id:'long',type:'html',props:{label:'Long original',html:`<section><img src="/media/review-long.svg"><p>${text}</p></section>`}}])
+ await open(page,[{op:'move',id:'long',to:0}],[inlineReviewHtml('long','Long original',`<section><img src="/media/review-long.svg"><p>${text}</p></section>`)])
  await generate(page)
  const frame=page.locator('.review-frame'),body=frame.contentFrame().locator('body')
  await expect(body).toContainText(text)
- await expect.poll(()=>frame.contentFrame().locator('img').evaluate(img=>(img as HTMLImageElement).complete)).toBe(true)
+ await expect.poll(()=>frame.contentFrame().locator('img').evaluate(img=>(img as HTMLImageElement).complete && (img as HTMLImageElement).naturalWidth>0)).toBe(true)
  await body.evaluate(()=>document.fonts.ready)
  await expect.poll(async()=>(await frame.evaluate(el=>el.getBoundingClientRect().height))-(await body.evaluate(el=>el.scrollHeight))).toBeGreaterThanOrEqual(0)
  await page.locator('.review-reject').scrollIntoViewIfNeeded();await page.locator('.review-reject').click()

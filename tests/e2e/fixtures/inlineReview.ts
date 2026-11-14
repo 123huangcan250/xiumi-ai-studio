@@ -6,3 +6,10 @@ export const suggestedText = '这是一篇经过整理的中文文章。审阅�
 export function inlineReviewBlocks() {
  return [originalText,secondText].map((text,index)=>({...createBlock('paragraph',{content:textToRich(text),align:'left'}),id:index===0?'a':'b'}))
 }
+
+export function inlineReviewHtml(id: string, label: string, html: string) {
+ return {...createBlock('html',{label,html}),id}
+}
+export function inlineReviewReplay() {
+ const block=createBlock('replay');block.id='replay';block.props.playback.trigger='tap';block.props.playback.loop={hold:0};return block
+}
