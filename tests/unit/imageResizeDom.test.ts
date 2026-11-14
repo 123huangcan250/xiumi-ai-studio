@@ -89,3 +89,30 @@ it('keeps a 44px handle for a real 40x20 image after Home and allows keyboard/re
  for(let i=0;i<6;i++){await key('ArrowUp',true);await tick()}
  expect((useStore.getState().doc.blocks[0].props as any).html).toContain('80%')
 })
+it.each([false,true])('rebinds only owned HTML commits without animation frames (external subscriber=%s)',async externalSubscriber=>{
+ function RenderedArticle(){const doc=useStore(s=>s.doc);return createElement('div',{className:'canvas-scroll'},createElement('div',{className:'article'},createElement('div',{'data-block-id':block.id},createElement('div',{className:'block-html',dangerouslySetInnerHTML:{__html:(doc.blocks[0].props as {html:string}).html}}))))}
+ article.remove()
+ await act(async()=>root.render(createElement('div',null,createElement(ImageResize),createElement(RenderedArticle))))
+ vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockImplementation(function(this:HTMLElement){
+  if(this.className==='canvas-scroll')return {left:0,top:0,right:500,bottom:500,width:500,height:500} as DOMRect
+  if(this.tagName==='IMG'){const width=400*(Number.parseFloat(this.style.width)||50)/100;return {left:20,top:20,right:20+width,bottom:20+width/2,width,height:width/2} as DOMRect}
+  return {left:20,top:20,width:400,height:400,right:420,bottom:420} as DOMRect
+ })
+ img=host.querySelector('img')!;await pick();const original=img
+ let changed=false
+ const unsubscribe=useStore.subscribe(s=>{
+  if(!externalSubscriber||changed)return
+  changed=true
+  useStore.setState({doc:{...s.doc,blocks:[{...s.doc.blocks[0],props:{...s.doc.blocks[0].props,html:'<img src="/media/p.png" style="width:65%"><p>EXTERNAL</p>'}}] as typeof s.doc.blocks}})
+ })
+ try {await key('End')} finally {unsubscribe()}
+ expect(original.isConnected).toBe(false)
+ if(externalSubscriber){const external=useStore.getState().doc;await key('Home');expect(useStore.getState().doc).toBe(external);vi.restoreAllMocks();return}
+ await key('Home');expect((useStore.getState().doc.blocks[0].props as any).html).toContain('10%')
+ await key('ArrowUp',true);expect((useStore.getState().doc.blocks[0].props as any).html).toContain('20%')
+ expect(useStore.getState().past).toHaveLength(3)
+ // An unrelated same-tick replacement is still not an owned render.
+ const before=useStore.getState().doc;const current=host.querySelector('img')!;current.replaceWith(current.cloneNode(true))
+ await key('End');expect(useStore.getState().doc).toBe(before)
+ vi.restoreAllMocks()
+})

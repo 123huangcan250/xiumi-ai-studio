@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { clampImageWidth } from '../core/imageResize'
 import { resizePhoto, resolveResizeTarget } from './imageResizeTarget'
 import { findBlock } from '../core/tree'
-import type { Block } from '../core/types'
+import type { Block, Doc } from '../core/types'
 import { useStore } from './store'
 import './ImageResize.css'
 
@@ -16,6 +16,7 @@ export function ImageResize() {
   const [handlePosition, setHandlePosition] = useState({ left: 0, top: 0 })
   const [width, setWidth] = useState(100)
   const handle = useRef<HTMLButtonElement>(null)
+  const ownRender = useRef<{ doc: Doc; percent: number } | null>(null)
   const measuredImage = useRef<HTMLImageElement | null>(null)
   const drag = useRef<{ img: HTMLImageElement; original: string | null; block: Block; parentWidth: number; startX: number; startWidth: number; percent: number; pointer: number; docId: string } | null>(null)
   const image = () => {
@@ -25,6 +26,17 @@ export function ImageResize() {
     const img = host && [...host.querySelectorAll<HTMLImageElement>('.block-html img')].find(img => img.closest('[data-block-id]') === host && resolveResizeTarget(img, current)?.pos.index === target.index)
     return img && resolveResizeTarget(img, current) ? img : null
   }
+
+  // Only our exact committed document permits rebinding a replaced HTML node.
+  // React has applied all DOM mutations before layout effects, unlike the next rAF.
+  useLayoutEffect(() => {
+    const pending = ownRender.current
+    if (!pending) return
+    ownRender.current = null
+    if (pending.doc !== doc || useStore.getState().doc !== doc) return
+    measuredImage.current = image()
+    setWidth(pending.percent)
+  }, [doc]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const cancel = () => {
     const d = drag.current
@@ -82,7 +94,14 @@ export function ImageResize() {
       return
     }
     const next = resizePhoto(s.doc, target, percent)
-    if (next !== s.doc) s.commit(next)
+    if (next !== s.doc) {
+      ownRender.current = null
+      s.commit(next)
+      // The store stamps updatedAt and creates the authoritative document object.
+      const actual = useStore.getState().doc
+      ownRender.current = actual.id === next.id && actual.blocks === next.blocks
+        ? { doc: actual, percent: clampImageWidth(percent) } : null
+    }
   }
   if (!rect || !target || selected !== target.blockId || editing) return null
   return <div className="image-resize-overlay" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} data-testid="image-resize-overlay" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
