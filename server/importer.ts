@@ -1,6 +1,7 @@
+import { validateDocxArchive } from './docxBudget'
 // 文稿导入：.docx（mammoth，内嵌图片自动入库）/ .md / .txt → Markdown 文本 + 图片列表
 import mammoth from 'mammoth'
-import { saveAsset, type Asset } from './assets'
+import { saveAsset, deleteAsset, type Asset } from './assets'
 
 const strip = (s: string) =>
   s
@@ -40,24 +41,61 @@ export function htmlToMarkdown(html: string): string {
 export async function importFile(buf: Buffer, name: string): Promise<{ text: string; assets: Asset[] }> {
   const lower = name.toLowerCase()
   if (lower.endsWith('.docx')) {
+    try { await validateDocxArchive(buf) } catch (error) {
+      if ((error as { status?: number }).status === 413) throw error
+      throw Object.assign(new Error('无法读取这个 Word 文件。文件可能已损坏或不是有效的 .docx，请用 Word 重新另存为 .docx 后再导入，或改用 Markdown/TXT。'), { status: 400 })
+    }
     const assets: Asset[] = []
+    let resourceError: unknown
+    let imageCount = 0, imageOutputBytes = 0
+    const imageTasks: Promise<unknown>[] = []
+    const rollback = async (cause: unknown) => {
+      await Promise.allSettled(imageTasks)
+      const results = await Promise.allSettled(assets.map(asset => deleteAsset(asset.id)))
+      const failures = results.filter(result => result.status === 'rejected').length
+      if (failures) {
+        if (cause instanceof Error) Object.assign(cause, { cleanupFailures: failures })
+        console.warn(`Word import rollback failed for ${failures} newly created assets`)
+      }
+    }
     const { value } = await mammoth.convertToHtml(
       { buffer: buf },
       {
-        convertImage: mammoth.images.imgElement(async (image: any) => {
-          const data = Buffer.from(await image.read('base64'), 'base64')
-          const a = await saveAsset(data, `word-image-${assets.length + 1}.${(image.contentType ?? 'image/png').split('/')[1]}`)
-          assets.push(a)
-          return { src: `/media/${a.file}` }
+        // Keep uploaded DOCX relationships inside the archive; never read host files.
+        externalFileAccess: false,
+        convertImage: mammoth.images.imgElement((image: any) => {
+          const task = (async () => {
+            if (resourceError) throw resourceError
+            const data = Buffer.from(await image.read('base64'), 'base64')
+            let a: Asset
+            try {
+              if (++imageCount > 256) throw Object.assign(new Error('Word document exceeds the 256-image conversion limit. Split the document and retry.'), { status: 413 })
+              a = await saveAsset(data, `word-image-${assets.length + 1}.${(image.contentType ?? 'image/png').split('/')[1]}`)
+              assets.push(a)
+              imageOutputBytes += a.size ?? 0
+              if (imageOutputBytes > 128 * 1024 * 1024) throw Object.assign(new Error('Word document exceeds the 128 MiB new-image output budget. Reduce images or split the document.'), { status: 413 })
+            } catch (error) {
+              if ([413, 429].includes((error as { status?: number }).status ?? 0)) resourceError ??= error
+              throw error
+            }
+            return { src: `/media/${a.file}` }
+          })()
+          imageTasks.push(task)
+          return task
         }),
       },
-    ).catch((error: unknown) => {
+    ).catch(async (error: unknown) => {
+      await rollback(error)
       const message = error instanceof Error ? error.message : ''
       if (/end of central directory|corrupted zip|invalid zip|can't find.*(?:document|file)|could not find.*(?:document|file)/i.test(message)) {
         throw Object.assign(new Error('无法读取这个 Word 文件。文件可能已损坏或不是有效的 .docx，请用 Word 重新另存为 .docx 后再导入，或改用 Markdown/TXT。'), { status: 400 })
       }
       throw error
     })
+    if (resourceError) {
+      await rollback(resourceError)
+      throw resourceError
+    }
     let md = htmlToMarkdown(value)
     // Word 没有一级标题时，把第一段当作标题
     if (!/^# /m.test(md)) md = md.replace(/^(?!!\[)(.+)$/m, '# $1')

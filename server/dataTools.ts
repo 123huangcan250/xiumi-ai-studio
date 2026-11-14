@@ -7,7 +7,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import type { Writable } from 'node:stream'
 import { Unzip, UnzipInflate, Zip, ZipDeflate, ZipPassThrough } from 'fflate'
 import { APP_ID, DATA, DATA_ENV } from './paths'
-import { readJson, writeJson } from './store'
+import { readJson, writeJson, mutateJson } from './store'
 
 export const CATEGORIES = {
   projects: { label: '项目', re: /^projects\/[\w-]{1,64}\.json$/ },
@@ -134,7 +134,8 @@ export async function applyMerge(plan: MergePlan): Promise<MergeResult> {
   // 素材索引：补上新复制的图片，以及目标里有文件、但索引里缺的条目
   const srcIndex = await readJson<Record<string, { file?: string }>>(join(source, ASSET_INDEX), {})
   if (Object.keys(srcIndex).length) {
-    const dstIndex = await readJson<Record<string, unknown>>(join(target, ASSET_INDEX), {})
+    await mkdir(join(target, 'assets'), { recursive: true })
+    await mutateJson<Record<string, unknown>>(join(target, ASSET_INDEX), {}, async dstIndex => {
     let changed = false
     for (const [id, a] of Object.entries(srcIndex)) {
       if (dstIndex[id] || !a?.file || !/^[\w-]+\.(?:jpg|png)$/.test(a.file)) continue
@@ -143,10 +144,8 @@ export async function applyMerge(plan: MergePlan): Promise<MergeResult> {
         changed = true
       }
     }
-    if (changed) {
-      await mkdir(join(target, 'assets'), { recursive: true })
-      await writeJson(join(target, ASSET_INDEX), dstIndex)
-    }
+    return changed
+    })
   }
   // AI 设置：按 id 补充没有的配置，不改动已有配置和当前选用的模型
   let aiAdded = 0
