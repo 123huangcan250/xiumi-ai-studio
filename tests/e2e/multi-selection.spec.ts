@@ -29,8 +29,8 @@ test('Ctrl/Cmd toggle, ordinary click and multi-delete retain history and persis
   await cards.nth(0).locator('.block-html').click({modifiers:['Control']})
   await page.keyboard.press('Delete')
   await expect(cards).toHaveCount(1);await expect(cards).toContainText('Multi C')
-  await page.getByRole('button',{name:'撤销',exact:true}).click();await expect(cards).toHaveCount(3)
-  await page.getByRole('button',{name:'重做',exact:true}).click();await expect(cards).toHaveCount(1)
+  await page.getByTitle('撤销 Ctrl+Z',{exact:true}).click();await expect(cards).toHaveCount(3)
+  await page.getByTitle('重做 Ctrl+Y',{exact:true}).click();await expect(cards).toHaveCount(1)
   await page.keyboard.press('Control+s');await expect(page.getByTestId('save-status')).toContainText('已保存')
   await page.reload();await expect(cards).toHaveCount(1);await expect(cards).toContainText('Multi C')
 })
@@ -48,7 +48,7 @@ test('multi AI response uses union scope and inline review accepts individual se
   await expect(page.locator('.review-accept')).toHaveCount(2)
   await page.locator('.review-accept').first().click();await page.locator('.review-reject').first().click()
   await expect(cards.nth(0)).toContainText('Accepted 0');await expect(cards.nth(1)).toContainText('Multi B');await expect(cards.nth(2)).toContainText('Multi C')
-  await page.getByRole('button',{name:'撤销',exact:true}).click();await expect(cards.nth(0)).toContainText('Multi A');await expect(page.locator('.review-accept')).toHaveCount(0)
+  await page.getByTitle('撤销 Ctrl+Z',{exact:true}).click();await expect(cards.nth(0)).toContainText('Multi A');await expect(page.locator('.review-accept')).toHaveCount(0)
 })
 
 test('membership ABA rejects a late edit even when the resulting selected set is the same',async({page})=>{
