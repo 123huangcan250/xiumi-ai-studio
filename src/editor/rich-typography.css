@@ -1,0 +1,9 @@
+.rich-editor .rich-typography-toolbar { flex-wrap: wrap; }
+.rich-typography-controls { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; max-width: 100%; }
+.rich-typography-controls label { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; white-space: nowrap; }
+.rich-typography-controls select { max-width: 160px; min-height: 32px; padding: 3px 5px; font-size: 14px; }
+.rich-typography-hint { font-size: 14px; color: var(--ui-text-secondary, #666); }
+@media (max-width: 600px) {
+  .rich-typography-controls select { min-height: 40px; max-width: 138px; }
+  .rich-typography-hint { flex-basis: 100%; }
+}
