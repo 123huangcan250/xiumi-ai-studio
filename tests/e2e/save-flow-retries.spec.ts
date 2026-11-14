@@ -72,6 +72,9 @@ test('choosing a variant keeps the old draft until persistence succeeds and leav
   await choose.click()
   await expect.poll(() => requested).toBe(true)
   await expect(choose).toBeDisabled()
+  // The old manuscript is truthfully saved while the new project's PUT is held.
+  // This predicate alone must not be used as variant-selection completion.
+  await expect(page.getByTestId('save-status')).toHaveText('已保存')
   await expect(page.getByRole('dialog')).toHaveCount(1)
   expect(await manuscript()).toEqual(original)
   await expect(page.getByLabel('文章标题', { exact: true })).toHaveValue(originalTitle)

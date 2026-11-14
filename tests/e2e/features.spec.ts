@@ -267,6 +267,7 @@ test('AI 写文案、按标准名称套用模板模块并安排照片，再按�
   expect(modal.y + modal.height).toBeLessThanOrEqual(900)
   expect(await page.locator('.modal-body').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
   await card.getByRole('button', { name: '使用此方案' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByTestId('save-status')).toHaveText('已保存', { timeout: 10_000 })
 
   // 选中原文片段，在右侧按槽位改字，保留原样式
