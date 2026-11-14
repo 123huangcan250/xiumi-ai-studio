@@ -28,10 +28,33 @@ export async function listAssets(): Promise<Asset[]> {
   return Object.values(await index()).sort((a, b) => b.createdAt - a.createdAt)
 }
 
+/**
+ * 动图只存一帧。装饰用的动图常常是“逐渐画出来”的，第一帧完全透明，存下来就是一张空白图：
+ * 第一帧几乎全透明时，改取画面最满的一帧。
+ */
+export async function bestFrame(buf: Buffer): Promise<number> {
+  const meta = await sharp(buf, { animated: true }).metadata().catch(() => null)
+  const pages = meta?.pages ?? 1
+  if (pages < 2) return 0
+  const coverage = async (page: number) => (await sharp(buf, { page }).ensureAlpha().stats()).channels[3].mean
+  let best = 0
+  let most = await coverage(0)
+  if (most > 8) return 0
+  const step = Math.max(1, Math.ceil(pages / 40))
+  for (let i = step; i < pages; i += step) {
+    const c = await coverage(i)
+    if (c > most + 1) {
+      most = c
+      best = i
+    }
+  }
+  return best
+}
+
 /** 保存上传图片：纠正 EXIF 方向、限制最长边、统一为 jpg/png */
 export async function saveAsset(buf: Buffer, name: string): Promise<Asset> {
   const id = nanoid(12).replace(/[^\w-]/g, '_')
-  const img = sharp(buf, { animated: false }).rotate()
+  const img = sharp(buf, { animated: false, page: await bestFrame(buf) }).rotate()
   const meta = await img.metadata()
   // 透明的 PNG、GIF、WebP 存成 PNG（GIF 只保留第一帧），其余统一为 JPG
   const keepPng = ['png', 'gif', 'webp'].includes(meta.format ?? '') && !!meta.hasAlpha

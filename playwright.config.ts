@@ -11,7 +11,8 @@ const devServers = [
   {
     // 每次运行前清空 E2E 数据目录
     command: `node -e "require('fs').rmSync('data-e2e',{recursive:true,force:true})" && npx tsx server/index.ts`,
-    env: { API_PORT: '5274', DATA_DIR: 'data-e2e' },
+    // 不读开发者自己的 .env：里面的公众号凭据会让“未配置接口”的用例走到另一条分支
+    env: { API_PORT: '5274', DATA_DIR: 'data-e2e', XIUMI_SKIP_ENV_FILES: '1' },
     port: 5274,
     reuseExistingServer: false,
   },
