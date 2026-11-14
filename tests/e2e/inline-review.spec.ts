@@ -1,27 +1,32 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createBlock } from '../../src/core/blocks'
+import { inlineReviewBlocks, originalText, secondText, suggestedText } from './fixtures/inlineReview'
 
 async function open(page: Page, ops: unknown[], customBlocks?: unknown[]) {
   const id = `inline-review-${Date.now()}-${Math.random().toString(36).slice(2)}`
-  const blocks = [
-    { id: 'a', type: 'paragraph', props: { content: '<p>Original complete paragraph</p>', align: 'left' } },
-    { id: 'b', type: 'paragraph', props: { content: '<p>Second original paragraph</p>', align: 'left' } },
-  ]
-  const response = await page.request.put(`/api/projects/${id}`, { data: { id, title: 'Inline review fixture', author: '', digest: '', themeId: 'minimal-magazine', blocks: customBlocks ?? blocks, createdAt: Date.now(), updatedAt: Date.now() } })
+  const blocks = inlineReviewBlocks()
+  const response = await page.request.put(`/api/projects/${id}`, { data: { id, title: '中文稿件就地审阅验收', author: '', digest: '', themeId: 'minimal-magazine', blocks: customBlocks ?? blocks, createdAt: Date.now(), updatedAt: Date.now() } })
   expect(response.ok()).toBe(true)
-  await page.route('**/api/projects', route => route.fulfill({ json: [{ id, title: 'Inline review fixture' }] }))
+  const saved = await (await page.request.get(`/api/projects/${id}`)).json()
+  expect(saved.blocks).toEqual(customBlocks ?? blocks)
+  await page.route('**/api/projects', route => route.fulfill({ json: [{ id, title: '中文稿件就地审阅验收' }] }))
   await page.route('**/api/ai/status', route => route.fulfill({ json: { enabled: true, name: 'Synthetic review', model: 'synthetic' } }))
   await page.route('**/api/ai/suggest-instruction', route => route.fulfill({ json: { suggestion: '' } }))
   await page.route('**/api/ai/edit', route => route.fulfill({ json: { summary: 'Inline suggestions', ops, selectionPolicy: 'strict', ignoredOps: 0 } }))
   await page.goto('/')
-  await expect(page.locator('.title-input')).toHaveValue('Inline review fixture')
+  await expect(page.locator('.title-input')).toHaveValue('中文稿件就地审阅验收')
+  await expect(page.locator('.toast')).not.toContainText('已自动修复')
+  if (!customBlocks) {
+    await expect(page.locator('[data-block-id="a"]')).toContainText(originalText)
+    await expect(page.locator('[data-block-id="a"]')).not.toContainText('<p>')
+  }
   return id
 }
 async function generate(page: Page) {
   const properties = page.getByRole('button', { name: '属性', exact: true })
   if (await properties.isVisible()) await properties.click()
   await page.getByTestId('tab-ai').click()
-  await page.getByPlaceholder(/例如：把第二章/).fill('Apply the requested complete changes')
+  await page.getByPlaceholder(/例如：把第二章/).fill('请保留原意，完整展示正文修改建议，等待逐项审阅。')
   await page.getByRole('button', { name: '生成修改建议', exact: true }).click()
   await expect(page.getByTestId('proposal')).toContainText('Inline suggestions')
   const canvas = page.getByRole('button', { name: '画布', exact: true })
@@ -31,7 +36,7 @@ for (const [width, height] of [[1440, 900], [1024, 768], [390, 844]]) {
   test(`whole red original and green replacement remain operable at ${width}`, async ({ page }) => {
     test.skip(width < 1440 && process.env.XIUMI_RESPONSIVE_COMBINATION !== '1', 'Requires PR8 responsive shell; narrow upstream retains desktop layout')
     await page.setViewportSize({ width, height })
-    const id = await open(page, [{ op: 'update', id: 'a', props: { content: 'Full suggested paragraph with visible replacement text' } }])
+    const id = await open(page, [{ op: 'update', id: 'a', props: { content: suggestedText } }])
     const original = page.locator('[data-block-id="a"]')
     const handle = await original.elementHandle()
     await generate(page)
@@ -40,23 +45,28 @@ for (const [width, height] of [[1440, 900], [1024, 768], [390, 844]]) {
     await expect(suggestion).toBeVisible()
     expect(await handle!.evaluate(node => node.isConnected)).toBe(true)
     await expect(suggestion.locator('iframe')).toHaveAttribute('sandbox', 'allow-same-origin')
-    await expect(suggestion.frameLocator('iframe').locator('body')).toContainText('Full suggested paragraph with visible replacement text')
+    await expect(suggestion.frameLocator('iframe').locator('body')).toContainText(suggestedText)
     const originalBox = (await original.boundingBox())!, suggestionBox = (await suggestion.boundingBox())!
     expect(suggestionBox.y).toBeGreaterThanOrEqual(originalBox.y + originalBox.height)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
     for (const button of await suggestion.locator('button').all()) {
       expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
     }
-    await page.screenshot({ path: `test-results/inline-review-${width}.png`, fullPage: true })
+    await page.evaluate(()=>document.fonts.ready)
+    await suggestion.frameLocator('iframe').locator('body').evaluate(()=>document.fonts.ready)
+    await expect.poll(async()=>(await suggestion.locator('iframe').evaluate(el=>el.getBoundingClientRect().height))-(await suggestion.frameLocator('iframe').locator('body').evaluate(el=>el.scrollHeight))).toBeGreaterThanOrEqual(0)
+    await expect(suggestion).not.toContainText('无法安全预览')
+    await page.screenshot({ path: `test-results/inline-review-narrow-zh-${width}.png`, fullPage: true })
+    await page.locator('.review-position').first().screenshot({path:`test-results/inline-review-pair-zh-${width}.png`})
     const accept = suggestion.getByRole('button', { name: '接受', exact: true })
     await accept.focus(); await page.keyboard.press('Enter')
-    await expect(original).toContainText('Full suggested paragraph with visible replacement text')
+    await expect(original).toContainText(suggestedText)
     await expect(suggestion).toHaveCount(0)
     await expect(page.getByTestId('save-status')).toHaveText('已保存')
     const saved = await (await page.request.get(`/api/projects/${id}`)).json()
     expect(JSON.stringify(saved)).not.toMatch(/review-suggestion|review-frame|review-bubble/)
     await page.locator('.phone-head').click(); await page.keyboard.press('Control+z')
-    await expect(original).toContainText('Original complete paragraph')
+    await expect(original).toContainText(originalText)
     await expect(page.locator('.review-suggestion')).toHaveCount(0)
   })
 }
@@ -65,7 +75,7 @@ test('insert and delete suggestions remain visible without replacing original bl
   await generate(page)
   const cards = page.locator('.review-suggestion')
   await expect(cards).toHaveCount(2)
-  await expect(page.locator('[data-block-id="b"]')).toContainText('Second original paragraph')
+  await expect(page.locator('[data-block-id="b"]')).toContainText(secondText)
   await expect(cards.nth(0).frameLocator('iframe').locator('body')).toContainText('Inserted complete module')
   await expect(cards.nth(1)).toContainText('不会替换为新内容')
   await cards.nth(0).getByRole('button', { name: '接受', exact: true }).click()
