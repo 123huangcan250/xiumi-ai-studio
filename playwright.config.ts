@@ -46,6 +46,7 @@ export default defineConfig({
     baseURL: packaged ? 'http://127.0.0.1:5284' : 'http://localhost:5273',
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
+    trace: 'retain-on-failure',
     permissions: ['clipboard-read', 'clipboard-write'],
   },
   webServer: packaged ? packagedServer : devServers,
