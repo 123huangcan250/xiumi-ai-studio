@@ -116,9 +116,13 @@ async function req<T>(method: string, url: string, body?: unknown, signal?: Abor
     init.headers = { 'content-type': 'application/json' }
   }
   const res = await fetch(url, init)
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error ?? `${res.status} ${res.statusText}`)
-  return data as T
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new Error(data?.error ?? `${res.status} ${res.statusText}`)
+  }
+  // A failed/aborted success body is not an empty result. Callers must not turn it into writes.
+  if (res.status === 204 || res.status === 205) return {} as T
+  return await res.json() as T
 }
 
 export const assetRef = (a: Asset): ImageRef => ({ src: `/media/${a.file}`, assetId: a.id, alt: a.name, width: a.width, height: a.height })
@@ -176,8 +180,8 @@ export const api = {
   aiCopywrite: (body: { brief: string; style: string; length: string; levels: number; extra: string; previous?: string; revise?: string; profileId?: string }) => req<{ markdown?: string }>('POST', '/api/ai/copywrite', body),
   aiEnrichCopy: (body: { text: string; photos: unknown[]; keep: string[]; profileId?: string }) => req<{ markdown?: string; changes?: string[] }>('POST', '/api/ai/enrich-copy', body),
   aiPlacePhotos: (body: unknown) => req<{ placements?: unknown[] }>('POST', '/api/ai/place-photos', body),
-  aiSuggestInstruction: (context: unknown, profileId?: string, selectedId?: string, signal?: AbortSignal) => req<{ suggestion: string }>('POST', '/api/ai/suggest-instruction', { context, profileId, selectedId }, signal),
-  aiEdit: (context: unknown, instruction: string, profileId?: string, selectedId?: string) => req<{ summary: string; ops: any[]; selectionPolicy?: SelectionPolicy; ignoredOps?: number }>('POST', '/api/ai/edit', { context, instruction, profileId, selectedId }),
+  aiSuggestInstruction: (context: unknown, profileId?: string, selectedId?: string, signal?: AbortSignal, selectedIds?: string[]) => req<{ suggestion: string }>('POST', '/api/ai/suggest-instruction', { context, profileId, selectedId, selectedIds }, signal),
+  aiEdit: (context: unknown, instruction: string, profileId?: string, selectedId?: string, selectedIds?: string[]) => req<{ summary: string; ops: any[]; selectionPolicy?: SelectionPolicy; ignoredOps?: number }>('POST', '/api/ai/edit', { context, instruction, profileId, selectedId, selectedIds }),
   fetchReference: (url: string) => req<{ html: string }>('POST', '/api/reference/fetch', { url }),
   fetchArticle: (url: string) => req<{ html: string }>('POST', '/api/article/fetch', { url }),
   fetchAssets: (urls: string[]) => req<Record<string, Asset>>('POST', '/api/assets/fetch', { urls }),

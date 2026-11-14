@@ -2,7 +2,8 @@
 import { readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+import { captureNetworkFailures } from './helpers/networkDiagnostics'
 
 const MOCK_PORT = 5298
 const PRIMARY = ['#7a1f2b', '#1d4e5f', '#3f3a8c']
@@ -31,6 +32,21 @@ function placePlan(user: string) {
   const units: any[] = JSON.parse(user.split('照片单元：\n')[1]?.split('\n\n可用版式')[0] ?? '[]')
   return { placements: units.map((u) => ({ photos: u.photos, after: u.photos.includes(3) ? 'P3' : 'P1' })) }
 }
+
+const networkCaptures = new WeakMap<Page, ReturnType<typeof captureNetworkFailures>>()
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.title === 'AI 写文案、按标准名称套用模板模块并安排照片，再按槽位改字') networkCaptures.set(page, captureNetworkFailures(page))
+})
+test.afterEach(async ({ page }, testInfo) => {
+  const stop = networkCaptures.get(page)
+  networkCaptures.delete(page)
+  if (!stop) return
+  const report = stop()
+  if (report.failures.length) {
+    try { await testInfo.attach('local-api-network-failures', { body: JSON.stringify(report), contentType: 'application/json' }) }
+    catch { console.warn('Network failure diagnostic attachment unavailable') }
+  }
+})
 
 test.beforeAll(async () => {
   // 最小的 OpenAI 兼容服务：按系统提示词返回不同 JSON
@@ -188,7 +204,7 @@ test('粘贴整页复制的富文本：去掉页面外框，版面随画布宽�
   expect(m.widest).toBeLessThanOrEqual(m.blockRight + 1.5)
 })
 
-test('AI 写文案、按标准名称套用模板模块并安排照片，再按槽位改字', async ({ page }) => {
+test('AI 写文案、按标准名称套用模板模块并安排照片，再按槽位改字', async ({ page }, testInfo) => {
   page.on('dialog', (d) => d.accept())
   await page.goto('/')
   await page.getByRole('button', { name: '模板', exact: true }).click()
@@ -280,10 +296,83 @@ test('AI 写文案、按标准名称套用模板模块并安排照片，再按�
   const first = async () => Promise.all([0, 1, 2].map(base))
   const before = await first()
   expect(new Set(before).size).toBe(3)
-  // 相邻的大图拖动时页面可能滚动，落点不一定是第二张：只要求恰好有两张互换了位置
-  await photos.nth(0).dragTo(photos.nth(1))
-  await expect(page.locator('.toast')).toContainText('已交换两张照片')
-  const after = await first()
-  expect([...after].sort()).toEqual([...before].sort())
-  expect(after.filter((s, i) => s !== before[i])).toHaveLength(2)
+  // Diagnostic only: no listeners prevent default, dispatch events, or change layout.
+  await page.evaluate(() => {
+    const records: unknown[] = []
+    const identity = (node: EventTarget | null) => {
+      const el = node instanceof Element ? node : null
+      return { tag: el?.tagName ?? null, blockId: el?.closest('[data-block-id]')?.getAttribute('data-block-id')?.slice(0, 96) ?? null,
+        photoIndex: el?.closest('img[data-photo]')?.getAttribute('data-photo')?.slice(0, 16) ?? null }
+    }
+    const geometry = () => [...document.querySelectorAll('[data-testid=canvas] img[data-photo]')].slice(0, 3).map(el => {
+      const r = el.getBoundingClientRect()
+      return { ...identity(el), x: r.x, y: r.y, width: r.width, height: r.height }
+    })
+    let dropped = 0
+    const record = (e?: Event) => {
+      if (records.length >= 120) { dropped++; return }
+      const mouse = e instanceof MouseEvent ? e : null
+      const transfer = e instanceof DragEvent ? e.dataTransfer : null
+      let from: { blockId: string; index: number } | null = null
+      try {
+        const raw = transfer?.getData('application/x-xiumi-photo')
+        if (raw && raw.length < 512) {
+          const value = JSON.parse(raw)
+          if (typeof value.blockId === 'string' && Number.isSafeInteger(value.index)) from = { blockId: value.blockId.slice(0, 96), index: value.index }
+        }
+      } catch { /* Protected drag data is optional diagnostic information. */ }
+      records.push({ type: e?.type ?? 'setup', ...identity(e?.target ?? null),
+        clientX: mouse?.clientX ?? null, clientY: mouse?.clientY ?? null,
+        pointTarget: mouse ? identity(document.elementFromPoint(mouse.clientX, mouse.clientY)) : null,
+        types: transfer ? [...transfer.types].slice(0, 12).map(t => t.slice(0, 96)) : [], from,
+        scrollTop: document.querySelector('.canvas-scroll')?.scrollTop ?? null, photos: geometry() })
+    }
+    const events = ['mousedown', 'mouseup', 'dragstart', 'dragover', 'drop', 'dragend']
+    events.forEach(type => document.addEventListener(type, record, { capture: true, passive: true }))
+    record()
+    ;(window as unknown as { readPhotoDiagnostic: () => unknown }).readPhotoDiagnostic = () => records
+    ;(window as unknown as { finishPhotoDiagnostic: () => unknown }).finishPhotoDiagnostic = () => {
+      events.forEach(type => document.removeEventListener(type, record, true))
+      return { records, dropped, finalPhotos: geometry() }
+    }
+  })
+  try {
+    // 相邻的大图拖动时页面可能滚动，落点不一定是第二张：只要求恰好有两张互换了位置
+    // Begin a real native drag before Playwright scrolls the offscreen target.
+    const source = photos.nth(0)
+    const destination = photos.nth(1)
+    const sourceIdentity = await source.evaluate(el => ({ blockId: el.closest('[data-block-id]')!.getAttribute('data-block-id'), photoIndex: el.getAttribute('data-photo') }))
+    await source.scrollIntoViewIfNeeded()
+    const start = await source.boundingBox()
+    expect(start).not.toBeNull()
+    await page.mouse.move(start!.x + start!.width / 2, start!.y + start!.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(start!.x + start!.width / 2 + 16, start!.y + start!.height / 2, { steps: 4 })
+    const events = () => page.evaluate(() => (window as unknown as { readPhotoDiagnostic: () => Array<{ type: string; blockId: string | null; photoIndex: string | null }> }).readPhotoDiagnostic())
+    await expect.poll(async () => (await events()).filter(e => e.type === 'dragstart').map(e => ({ blockId: e.blockId, photoIndex: e.photoIndex }))).toEqual([sourceIdentity])
+    await destination.scrollIntoViewIfNeeded()
+    const end = await destination.boundingBox()
+    expect(end).not.toBeNull()
+    await page.mouse.move(end!.x + end!.width / 2, end!.y + end!.height / 2, { steps: 4 })
+    await page.mouse.move(end!.x + end!.width / 2 + 1, end!.y + end!.height / 2)
+    await expect.poll(async () => (await events()).filter(e => e.type === 'dragover').length).toBeGreaterThan(0)
+    await page.mouse.up()
+    await expect.poll(async () => (await events()).filter(e => e.type === 'drop').length).toBe(1)
+    await expect(page.locator('.toast')).toContainText('已交换两张照片')
+    const after = await first()
+    expect([...after].sort()).toEqual([...before].sort())
+    expect(after.filter((s, i) => s !== before[i])).toHaveLength(2)
+  } finally {
+    await page.mouse.up().catch(() => undefined)
+    try {
+      const diagnostic = await page.evaluate(() => {
+        const w = window as unknown as { finishPhotoDiagnostic?: () => unknown; readPhotoDiagnostic?: () => unknown }
+        const result = w.finishPhotoDiagnostic?.()
+        delete w.finishPhotoDiagnostic
+        delete w.readPhotoDiagnostic
+        return result
+      })
+      await testInfo.attach('photo-drag-diagnostic', { body: JSON.stringify(diagnostic, null, 2), contentType: 'application/json' })
+    } catch { console.warn('Photo drag diagnostic unavailable; original test result retained') }
+  }
 })

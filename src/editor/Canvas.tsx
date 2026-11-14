@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createContext, lazy, memo, Suspense, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { blockTextFields } from '../core/blockTextEditing'
 import { BlockTextEditor } from './BlockTextEditor'
 import { blockLabel, blockMeta } from '../core/blocks'
@@ -21,6 +21,7 @@ import { openCollect, setInlineTarget } from './componentActions'
 import { ErrorBoundary } from './ErrorBoundary'
 import { ReplayCanvasBody } from './ReplayPreview'
 import { useStore } from './store'
+import { ReviewProvider, ReviewBlock, ReviewSlot } from './InlineReview'
 
 /** "a:b;c:d" → React style 对象 */
 export function styleObj(s: string): React.CSSProperties {
@@ -271,7 +272,7 @@ function BoxBody({ block, theme }: { block: Block<'box'>; theme: Theme }) {
       <div style={styleObj(parts.body)} className="box-body">
         <SortableContext items={children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {children.map((c, i) => (
-            <BlockView key={c.id} block={c} theme={theme} gap={i === children.length - 1 ? 0 : BOX_GAP} parentId={block.id} />
+            <ReviewBlock key={c.id} id={c.id}><BlockView block={c} theme={theme} gap={i === children.length - 1 ? 0 : BOX_GAP} parentId={block.id} /></ReviewBlock>
           ))}
         </SortableContext>
         <div ref={setNodeRef} className={`box-drop ${isOver ? 'over' : ''} ${children.length ? '' : 'empty'}`} data-testid="box-drop">
@@ -283,8 +284,14 @@ function BoxBody({ block, theme }: { block: Block<'box'>; theme: Theme }) {
   )
 }
 
+const MultiSelectMode = createContext(false)
+const interactiveSelectionTarget = (target: EventTarget) => target instanceof Element && !!target.closest('button,input,textarea,select,a,[contenteditable]:not([contenteditable="false"]),[role="button"],[role="slider"]')
+
 function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme; gap: number; parentId?: string }) {
-  const selected = useStore((s) => s.selectedId === block.id)
+  const selected = useStore((s) => s.selectedIds.includes(block.id))
+  const primary = useStore(s => s.selectedId === block.id)
+  const multiple = useStore(s => s.selectedIds.length > 1)
+  const selectionMode = useContext(MultiSelectMode)
   const editing = useStore((s) => s.editingId === block.id)
   const picking = useStore((s) => s.pickingId === block.id)
   const { select, setEditing, setPicking, updateProps, removeBlock, replaceBlock, duplicateBlock, moveBlock, moveBlockTo, notify } = useStore.getState()
@@ -351,14 +358,16 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
       data-block-type={block.type}
       onClick={(e) => {
         e.stopPropagation()
-        select(block.id)
+        if (interactiveSelectionTarget(e.target)) return
+        select(block.id, { toggle: selectionMode || e.ctrlKey || e.metaKey })
       }}
-      onDoubleClick={(e) => { e.stopPropagation(); startEdit() }}
+      onDoubleClick={(e) => { e.stopPropagation(); if (!selectionMode && !e.ctrlKey && !e.metaKey && !interactiveSelectionTarget(e.target)) startEdit() }}
       {...attributes}
       role="group"
       tabIndex={-1}
     >
-      {selected && !editing && !picking && (
+      {selectionMode && <button className="block-select-toggle" data-testid="toggle-block-selection" aria-label={`选择模块：${blockLabel(block)} ${block.id}`} aria-pressed={selected} onClick={e => { e.stopPropagation(); select(block.id, { toggle: true }) }}>{selected ? '已选择' : '选择'}</button>}
+      {primary && !multiple && !selectionMode && !editing && !picking && (
         <div className="block-toolbar" onClick={(e) => e.stopPropagation()}>
           <span className="block-label">{blockLabel(block)}</span>
           <button ref={setActivatorNodeRef} {...listeners} className="drag" title="拖动排序">⠿</button>
@@ -510,12 +519,20 @@ export function Canvas() {
   const doc = useStore((s) => s.doc)
   const theme = useMemo(() => resolveTheme(doc), [doc.themeId, doc.themeOverrides]) // eslint-disable-line react-hooks/exhaustive-deps
   const select = useStore((s) => s.select)
+  const count = useStore(s => s.selectedIds.length)
+  const [selectionMode, setSelectionMode] = useState(false)
   const { setNodeRef, isOver } = useDroppable({ id: 'canvas-end' })
   const scroller = useRef<HTMLDivElement>(null)
   const photoDrag = usePhotoDrag(scroller)
   const [zoom, setZoom] = useCanvasZoom()
   return (
-    <div className="canvas-wrap">
+    <ReviewProvider><MultiSelectMode.Provider value={selectionMode}><div className="canvas-wrap">
+      <div className="selection-bar" role="group" aria-label="模块选择">
+        <button data-testid="multi-select-mode" aria-pressed={selectionMode} onClick={() => setSelectionMode(value => !value)}>{selectionMode ? '完成多选' : '多选模块'}</button>
+        <span role="status">{count ? `已选 ${count} 个模块` : '未选择模块'}</span>
+        {count > 0 && <button onClick={() => select(null)}>取消选择</button>}
+      </div>
+
       <div className="canvas-scroll" ref={scroller} onClick={() => select(null)} {...photoDrag}>
         <div className="phone" style={zoom === 1 ? undefined : { zoom }} data-zoom={zoom}>
           <div className="phone-head">
@@ -525,9 +542,10 @@ export function Canvas() {
           <div className="article" style={styleObj(rootStyle(theme))} data-testid="canvas">
             <SortableContext items={doc.blocks.map((b) => b.id)} strategy={verticalListSortingStrategy}>
               {doc.blocks.map((b, i) => (
-                <BlockView key={b.id} block={b} theme={theme} gap={blockGap(b, doc.blocks[i + 1], theme)} />
+                <div key={b.id} className="review-position"><ReviewSlot beforeId={b.id} /><ReviewBlock id={b.id}><BlockView block={b} theme={theme} gap={blockGap(b, doc.blocks[i + 1], theme)} /></ReviewBlock></div>
               ))}
             </SortableContext>
+            <ReviewSlot />
             <div ref={setNodeRef} className={`drop-end ${isOver ? 'over' : ''}`}>
               {doc.blocks.length ? '拖入模块到此处，或在左侧点击添加' : '从左侧拖入模块，或使用「AI 一键排版」导入文稿'}
             </div>
@@ -539,6 +557,6 @@ export function Canvas() {
         <button className="zoom-val" title="恢复 100%（Ctrl + 0）" onClick={() => setZoom(1)} data-testid="zoom-reset">{Math.round(zoom * 100)}%</button>
         <button title="放大（Ctrl + 滚轮向上 / Ctrl + +）" onClick={() => setZoom((z) => z + 0.1)} disabled={zoom >= ZOOM_MAX} data-testid="zoom-in">＋</button>
       </div>
-    </div>
+    </div></MultiSelectMode.Provider></ReviewProvider>
   )
 }
