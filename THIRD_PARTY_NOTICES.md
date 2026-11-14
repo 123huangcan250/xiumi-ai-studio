@@ -30,3 +30,9 @@ MIT License (wechat-draft-publisher) — Copyright (c) andrewlaredo. Permission 
 - sharp 的 Windows 预编译库 `@img/sharp-win32-x64` 以独立文件随包分发，其中 libvips 为 LGPL-3.0 动态库，可自行替换。
 - 产物 `app/licenses/` 内含 `Node.js-LICENSE.txt` 和 `THIRD_PARTY_LICENSES.txt`（打包时由 `pnpm licenses list --prod` 收集全部生产依赖的许可文本）。
 - 仅在构建时使用、不随产物分发：esbuild、postject、rcedit（均为 MIT）。
+
+
+## HTML parsing security dependencies
+
+- DOMPurify 3.4.17 is offered under `(MPL-2.0 OR Apache-2.0)`; this distribution uses the Apache-2.0 option. Its complete upstream LICENSE and notices remain in the dependency package and generated `app/licenses/THIRD_PARTY_LICENSES.txt`.
+- isomorphic-dompurify 3.0.0 and jsdom 28.1.0 use MIT licenses. Their runtime package resources and dependency license texts are included in the portable distribution rather than flattening jsdom into the server bundle.
