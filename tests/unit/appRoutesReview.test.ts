@@ -2,8 +2,6 @@ import { createHash } from 'node:crypto'
 import type { Server } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const moduleDiagnostics = vi.hoisted(() => ({ aiFactoryCalls: 0 }))
-
 vi.hoisted(async () => {
   const { mkdtempSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
@@ -17,8 +15,7 @@ vi.hoisted(async () => {
 // async mock can expose the real module while that cycle is being evaluated.
 // These route tests exercise HTTP wiring, not provider transport or prompt text.
 // Every provider entry point is a fail-closed stub, so no test can contact a model.
-vi.mock('../../server/ai', () => {
-  moduleDiagnostics.aiFactoryCalls++
+function createProviderMocks() {
   const unexpectedProviderCall = () => { throw new Error('Unconfigured provider call in route test') }
   return {
     aiStatus: vi.fn(unexpectedProviderCall),
@@ -30,36 +27,51 @@ vi.mock('../../server/ai', () => {
     EDIT_SYSTEM: 'test edit prompt', ENRICH_SYSTEM: 'test enrich prompt',
     OUTLINE_SYSTEM: 'test outline prompt', PLACE_SYSTEM: 'test place prompt',
   }
-})
-vi.mock('../../server/net', async importOriginal => ({
-  ...await importOriginal<typeof import('../../server/net')>(), safeFetch: vi.fn(),
-}))
-vi.mock('../../server/settings', async importOriginal => ({
-  ...await importOriginal<typeof import('../../server/settings')>(), resolveDraftProfile: vi.fn(async draft => draft),
-}))
+}
 
-import { chatJson, discoverModels, testConnection } from '../../server/ai'
-import { MAX_PAGE_BYTES, safeFetch } from '../../server/net'
-
-const aiMockState = () => ({ chatJson: vi.isMockFunction(chatJson), discoverModels: vi.isMockFunction(discoverModels), testConnection: vi.isMockFunction(testConnection) })
-const staticAiMockState = aiMockState()
+type AiModule = typeof import('../../server/ai')
+type NetModule = typeof import('../../server/net')
+let chatJson: AiModule['chatJson']
+let discoverModels: AiModule['discoverModels']
+let testConnection: AiModule['testConnection']
+let safeFetch: NetModule['safeFetch']
+let MAX_PAGE_BYTES: NetModule['MAX_PAGE_BYTES']
 
 let server: Server
 let base: string
 beforeAll(async () => {
-  const beforeApp = aiMockState()
-  const mockedAi = await vi.importMock<typeof import('../../server/ai')>('../../server/ai')
-  const { createApp } = await import('../../server/app')
-  const diagnostic = {
-    factoryCalls: moduleDiagnostics.aiFactoryCalls,
-    staticImport: staticAiMockState, beforeApp, afterApp: aiMockState(),
-    sameMockReferences: { chatJson: chatJson === mockedAi.chatJson, discoverModels: discoverModels === mockedAi.discoverModels, testConnection: testConnection === mockedAi.testConnection },
+  // Reset evaluated modules before registering this fixture's factories. Never
+  // retain a static server import across the reset: app and assertions must share
+  // the same provider, network and settings boundaries.
+  vi.resetModules()
+  const provider = createProviderMocks()
+  const fetchStub = vi.fn<NetModule['safeFetch']>(() => { throw new Error('Unconfigured network call in route test') })
+  const draftStub = vi.fn(async (draft: unknown) => draft)
+  let factoryCalls = 0
+  vi.doMock('../../server/ai', () => { factoryCalls++; return provider })
+  vi.doMock('../../server/net', async importOriginal => ({
+    ...await importOriginal<NetModule>(), safeFetch: fetchStub,
+  }))
+  vi.doMock('../../server/settings', async importOriginal => ({
+    ...await importOriginal<typeof import('../../server/settings')>(), resolveDraftProfile: draftStub,
+  }))
+  const ai = await import('../../server/ai')
+  const net = await import('../../server/net')
+  const settings = await import('../../server/settings')
+  ;({ chatJson, discoverModels, testConnection } = ai)
+  ;({ safeFetch, MAX_PAGE_BYTES } = net)
+  const verifyBoundaries = () => {
+    expect(factoryCalls).toBe(1)
+    for (const name of ['chatJson', 'discoverModels', 'testConnection'] as const) {
+      expect(vi.isMockFunction(ai[name])).toBe(true)
+      expect(ai[name]).toBe(provider[name])
+    }
+    expect(net.safeFetch).toBe(fetchStub)
+    expect(settings.resolveDraftProfile).toBe(draftStub)
   }
-  // Booleans/count only: reveal loader timing without logging profiles or function bodies.
-  console.info('ROUTE_MOCK_DIAGNOSTIC', JSON.stringify(diagnostic))
-  const allMocked = { chatJson: true, discoverModels: true, testConnection: true }
-  expect(diagnostic).toMatchObject({ staticImport: allMocked, beforeApp: allMocked, afterApp: allMocked, sameMockReferences: allMocked })
-  expect(diagnostic.factoryCalls).toBeGreaterThan(0)
+  verifyBoundaries()
+  const { createApp } = await import('../../server/app')
+  verifyBoundaries()
   server = await new Promise<Server>(resolve => {
     const listening = createApp().listen(0, '127.0.0.1', () => resolve(listening))
   })
