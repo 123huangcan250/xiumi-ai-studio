@@ -2,11 +2,14 @@ import { createHash } from 'node:crypto'
 import type { Server } from 'node:http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const moduleDiagnostics = vi.hoisted(() => ({ aiFactoryCalls: 0 }))
+
 vi.hoisted(async () => {
   const { mkdtempSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const { join } = await import('node:path')
   process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'xiumi-route-review-'))
+  process.env.XIUMI_DATA_DIR = process.env.DATA_DIR
   process.env.AI_SELECTION_POLICY = 'filter'
 })
 
@@ -15,6 +18,7 @@ vi.hoisted(async () => {
 // These route tests exercise HTTP wiring, not provider transport or prompt text.
 // Every provider entry point is a fail-closed stub, so no test can contact a model.
 vi.mock('../../server/ai', () => {
+  moduleDiagnostics.aiFactoryCalls++
   const unexpectedProviderCall = () => { throw new Error('Unconfigured provider call in route test') }
   return {
     aiStatus: vi.fn(unexpectedProviderCall),
@@ -37,10 +41,25 @@ vi.mock('../../server/settings', async importOriginal => ({
 import { chatJson, discoverModels, testConnection } from '../../server/ai'
 import { MAX_PAGE_BYTES, safeFetch } from '../../server/net'
 
+const aiMockState = () => ({ chatJson: vi.isMockFunction(chatJson), discoverModels: vi.isMockFunction(discoverModels), testConnection: vi.isMockFunction(testConnection) })
+const staticAiMockState = aiMockState()
+
 let server: Server
 let base: string
 beforeAll(async () => {
+  const beforeApp = aiMockState()
+  const mockedAi = await vi.importMock<typeof import('../../server/ai')>('../../server/ai')
   const { createApp } = await import('../../server/app')
+  const diagnostic = {
+    factoryCalls: moduleDiagnostics.aiFactoryCalls,
+    staticImport: staticAiMockState, beforeApp, afterApp: aiMockState(),
+    sameMockReferences: { chatJson: chatJson === mockedAi.chatJson, discoverModels: discoverModels === mockedAi.discoverModels, testConnection: testConnection === mockedAi.testConnection },
+  }
+  // Booleans/count only: reveal loader timing without logging profiles or function bodies.
+  console.info('ROUTE_MOCK_DIAGNOSTIC', JSON.stringify(diagnostic))
+  const allMocked = { chatJson: true, discoverModels: true, testConnection: true }
+  expect(diagnostic).toMatchObject({ staticImport: allMocked, beforeApp: allMocked, afterApp: allMocked, sameMockReferences: allMocked })
+  expect(diagnostic.factoryCalls).toBeGreaterThan(0)
   server = await new Promise<Server>(resolve => {
     const listening = createApp().listen(0, '127.0.0.1', () => resolve(listening))
   })
