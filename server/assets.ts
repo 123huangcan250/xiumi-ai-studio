@@ -16,6 +16,8 @@ export interface Asset {
   height: number
   size: number
   createdAt: number
+  /** Digest of canonical import URL, never the credential-bearing URL itself. */
+  sourceKey?: string
 }
 
 const META = join(DIRS.assets, '_index.json')
@@ -55,7 +57,7 @@ async function bestFrameWithinBudget(buf: Buffer): Promise<number> {
 }
 
 /** 保存上传图片：纠正 EXIF 方向、限制最长边、统一为 jpg/png */
-export async function saveAsset(buf: Buffer, name: string): Promise<Asset> {
+export async function saveAsset(buf: Buffer, name: string, sourceKey?: string): Promise<Asset> {
   return withImageBudget(async () => {
     const id = nanoid(12).replace(/[^\w-]/g, '_')
     const img = sharp(buf, { animated: false, page: await bestFrameWithinBudget(buf), limitInputPixels: MAX_INPUT_PIXELS }).rotate()
@@ -67,7 +69,7 @@ export async function saveAsset(buf: Buffer, name: string): Promise<Asset> {
     const pipeline = img.resize({ width: MAX_EDGE, height: MAX_EDGE, fit: 'inside', withoutEnlargement: true })
     try {
     const info = await (keepPng ? pipeline.png({ compressionLevel: 9 }) : pipeline.jpeg({ quality: 86, mozjpeg: true })).toFile(join(DIRS.assets, file))
-    const asset: Asset = { id, file, name, width: info.width, height: info.height, size: info.size, createdAt: Date.now() }
+    const asset: Asset = { id, file, name, width: info.width, height: info.height, size: info.size, createdAt: Date.now(), ...(sourceKey ? { sourceKey } : {}) }
     await updateIndex(idx => { idx[id] = asset })
     return asset
     } catch (error) {

@@ -1,3 +1,4 @@
+import { importArticleImages } from './articleImages'
 // HTTP 服务：全部接口与前端静态文件。源码运行（index.ts）和打包运行（launcher.ts）共用。
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
@@ -423,11 +424,8 @@ ${JSON.stringify(b.layouts ?? {})}`
   res.json(await chatJson(PLACE_SYSTEM, user, { maxTokens: 3000, temperature: 0.3, profileId: pid(req) }))
 }))
 app.post('/api/ai/suggest-instruction', h(async (req, res) => {
-  const { context, selectedId } = req.body
-  if (selectedId !== undefined && (typeof selectedId !== 'string' || !selectedId)) {
-    throw Object.assign(new Error('无效的选中模块'), { status: 400 })
-  }
-  const prompt = suggestionPrompt(context, selectedId)
+  const { context, selectedId, selectedIds } = req.body
+  const prompt = suggestionPrompt(context, selectedId, selectedIds)
   const controller = new AbortController()
   const disconnect = () => { if (!res.writableEnded) controller.abort() }
   req.once('aborted', disconnect)
@@ -446,7 +444,7 @@ app.post('/api/ai/suggest-instruction', h(async (req, res) => {
 }))
 app.post('/api/ai/edit', h(async (req, res) => {
   const { context, instruction } = req.body
-  const edit = prepareEdit(context, req.body.selectedId)
+  const edit = prepareEdit(context, req.body.selectedId, undefined, req.body.selectedIds)
   const user = edit.prompt(instruction)
   res.json(edit.result(await chatJson(EDIT_SYSTEM, user, { maxTokens: 6000, profileId: pid(req) })))
 }))
@@ -472,6 +470,7 @@ app.get('/api/wx-image', h(async (req, res) => {
   res.send(Buffer.from(await r.arrayBuffer()))
 }))
 /** 把导入内容里的图片下载到素材库（仅限微信和秀米图床，重定向目标同样检查） */
+app.post('/api/assets/import-article', h(async (req,res) => res.json(await importArticleImages(req.body.urls))))
 app.post('/api/assets/fetch', h(async (req, res) => {
   const urls: string[] = (req.body.urls ?? []).slice(0, 80)
   const out: Record<string, unknown> = {}

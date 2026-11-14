@@ -26,7 +26,10 @@ function freeze(root: HTMLElement | null, times: number[]) {
 
 /** 画布上的回放模块：定格在成稿，右上角可打开预览器 */
 export const ReplayCanvasBody = memo(function ReplayCanvasBody({ block }: { block: ReplayBlock }) {
-  const shown = useMemo(() => asAuto(block), [block])
+  // A final-frame canvas is not an animation player: retain looping only in the
+  // interactive preview and exported work. Seeking a zero-hold loop to its end
+  // otherwise lands exactly at the beginning of its next cycle.
+  const shown = useMemo(() => ({ ...block, props: { ...block.props, playback: { ...block.props.playback, trigger: 'auto' as const, loop: undefined } } }), [block])
   const html = useMemo(() => displayHtml(compileReplay(shown).html), [shown])
   const finals = useMemo(() => replayFinalTimes(shown.props), [shown])
   const ref = useRef<HTMLDivElement>(null)

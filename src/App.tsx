@@ -74,7 +74,7 @@ function useShortcuts() {
         s.redo()
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && s.selectedId && !s.editingId) {
         e.preventDefault()
-        s.removeBlock(s.selectedId)
+        s.removeSelected()
       } else if (e.key === 'Escape') s.select(null)
     }
     window.addEventListener('keydown', onKey)
@@ -95,6 +95,7 @@ export default function App() {
       await loadCustomThemes()
       try {
         const list = await api.projects()
+        if (!Array.isArray(list)) throw new Error('项目列表响应格式无效，未创建或保存文稿')
         if (list.length) useStore.getState().load(await api.project(list[0].id))
         else {
           useStore.getState().load(emptyDoc())
