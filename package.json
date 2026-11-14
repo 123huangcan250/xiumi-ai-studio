@@ -43,7 +43,8 @@
     "react-easy-crop": "^6.2.4",
     "sharp": "^0.35.5",
     "undici": "^8.12.4",
-    "zustand": "^5.0.16"
+    "zustand": "^5.0.16",
+    "yauzl": "3.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -68,7 +69,9 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.5",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "@types/yauzl": "3.4.0",
+    "jszip": "3.10.2"
   },
   "packageManager": "pnpm@12.6.0",
   "engines": {

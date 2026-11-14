@@ -5,6 +5,8 @@ import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import multer from 'multer'
+import { boundedDiskStorage } from './uploadStorage'
+import { createUploadGate } from './uploadGate'
 import { nanoid } from 'nanoid'
 import { APP_ID, DATA, DATA_ENV, LOG_DIR, PACKAGED, TMP_DIR } from './paths'
 import { cropAsset, deleteAsset, listAssets, saveAsset, saveGlyph, variantPath } from './assets'
@@ -90,7 +92,8 @@ app.use((req, res, next) => {
   next()
 })
 app.use(express.json({ limit: '20mb' }))
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024, files: 50 } })
+const upload = multer({ storage: boundedDiskStorage(), limits: { fileSize: 30 * 1024 * 1024, files: 50, fields: 0, parts: 50 } })
+const uploadRoute = createUploadGate()
 const backupUpload = multer({ dest: TMP_DIR, limits: { fileSize: 8 * 1024 * 1024 * 1024, files: 1 } })
 
 // ---------- 程序与数据 ----------
@@ -191,7 +194,7 @@ app.get('/media/:file', h(async (req, res) => {
   res.sendFile(p)
 }))
 app.get('/api/assets', h(async (_req, res) => res.json(await listAssets())))
-app.post('/api/assets', upload.array('files'), h(async (req, res) => {
+app.post('/api/assets', uploadRoute(upload.array('files'), async (req, res) => {
   const files = (req.files as Express.Multer.File[]) ?? []
   const out = []
   for (const f of files) out.push(await saveAsset(f.buffer, fixName(f.originalname)))
@@ -215,7 +218,7 @@ app.delete('/api/assets/:id', h(async (req, res) => {
 }))
 
 // ---------- 导入 ----------
-app.post('/api/import', upload.single('file'), h(async (req, res) => {
+app.post('/api/import', uploadRoute(upload.single('file'), async (req, res) => {
   if (!req.file) throw Object.assign(new Error('缺少文件'), { status: 400 })
   res.json(await importFile(req.file.buffer, fixName(req.file.originalname)))
 }))
