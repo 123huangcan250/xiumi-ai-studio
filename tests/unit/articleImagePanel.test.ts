@@ -84,3 +84,15 @@ it('auto-suggestion removes nested replay image sources but preserves ordinary t
  act(()=>state().load({...emptyDoc(),blocks:[replay,html]}));const doc=state().doc
  try{await enableSuggestions();await act(async()=>vi.advanceTimersByTimeAsync(1500));expect(suggestion).toHaveBeenCalledTimes(1);const sent=JSON.stringify(suggestion.mock.calls[0][0]);expect(sent).not.toContain('SECRET');expect(sent).not.toContain('img.xiumi.us');expect(sent).toContain('保留正文 https://example.test/reference');expect(sent).toContain('保留HTML文字');expect(state().doc).toBe(doc)}finally{vi.useRealTimers()}
 })
+
+it('keeps both accessible close buttons and scopes the footer action unambiguously',async()=>{
+ await click('收集当前范围图片到素材库')
+ const dialog=document.querySelector('[role="dialog"]')!
+ const namedClose=[...dialog.querySelectorAll('button')].filter(b=>(b.getAttribute('aria-label')??b.textContent)==='关闭')
+ expect(namedClose).toHaveLength(2)
+ const footerClose=[...dialog.querySelectorAll<HTMLButtonElement>('.modal-actions button')].filter(b=>b.textContent==='关闭')
+ expect(footerClose).toHaveLength(1)
+ await act(async()=>footerClose[0].click())
+ expect(document.querySelector('[role="dialog"]')).toBeNull()
+ expect(api.importArticleImages).not.toHaveBeenCalled()
+})

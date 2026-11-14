@@ -21,7 +21,7 @@ test('natural-language collection confirms locally and does not modify persisted
  await page.getByRole('button',{name:'收集图片到素材库',exact:true}).click()
  const dialog=page.getByRole('dialog');await expect(dialog).toContainText('发现 1 张');expect(imports).toBe(0)
  await dialog.getByRole('button',{name:'确认加入素材库',exact:true}).click();await expect(dialog).toContainText('新增 1 张')
- await dialog.getByRole('button',{name:'关闭',exact:true}).click();expect(modelCalls).toBe(0)
+ await dialog.locator('.modal-actions').getByRole('button',{name:'关闭',exact:true}).click();expect(modelCalls).toBe(0)
  expect((await(await page.request.get(`/api/projects/${id}`)).json()).blocks).toEqual(before)
  await expect(page.getByLabel('AI 修改指令')).toHaveValue('帮我把原文中的图片加入我们自己的素材库，不要修改正文')
 })
@@ -32,7 +32,7 @@ test('partial results retry only failed URLs and closing stops later requests',a
  await page.getByTestId('collect-article-images').click();const dialog=page.getByRole('dialog');await expect(dialog).toContainText('发现 2 张')
  await dialog.getByRole('button',{name:'确认加入素材库'}).click();await expect(dialog).toContainText('失败或未确认 1 张');failed=false
  await dialog.getByRole('button',{name:'重试失败图片'}).click();await expect(dialog).toContainText('已存在 2 张');expect(calls).toEqual(['https://img.xiumi.us/a','https://img.xiumi.us/b','https://img.xiumi.us/b'])
- await dialog.getByRole('button',{name:'关闭',exact:true}).click()
+ await dialog.locator('.modal-actions').getByRole('button',{name:'关闭',exact:true}).click()
  let release!:()=>void;const gate=new Promise<void>(r=>release=r);let started=false
  await page.route('**/api/assets/import-article',async r=>{started=true;await gate;await r.fulfill({json:[{url:r.request().postDataJSON().urls[0],status:'existing'}]})})
  await page.getByTestId('collect-article-images').click();await dialog.getByRole('button',{name:'确认加入素材库'}).click();await expect.poll(()=>started).toBe(true)
