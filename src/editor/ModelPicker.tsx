@@ -29,8 +29,9 @@ export function ModelPicker({ models, value, disabled, onSelect }: { models: Mod
       const outer = body.getBoundingClientRect()
       const top = outer.top + body.clientTop
       const bottom = top + body.clientHeight
-      if (inner.bottom > bottom) body.scrollTop += inner.bottom - bottom
-      else if (inner.top < top) body.scrollTop -= top - inner.top
+      // Round toward visibility: browsers may quantize scroll offsets to whole CSS pixels.
+      if (inner.bottom > bottom) body.scrollTop += Math.ceil(inner.bottom - bottom)
+      else if (inner.top < top) body.scrollTop -= Math.ceil(top - inner.top)
     }
     const outside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false) }
     document.addEventListener('pointerdown', outside)

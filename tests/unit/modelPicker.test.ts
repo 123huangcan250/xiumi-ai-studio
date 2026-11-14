@@ -78,3 +78,29 @@ it('nested dialog takes focus away from the picker and receives Escape without c
  expect(document.activeElement?.textContent).toBe('✕')
  key('Escape');expect(innerClose).toHaveBeenCalledTimes(1);expect(outerClose).not.toHaveBeenCalled()
 })
+
+it.each(['below','above'] as const)('reveals fractional %s edges with integer scroll offsets and available local scroll range', direction=>{
+ let offset=200
+ const max=1000
+ act(()=>root.render(createElement('div',{className:'modal-body'},createElement(ModelPicker,{models,value:'model-0',onSelect:vi.fn()}))))
+ const body=host.querySelector<HTMLElement>('.modal-body')!
+ Object.defineProperties(body,{clientHeight:{value:400},scrollHeight:{value:1400},scrollTop:{get:()=>offset,set:(next:number)=>{offset=Math.max(0,Math.min(max,Math.round(next)))}}})
+ const bounds=vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockImplementation(function(this:HTMLElement){
+  if(this===body)return {top:100,bottom:500,height:400} as DOMRect
+  if(this.getAttribute('role')==='listbox'){
+   const top=(direction==='below'?476.3125:299.6875)-offset
+   return {top,bottom:top+224,height:224} as DOMRect
+  }
+  return {top:300,bottom:320,height:20} as DOMRect
+ })
+ try {
+  act(()=>trigger().click())
+  const list=host.querySelector<HTMLElement>('[role="listbox"]')!
+  expect(list.getBoundingClientRect().top).toBeGreaterThanOrEqual(100)
+  expect(list.getBoundingClientRect().bottom).toBeLessThanOrEqual(500)
+  expect(offset).toBe(direction==='below'?201:199)
+  expect(max-offset).toBeGreaterThan(0)
+  const revealed=offset;key('End');expect(offset).toBe(revealed)
+  expect(document.documentElement.scrollTop).toBe(0)
+ } finally {bounds.mockRestore()}
+})
