@@ -2,7 +2,8 @@
 import { readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import { join } from 'node:path'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+import { captureNetworkFailures } from './helpers/networkDiagnostics'
 
 const MOCK_PORT = 5298
 const PRIMARY = ['#7a1f2b', '#1d4e5f', '#3f3a8c']
@@ -31,6 +32,21 @@ function placePlan(user: string) {
   const units: any[] = JSON.parse(user.split('照片单元：\n')[1]?.split('\n\n可用版式')[0] ?? '[]')
   return { placements: units.map((u) => ({ photos: u.photos, after: u.photos.includes(3) ? 'P3' : 'P1' })) }
 }
+
+const networkCaptures = new WeakMap<Page, ReturnType<typeof captureNetworkFailures>>()
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.title === 'AI 写文案、按标准名称套用模板模块并安排照片，再按槽位改字') networkCaptures.set(page, captureNetworkFailures(page))
+})
+test.afterEach(async ({ page }, testInfo) => {
+  const stop = networkCaptures.get(page)
+  networkCaptures.delete(page)
+  if (!stop) return
+  const report = stop()
+  if (report.failures.length) {
+    try { await testInfo.attach('local-api-network-failures', { body: JSON.stringify(report), contentType: 'application/json' }) }
+    catch { console.warn('Network failure diagnostic attachment unavailable') }
+  }
+})
 
 test.beforeAll(async () => {
   // 最小的 OpenAI 兼容服务：按系统提示词返回不同 JSON
