@@ -1,0 +1,16 @@
+[
+  {
+    "package": "@fontsource-variable/noto-serif-sc",
+    "version": "5.3.1",
+    "source": "https://registry.npmjs.org/@fontsource-variable/noto-serif-sc/-/noto-serif-sc-5.3.1.tgz",
+    "sha256": "ddadf818338639236bf2b968991856e2dfd788b2bdcb8aa62efe89161eb0a6b9",
+    "license": "OFL-1.1"
+  },
+  {
+    "package": "@fontsource-variable/noto-sans-sc",
+    "version": "5.3.1",
+    "source": "https://registry.npmjs.org/@fontsource-variable/noto-sans-sc/-/noto-sans-sc-5.3.1.tgz",
+    "sha256": "95a11c5bbacd9995d94fc8cf964ee687307aacf20957ca6a4a16077519388163",
+    "license": "OFL-1.1"
+  }
+]

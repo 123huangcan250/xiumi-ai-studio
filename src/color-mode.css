@@ -1,0 +1,140 @@
+:root[data-color-mode='dark']:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  color-scheme: dark;
+  --bg: #12151e;
+  --panel: #1b2030;
+  --line: #40485d;
+  --text: #edf0f7;
+  --sub: #bec6d6;
+  --faint: #a4aec2;
+  --brand: #baaeff;
+  --brand-soft: #332d52;
+  --accent: #ffb18f;
+  --danger: #ff9aa3;
+  --ok: #85d9a9;
+  --muted: #bec6d6;
+  /* These remain available inside the light article, for its editor controls. */
+  --ui-panel: #1b2030;
+  --ui-control: #252c3e;
+  --ui-hover: #303950;
+  --ui-line: #40485d;
+  --ui-text: #edf0f7;
+  --ui-sub: #bec6d6;
+  --ui-faint: #a4aec2;
+  --ui-brand: #baaeff;
+  --ui-brand-soft: #332d52;
+  --ui-danger: #ff9aa3;
+  --ui-accent: #ffb18f;
+  --ui-primary: #7054cc;
+  --ui-primary-hover: #7654ce;
+  --ui-warning: #ffd08a;
+  --ui-warning-bg: #382e20;
+  --ui-success-bg: #1a352a;
+  --ui-error-bg: #44252e;
+}
+
+.color-mode-control { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--sub); }
+.color-mode-control > span[aria-hidden] { font-size: 18px; width: 20px; text-align: center; }
+.color-mode-control select { width: auto; max-width: 145px; min-height: 32px; font-size: 12px; }
+.color-mode-description { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+@media (pointer: coarse) { .color-mode-control select { min-height: 44px; } }
+
+/* Never recolor imported HTML, document thumbnails, or the editable article.
+   Freeze both inherited colors and the existing variables, including color-scheme
+   so native controls embedded in imported content stay as they were in light mode. */
+:is(.phone, .mini-preview, .comp-preview, .paste-box) {
+  color-scheme: light;
+  color: #1f2329;
+  --bg: #f2f3f5;
+  --panel: #fff;
+  --line: #e4e6eb;
+  --text: #1f2329;
+  --sub: #646a73;
+  --faint: #8f959e;
+  --brand: #5b4bdb;
+  --brand-soft: #efedff;
+  --accent: #ff7a45;
+  --danger: #e5484d;
+  --ok: #1a9e5c;
+  --muted: #666;
+}
+.paste-box { background: #fff; color: var(--faint); }
+
+/* Editing toolbars are UI even when they live inside a document surface. */
+:root[data-color-mode='dark'] :is(.block-toolbar, .rich-toolbar, [data-testid='inline-block-text'], .render-error):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  color-scheme: dark;
+  --panel: var(--ui-panel);
+  --text: var(--ui-text);
+  --sub: var(--ui-sub);
+  --faint: var(--ui-faint);
+  --line: var(--ui-line);
+  --brand: var(--ui-brand);
+  --brand-soft: var(--ui-brand-soft);
+  --danger: var(--ui-danger);
+  --accent: var(--ui-accent);
+  color: var(--ui-text);
+}
+:root[data-color-mode='dark'] :is(.modal, .crash, .block-toolbar, .rich-toolbar, .tm-card):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-panel); }
+/* The existing inline editor sets its background via an inline style. */
+:root[data-color-mode='dark'] [data-testid='inline-block-text']:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-panel) !important; }
+
+/* Excluding preview descendants prevents broad element rules from touching article HTML. */
+:root[data-color-mode='dark'] :is(button, input, textarea, select):not(:where(.phone *, .mini-preview *, .comp-preview *, .paste-box *)):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)),
+:root[data-color-mode='dark'] :is(.block-toolbar, .rich-toolbar, [data-testid='inline-block-text'], .render-error) :is(button, input, textarea, select):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  background: var(--ui-control);
+  color: var(--ui-text);
+  border-color: var(--ui-line);
+}
+:root[data-color-mode='dark'] button:hover:not(:disabled):not(:where(.phone *, .mini-preview *, .comp-preview *, .paste-box *)):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)),
+:root[data-color-mode='dark'] :is(.block-toolbar, .rich-toolbar, [data-testid='inline-block-text'], .render-error) button:hover:not(:disabled):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  background: var(--ui-hover);
+  border-color: var(--ui-faint);
+}
+:root[data-color-mode='dark'] :is(input, textarea, select):focus:not(:where(.phone *, .mini-preview *, .comp-preview *, .paste-box *)):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)),
+:root[data-color-mode='dark'] [data-testid='inline-block-text'] :is(input, textarea, select):focus:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { border-color: var(--ui-brand); }
+:root[data-color-mode='dark'] :is(button, input, textarea, select):focus-visible:not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  outline: 2px solid var(--ui-brand);
+  outline-offset: 2px;
+}
+:root[data-color-mode='dark'] :is(input, textarea):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *))::placeholder { color: var(--ui-faint); opacity: 1; }
+
+/* Preserve button semantics after replacing the original hardcoded white defaults. */
+:root[data-color-mode='dark'] button.primary:not(:where(.block-html *, .html-editor *, .mini-preview *, .comp-preview *)):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-primary); border-color: var(--ui-primary); color: #fff; }
+:root[data-color-mode='dark'] button.primary:hover:not(:disabled):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-primary-hover); }
+:root[data-color-mode='dark'] button.accent:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: linear-gradient(90deg, var(--ui-accent-start), var(--ui-accent-end)); border: 0; color: #fff; }
+:root[data-color-mode='dark'] button.accent:hover:not(:disabled):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: linear-gradient(90deg, var(--ui-accent-hover-start), var(--ui-accent-hover-end)); }
+:root[data-color-mode='dark'] button.on:not(:where(.block-html *, .html-editor *, .mini-preview *, .comp-preview *)):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-brand-soft); border-color: var(--ui-brand); color: var(--ui-brand); }
+:root[data-color-mode='dark'] button.danger:not(:where(.block-html *, .html-editor *, .mini-preview *, .comp-preview *)):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { color: var(--ui-danger); }
+:root[data-color-mode='dark'] :is(button.link, .rich-toolbar .done, .photo-list .link):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { color: var(--ui-brand); }
+:root[data-color-mode='dark'] :is(button.link, .tabs button, .zoom-bar button, .split-list button, .align-btns button, .tpl-item .grow, .drag-ghost):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: none; }
+:root[data-color-mode='dark'] :is(.tabs button.on, .align-btns button.on, .split-list button.on, .tpl-item .grow:hover):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-brand-soft); }
+:root[data-color-mode='dark'] .tabs button:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { color: var(--ui-sub); border-bottom-color: transparent; }
+:root[data-color-mode='dark'] .tabs button.on:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { color: var(--ui-brand); border-bottom-color: var(--ui-brand); }
+:root[data-color-mode='dark'] :is(.ai-item:hover, .zoom-bar button:hover):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-hover); }
+:root[data-color-mode='dark'] :is(.title-input, .title-input:not(:hover):not(:focus)):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: transparent; border-color: transparent; }
+:root[data-color-mode='dark'] .title-input:focus:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { border-color: var(--ui-brand); }
+
+/* Remaining UI surfaces and status colors in styles.css, not image/cover artwork. */
+:root[data-color-mode='dark'] :is(.upload, .ai-status, .report, .proposal, .cw-legend b, .cw-legend span, .op, .asset):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-control); }
+:root[data-color-mode='dark'] :is(.ai-box, .photo-group, .enrich-box):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: #28233d; }
+:root[data-color-mode='dark'] .enrich-box:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { border-color: #68577d; }
+:root[data-color-mode='dark'] .upload:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { border-color: var(--ui-faint); }
+:root[data-color-mode='dark'] .asset-actions button:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: rgb(27 32 48 / 94%); }
+:root[data-color-mode='dark'] :is(.ai-status.on, .op.accepted, .diff.add):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-success-bg); color: var(--ok); }
+:root[data-color-mode='dark'] .op.accepted:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { border-color: #416d56; }
+:root[data-color-mode='dark'] :is(.diff.del, .render-error):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-error-bg); color: var(--ui-danger); }
+:root[data-color-mode='dark'] :is(.warn, .plan-issues):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: var(--ui-warning-bg); color: var(--ui-warning); }
+:root[data-color-mode='dark'] :is(.plan-issues, .plan-issues .issue):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { border-color: #85663a; }
+:root[data-color-mode='dark'] :is(.save.dirty, .save.saving, .comp-info .comp-warn, .tm-info em, .kit-table td small):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { color: var(--ui-warning); }
+:root .ok:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { color: var(--ok); }
+:root[data-color-mode='dark'] .kit-section h4:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { color: #e3a7f0; }
+:root[data-color-mode='dark'] :is(.pic-row img, .pic-empty):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: #32283d; color: #d3b2df; }
+:root[data-color-mode='dark'] .toast:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: #e4e8f2; color: #1b2030; }
+:root[data-color-mode='dark'] .toast.error:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: #9e2739; color: #fff; }
+
+/* Help is an annotation trigger, never a filled action button. */
+:root[data-color-mode='dark'] button.help-trigger:not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)),
+:root[data-color-mode='dark'] button.help-trigger:hover:not(:disabled):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) { background: transparent; color: inherit; }
+:root :is(input, textarea):not(:where(.block-html, .block-html *, .html-editor, .html-editor *, .rich-content, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *))::placeholder { color: var(--faint); opacity: 1; }
+
+/* Success toasts use a dark surface in light mode: do not inherit .ok's green. */
+:root:not([data-color-mode='dark']) #root > .app > .toast.ok { color: #fff; }
