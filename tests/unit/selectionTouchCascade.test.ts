@@ -16,3 +16,13 @@ it.each(['light', 'dark'])('keeps selection controls at 44px through the actual 
     expect(dom.window.getComputedStyle(dom.window.document.querySelector('button')!).minHeight).toBe('44px')
   } finally { dom.window.close() }
 })
+
+it('requires dark mode only for the explicit responsive combination, retaining narrow bbox checks', () => {
+  for (const file of ['inline-review.spec.ts', 'multi-selection.spec.ts']) {
+    const source = readFileSync(`tests/e2e/${file}`, 'utf8')
+    const darkAssertions = source.split('\n').filter(line => line.includes("toHaveAttribute('data-color-mode','dark')"))
+    expect(darkAssertions).toHaveLength(1)
+    expect(darkAssertions[0]).toContain("if (process.env.XIUMI_RESPONSIVE_COMBINATION === '1')")
+    expect(source).toContain('boundingBox())!.height).toBeGreaterThanOrEqual(44)')
+  }
+})
