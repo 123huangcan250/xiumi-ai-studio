@@ -36,8 +36,10 @@ async function generate(page: Page) {
 for (const [width, height] of [[1440, 900], [1024, 768], [390, 844]]) {
   test(`whole red original and green replacement remain operable at ${width}`, async ({ page }) => {
     test.skip(width < 1440 && process.env.XIUMI_RESPONSIVE_COMBINATION !== '1', 'Requires PR8 responsive shell; narrow upstream retains desktop layout')
+    await page.addInitScript(() => localStorage.setItem('xiumi-color-mode','dark'))
     await page.setViewportSize({ width, height })
     const id = await open(page, [{ op: 'update', id: 'a', props: { content: suggestedText } }])
+    await expect(page.locator('html')).toHaveAttribute('data-color-mode','dark')
     const original = page.locator('[data-block-id="a"]')
     const handle = await original.elementHandle()
     await generate(page)
@@ -57,6 +59,12 @@ for (const [width, height] of [[1440, 900], [1024, 768], [390, 844]]) {
     await suggestion.frameLocator('iframe').locator('body').evaluate(()=>document.fonts.ready)
     await expect.poll(async()=>(await suggestion.locator('iframe').evaluate(el=>el.getBoundingClientRect().height))-(await suggestion.frameLocator('iframe').locator('body').evaluate(el=>el.scrollHeight))).toBeGreaterThanOrEqual(0)
     await expect(suggestion).not.toContainText('无法安全预览')
+    const selectionButtons = page.locator('.canvas-wrap > .selection-bar button')
+    expect(await selectionButtons.count()).toBeGreaterThan(0)
+    for (const button of await selectionButtons.all()) {
+      await expect(button).toBeVisible()
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+    }
     const readyOriginalBox=(await original.boundingBox())!,readySuggestionBox=(await suggestion.boundingBox())!
     expect(readySuggestionBox.y).toBeGreaterThanOrEqual(readyOriginalBox.y+readyOriginalBox.height)
     await page.screenshot({ path: `test-results/inline-review-narrow-zh-${width}.png`, fullPage: true })

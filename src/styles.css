@@ -527,6 +527,6 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .block > .block-select-toggle { position: relative; z-index: 4; display: block; min-height: 44px; min-width: 64px; margin: 0 0 8px auto; font-size: 14px; line-height: 22px; background: var(--panel); color: var(--text); border: 1px solid currentColor; }
 .block > .block-select-toggle[aria-pressed="true"] { font-weight: 700; border-width: 2px; }
 :root[data-color-mode='dark'] :is(.canvas-wrap > .selection-bar,.block > .block-select-toggle) { background: var(--ui-panel); color: var(--ui-text); }
-:root[data-color-mode='dark'] .canvas-wrap > .selection-bar button { color: var(--ui-text); background: var(--ui-panel); border-color: var(--ui-line); }
+:root[data-color-mode='dark'] .canvas-wrap > .selection-bar button { min-height: 44px; color: var(--ui-text); background: var(--ui-panel); border-color: var(--ui-line); }
 [data-testid='multi-selection-properties'] li { overflow-wrap: anywhere; }
 @media (max-width: 600px) { .canvas-wrap > .selection-bar { gap: 4px 8px; padding: 4px 8px; } .canvas-wrap > .selection-bar button { min-height: 44px; } }

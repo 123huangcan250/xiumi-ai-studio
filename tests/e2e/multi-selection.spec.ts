@@ -64,10 +64,18 @@ test('membership ABA rejects a late edit even when the resulting selected set is
 
 test('390px touch-style mode exposes real selection, mixed properties and cancellation without Ctrl',async({page},testInfo)=>{
   test.skip(process.env.XIUMI_RESPONSIVE_COMBINATION !== '1', 'Responsive shell is supplied by the separately verified PR8 combination, not this narrow candidate')
+  await page.addInitScript(() => localStorage.setItem('xiumi-color-mode','dark'))
   const cards=await setup(page);await page.setViewportSize({width:390,height:844})
+  await expect(page.locator('html')).toHaveAttribute('data-color-mode','dark')
   const switcher=page.getByRole('navigation',{name:'工作区切换'})
   await switcher.getByRole('button',{name:'画布',exact:true}).click()
   await page.locator('.selection-bar').getByRole('button',{name:'取消选择'}).click()
+  const touchButtons=page.locator('.canvas-wrap > .selection-bar button')
+  expect(await touchButtons.count()).toBeGreaterThan(0)
+  for(const button of await touchButtons.all()) {
+    await expect(button).toBeVisible()
+    expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44)
+  }
   await page.getByTestId('multi-select-mode').click()
   await cards.nth(0).getByTestId('toggle-block-selection').click();await cards.nth(1).getByTestId('toggle-block-selection').click()
   await expect(cards.nth(0).getByTestId('toggle-block-selection')).toHaveAttribute('aria-pressed','true')
