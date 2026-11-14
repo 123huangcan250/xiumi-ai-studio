@@ -54,8 +54,8 @@ test('collapsed rich selection changes subsequent typing rather than existing te
   await expect(editor.locator('span').filter({hasText:'NEW'})).toHaveCSS('font-size','32px')
   await expect(editor).toHaveText('alpha beta gamma NEW')
 })
-test('font controls keep upstream color selection and keyboard focus at phone width', async ({ page }) => {
-  const { editor } = await setup(page, false, 390)
+test('font controls keep upstream color selection and keyboard focus on the desktop workspace', async ({ page }) => {
+  const { editor } = await setup(page, false, 1440)
   await selectText(editor, 6, 10)
   await page.getByTestId('rich-color').click()
   await page.getByTestId('rich-color-pop').getByRole('button', { name: '红色', exact: true }).click()

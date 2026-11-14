@@ -22,3 +22,9 @@ Fresh narrow-branch Linux verification passed:
 - Package manifest/lockfile, ColorPicker, sanitize and replay source remain byte-identical to upstream f0.
 
 Node 24.22.1 and the existing pnpm 11.25.0 performed frozen-lock dependency installation. The PR9 dependency tree was not reused because its lockfile differs. No Windows, browser, screenshot or EXE acceptance is claimed. Earlier stage documents retain historical combined-base TDD results, not proof that this new baseline has run. Cloud browser socket restrictions are already established; no browser launch is repeated. E2E discovery alone is not execution, strict-unit coverage, or packaged EXE acceptance.
+
+## Windows scope correction
+
+The first exact remote candidate `dab1c128` failed the added 390px scenario before RichEditor opened: block dblclick timed out in setup. Its other two new font scenarios passed. The upstream f0 workspace keeps 210px + 280px side panels and two 6px dividers below 1100px, so the central workspace cannot be operated at 390px. This PR does not change that existing layout.
+
+The narrow-branch scenario is now explicitly desktop (1440px). Its font/color/keyboard/Escape/Done and no-horizontal-overflow assertions are unchanged, with no force click, retry or timeout increase. This is a scope correction, not a fix or a claim that the original phone run passed. The unchanged 390px scenario remains in the PR8-inclusive combination `8d855255`; its Windows result is separate evidence, not mobile acceptance of this narrow PR. A fresh exact-SHA Windows run is required after this test-only change.
