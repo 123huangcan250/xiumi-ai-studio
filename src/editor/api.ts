@@ -120,9 +120,12 @@ async function req<T>(method: string, url: string, body?: unknown, signal?: Abor
     init.headers = { 'content-type': 'application/json' }
   }
   const res = await fetch(url, init)
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new ApiError(data.error ?? `${res.status} ${res.statusText}`, res.status)
-  return data as T
+  if (!res.ok) {
+    const data = await res.json().catch(() => null)
+    throw new ApiError(data?.error ?? `${res.status} ${res.statusText}`, res.status)
+  }
+  if (res.status === 204 || res.status === 205) return {} as T
+  return await res.json() as T
 }
 
 export const assetRef = (a: Asset): ImageRef => ({ src: `/media/${a.file}`, assetId: a.id, alt: a.name, width: a.width, height: a.height })

@@ -100,6 +100,7 @@ export default function App() {
       try {
         const list = await api.projects()
         if (!active) return
+        if (!Array.isArray(list)) throw new Error('项目列表响应格式错误，未创建或替换文稿。')
         if (list.length) {
           const initial = await api.project(list[0].id)
           if (active) loadIfUnchanged(initial, expected)

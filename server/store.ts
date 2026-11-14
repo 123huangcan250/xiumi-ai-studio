@@ -31,6 +31,20 @@ export async function readJson<T>(file: string, fallback: T): Promise<T> {
   }
 }
 
+// In-process read/modify/write transactions shared by asset writes and data merges.
+const pendingMutations = new Map<string, Promise<void>>()
+export async function mutateJson<T>(file: string, fallback: T, update: (value: T) => void | boolean | Promise<void | boolean>): Promise<void> {
+  const target = resolve(file)
+  const key = process.platform === 'win32' ? target.toLowerCase() : target
+  const operation = (pendingMutations.get(key) ?? Promise.resolve()).then(async () => {
+    const value = await readJson(target, fallback)
+    if (await update(value) !== false) await writeJson(target, value)
+  })
+  const settled = operation.then(() => {}, () => {})
+  pendingMutations.set(key, settled)
+  try { await operation } finally { if (pendingMutations.get(key) === settled) pendingMutations.delete(key) }
+}
+
 // Windows 不允许对同一目标并发替换；不同文件仍可独立保存。
 const pendingWrites = new Map<string, Promise<void>>()
 
