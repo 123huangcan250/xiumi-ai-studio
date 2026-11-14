@@ -13,13 +13,13 @@ const devServers: PlaywrightTestConfig['webServer'] = [
     command: `node -e "require('fs').rmSync('data-e2e',{recursive:true,force:true})" && npx tsx server/index.ts`,
     // 不读开发者自己的 .env：里面的公众号凭据会让“未配置接口”的用例走到另一条分支
     env: { API_PORT: '5274', DATA_DIR: 'data-e2e', XIUMI_SKIP_ENV_FILES: '1' },
-    port: 5274,
+    url: 'http://127.0.0.1:5274/api/app/info',
     reuseExistingServer: false,
   },
   {
-    command: 'npx vite --port 5273 --strictPort',
+    command: 'npx vite --host 127.0.0.1 --port 5273 --strictPort',
     env: { API_PORT: '5274', VITE_CACHE_DIR: 'node_modules/.vite-e2e' },
-    port: 5273,
+    url: 'http://127.0.0.1:5273',
     reuseExistingServer: false,
   },
 ]
@@ -43,9 +43,9 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     ...devices['Desktop Chrome'],
-    baseURL: packaged ? 'http://127.0.0.1:5284' : 'http://localhost:5273',
+    baseURL: packaged ? 'http://127.0.0.1:5284' : 'http://127.0.0.1:5273',
     // Test-only determinism: product automatic day/night mode remains unchanged.
-    storageState: { cookies: [], origins: [{ origin: packaged ? 'http://127.0.0.1:5284' : 'http://localhost:5273', localStorage: [{ name: 'xiumi-color-mode', value: 'light' }] }] },
+    storageState: { cookies: [], origins: [{ origin: packaged ? 'http://127.0.0.1:5284' : 'http://127.0.0.1:5273', localStorage: [{ name: 'xiumi-color-mode', value: 'light' }] }] },
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
     permissions: ['clipboard-read', 'clipboard-write'],

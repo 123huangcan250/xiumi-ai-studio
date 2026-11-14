@@ -15,6 +15,8 @@ export function Modal({ title, children, onClose, width = 560 }: { title: string
     const k = (e: KeyboardEvent) => {
       if (!isTop()) return
       if (e.key === 'Escape') {
+        // Let the expanded picker in this top dialog handle its first Escape.
+        if (dialog.querySelector('[data-model-picker-open]')) return
         e.preventDefault()
         e.stopImmediatePropagation()
         close.current()
