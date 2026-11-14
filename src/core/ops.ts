@@ -1,6 +1,6 @@
 import { BLOCK_TYPES, coerceProps, createBlock, newId } from './blocks'
 import { richToPlain } from './richtext'
-import { extractSlots, fillSlots } from './slots'
+import { validateHtmlUpdate } from './htmlUpdateValidation'
 import { findBlock, flatBlocks, removeBlockById, updateBlock } from './tree'
 import type { Block, Doc, DocOp, InsertAnchor, SelectionPolicy } from './types'
 
@@ -48,20 +48,7 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
       // 大型文本框里的模块也可以按 id 修改
       const b = findBlock(doc.blocks, op.id)?.block
       if (!b) return { error: `找不到模块 ${op.id}` }
-      // 原文片段：只接受文字槽位，HTML 由槽位在当前内容上重新计算（不信任传入的 props.html）
-      if (b.type === 'html') {
-        const raw = op.slots ?? op.props?.slots
-        if (!raw || typeof raw !== 'object') return { error: '原文片段只能修改文字槽位（slots）' }
-        const known = new Map(extractSlots(b.props.html).flatMap((s) => (s.kind === 'text' ? [[s.id, s] as const] : [])))
-        const slots: Record<string, string> = {}
-        for (const [k, v] of Object.entries(raw)) {
-          const s = known.get(k)
-          if (!s || (typeof v !== 'string' && typeof v !== 'number')) continue
-          slots[k] = s.tight ? [...String(v).replace(/\s*\n+\s*/g, ' ')].slice(0, s.max).join('') : String(v)
-        }
-        if (!Object.keys(slots).length) return { error: `修改 ${op.id} 没有有效的文字槽位` }
-        return { op: { op: 'update', id: op.id, props: { html: fillSlots(b.props.html, slots, { split: false }) }, slots, reason: op.reason } }
-      }
+      if (b.type === 'html') return validateHtmlUpdate(b, op)
       if (b.type === 'replay') return { error: '编辑回放模块不支持 AI 修改' }
       // Never normalize untrusted replacement children: updates cannot replace identities or content trees.
       const fields = op.props && typeof op.props === 'object' ? { ...op.props } : {}
