@@ -7,6 +7,7 @@ import type { Block, BlockType, Doc, DocOp, SelectionPolicy, Theme } from '../co
 import { api } from './api'
 
 const HISTORY_LIMIT = 100
+let loadGeneration = 0
 
 export interface ProposalItem {
   op: DocOp
@@ -34,6 +35,8 @@ interface State {
   lastCoalesce: { key: string; at: number } | null
   saveStatus: SaveStatus
   saveError: string
+  savedRevision?: string
+  saveConflict: boolean
   proposal: Proposal | null
   themes: Theme[]
   toast: { text: string; kind: 'ok' | 'error' } | null
@@ -113,6 +116,8 @@ export const useStore = create<State>((set, get) => ({
   lastCoalesce: null,
   saveStatus: 'saved',
   saveError: '',
+  savedRevision: undefined,
+  saveConflict: false,
   proposal: null,
   themes: allThemes(),
   toast: null,
@@ -132,10 +137,12 @@ export const useStore = create<State>((set, get) => ({
     })
   },
   load(raw) {
+    loadGeneration++
+    clearTimeout(timer)
     // 加载时修复历史数据（例如旧版本保存的、字段类型不对的 AI 修改）
     const doc = normalizeDoc(raw)
     const repaired = JSON.stringify(doc.blocks) !== JSON.stringify(raw.blocks)
-    set({ doc, past: [], future: [], selectedId: null, editingId: null, pickingId: null, proposal: null, saveStatus: repaired ? 'dirty' : 'saved', lastCoalesce: null })
+    set({ doc, past: [], future: [], selectedId: null, editingId: null, pickingId: null, proposal: null, saveStatus: repaired ? 'dirty' : 'saved', saveError: '', savedRevision: raw.revision, saveConflict: false, lastCoalesce: null })
     if (repaired) {
       saveNow()
       get().notify('已自动修复文档中格式异常的模块')
@@ -274,51 +281,87 @@ export const selectedBlock = (s: State) => findBlock(s.doc.blocks, s.selectedId)
 // ---------- 自动保存 ----------
 let timer: ReturnType<typeof setTimeout> | undefined
 useStore.subscribe((s, prev) => {
-  if (s.doc === prev.doc || s.saveStatus !== 'dirty') return
+  if (s.doc === prev.doc || s.saveStatus !== 'dirty' || s.saveConflict) return
   clearTimeout(timer)
   timer = setTimeout(saveNow, 1200)
 })
 
-// 保存请求排队依次执行，避免两次保存同时进行时旧内容后写入
-let queue: Promise<void> = Promise.resolve()
-
-/** 立即保存当前文档。失败时不抛出，状态变为「保存失败」。 */
-export function saveNow(): Promise<void> {
+// Serialize writes, but bind every queued save to its document generation.
+let queue: Promise<unknown> = Promise.resolve()
+export function saveNow(): Promise<boolean> {
   clearTimeout(timer)
-  const run = queue.then(saveOnce)
-  queue = run
+  if (useStore.getState().saveConflict) return Promise.resolve(false)
+  const generation = loadGeneration
+  const run = queue.then(() => generation === loadGeneration ? saveOnce(generation) : false)
+  queue = run.catch(() => {})
   return run
 }
 
-/**
- * 确认当前内容已经写入本地服务：等待进行中的保存，保存期间又有修改就继续保存。
- * 保存失败时抛出错误。用于退出、下载备份、刷新页面等需要“已保存”为前提的操作。
- */
+/** Preserve the existing backup/quit contract: reject unless the latest edit is saved. */
 export async function flushSave(): Promise<void> {
   for (let i = 0; i < 5; i++) {
-    await saveNow()
+    if (await saveNow()) return
     const { saveStatus, saveError } = useStore.getState()
-    if (saveStatus === 'saved') return
     if (saveStatus === 'error') throw new Error(saveError || '保存失败')
   }
   throw new Error('内容仍在变化，请停止编辑后再试')
 }
 
-async function saveOnce() {
+async function saveOnce(generation: number): Promise<boolean> {
   clearTimeout(timer)
-  const { doc } = useStore.getState()
+  const { doc, savedRevision } = useStore.getState()
+  if (useStore.getState().saveConflict) return false
   useStore.setState({ saveStatus: 'saving' })
   try {
-    await api.saveProject(doc)
-    // 保存期间若有新改动，保持 dirty 以便下一轮保存
-    if (useStore.getState().doc === doc) useStore.setState({ saveStatus: 'saved', saveError: '' })
-    else {
-      clearTimeout(timer)
-      timer = setTimeout(saveNow, 800)
+    const saved = await api.saveProject({ ...doc, revision: savedRevision })
+    if (generation !== loadGeneration) return false
+    useStore.setState({ savedRevision: saved.revision })
+    if (useStore.getState().doc === doc) {
+      useStore.setState({ saveStatus: 'saved', saveError: '' })
+      return true
     }
+    useStore.setState({ saveStatus: 'dirty' })
+    timer = setTimeout(saveNow, 800)
+    return false
   } catch (e: any) {
-    useStore.setState({ saveStatus: 'error', saveError: e.message })
+    if (generation === loadGeneration) useStore.setState({ saveStatus: 'error', saveError: e.message, saveConflict: e.status === 409 })
+    return false
   }
+}
+
+let copyingConflict = false
+
+/** Preserve local edits under a new ID, never force-overwrite the winning draft. */
+export async function saveConflictCopy(): Promise<boolean> {
+  if (!useStore.getState().saveConflict || copyingConflict) return false
+  copyingConflict = true
+  clearTimeout(timer)
+  const { doc } = useStore.getState()
+  const generation = loadGeneration
+  const copy = { ...doc, id: newId(), revision: undefined, title: `${doc.title}（冲突副本）` }
+  useStore.setState({ saveStatus: 'saving' })
+  try {
+    const saved = await api.saveProject(copy)
+    if (generation !== loadGeneration) return false
+    const current = useStore.getState().doc
+    const unchanged = current === doc
+    useStore.getState().load({ ...current, id: copy.id, title: `${current.title}（冲突副本）`, revision: saved.revision })
+    useStore.setState({ saveStatus: unchanged ? 'saved' : 'dirty' })
+    if (!unchanged) timer = setTimeout(saveNow, 800)
+    useStore.getState().notify('当前内容已另存为副本，原稿保留其他页面的修改。')
+    return unchanged
+  } catch (e: any) {
+    if (generation === loadGeneration) useStore.setState({ saveStatus: 'error', saveError: e.message })
+    return false
+  } finally {
+    copyingConflict = false
+  }
+}
+
+export async function saveBeforeLeave(): Promise<boolean> {
+  if (await saveNow()) return true
+  useStore.getState().notify('当前内容尚未保存，已保留原稿；请重试或先导出备份。', 'error')
+  return false
 }
 
 export async function loadCustomThemes() {

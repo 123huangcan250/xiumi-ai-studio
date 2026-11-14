@@ -83,6 +83,7 @@ test('配置 AI 模型并生成三套 AI 设计方案', async ({ page }) => {
   expect(html.toLowerCase()).toContain(PRIMARY[0])
 
   await aiCards.nth(0).getByRole('button', { name: '使用此方案' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByTestId('save-status')).toHaveText('已保存', { timeout: 10_000 })
   expect((await page.getByTestId('canvas').innerHTML()).toLowerCase()).toContain(PRIMARY[0])
   expect(calls.some((c) => c.includes('视觉设计师'))).toBe(true)
@@ -266,6 +267,7 @@ test('AI 写文案、按标准名称套用模板模块并安排照片，再按�
   expect(modal.y + modal.height).toBeLessThanOrEqual(900)
   expect(await page.locator('.modal-body').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true)
   await card.getByRole('button', { name: '使用此方案' }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await expect(page.getByTestId('save-status')).toHaveText('已保存', { timeout: 10_000 })
 
   // 选中原文片段，在右侧按槽位改字，保留原样式

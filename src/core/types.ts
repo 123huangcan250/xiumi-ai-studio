@@ -90,6 +90,8 @@ export type Block<T extends BlockType = BlockType> = {
 }[T]
 
 export interface Doc {
+  /** Opaque server persistence token; not an undo-history counter. */
+  revision?: string
   id: string
   title: string
   author: string

@@ -1,3 +1,4 @@
+import { loadIfUnchanged } from './documentNavigation'
 import { useDraggable } from '@dnd-kit/core'
 import { useCallback, useEffect, useState } from 'react'
 import { BLOCK_TYPES, blockMeta, cloneBlock, createBlock } from '../core/blocks'
@@ -8,7 +9,7 @@ import { TemplateModules } from './TemplateModules'
 import { ComponentLibrary } from './ComponentLibrary'
 import { CropModal } from './CropModal'
 import { KIT_ITEMS, KIT_THEME_ID, type KitItem } from './kitItems'
-import { emptyDoc, saveNow, selectedBlock, useStore } from './store'
+import { emptyDoc, saveBeforeLeave, saveNow, selectedBlock, useStore } from './store'
 
 type Tab = 'blocks' | 'components' | 'assets' | 'templates' | 'projects'
 
@@ -236,7 +237,7 @@ export function LeftPanel() {
                   <button
                     title="用此模板新建项目"
                     onClick={async () => {
-                      await saveNow()
+                      if (!await saveBeforeLeave()) return
                       const now = Date.now()
                       load({ ...emptyDoc(), title: t.name, ...(t.themeId && { themeId: t.themeId, themeOverrides: t.themeOverrides }), blocks: t.blocks.map(cloneBlock), createdAt: now, updatedAt: now })
                       await saveNow()
@@ -268,7 +269,7 @@ export function LeftPanel() {
             <button
               className="wide"
               onClick={async () => {
-                await saveNow()
+                if (!await saveBeforeLeave()) return
                 load(emptyDoc())
                 await saveNow()
                 refreshProjects()
@@ -281,8 +282,10 @@ export function LeftPanel() {
                 <button
                   className="grow"
                   onClick={async () => {
-                    await saveNow()
-                    load(await api.project(p.id))
+                    if (!await saveBeforeLeave()) return
+                    const expected = useStore.getState().doc
+                    const next = await api.project(p.id)
+                    loadIfUnchanged(next, expected)
                   }}
                 >
                   <b>{p.title || '未命名'}</b>
