@@ -10,6 +10,7 @@ import { api, assetRef, type Asset } from './editor/api'
 import { Canvas, photoTarget, shownRatio, slotTarget } from './editor/Canvas'
 import { KIT_ITEMS } from './editor/kitItems'
 import { LeftPanel } from './editor/LeftPanel'
+import { ReplayHost } from './editor/ReplayPreview'
 import { RightPanel } from './editor/RightPanel'
 import { emptyDoc, loadCustomThemes, saveNow, useStore } from './editor/store'
 import { listenForAiSettings } from './editor/suggestionQueue'
@@ -206,6 +207,7 @@ export default function App() {
         </Workspace>
         {toast && <div className={`toast ${toast.kind}`} role="status">{toast.text}</div>}
         <CollectHost />
+        <ReplayHost />
       </div>
       <DragOverlay dropAnimation={null}>{dragLabel && <div className="drag-overlay">{dragLabel}</div>}</DragOverlay>
     </DndContext>

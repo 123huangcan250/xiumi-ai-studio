@@ -90,9 +90,14 @@ describe('ai edits limited to the selected module', () => {
   })
   it('fails closed for stale or empty selections and malformed insertion positions or anchors', () => {
     for (const id of ['missing', '']) expect(limitToSelection(doc, id, raw, 'filter')).toEqual({ ops: [], dropped: raw })
-    const invalid = [null, undefined, '', '1', true, -1, 1.5, NaN, Infinity, 0, 3].map(index => ({ op: 'insert', index, block: { type: 'divider' } }))
+    const invalid = [null, undefined, '', '1x', true, -1, 1.5, NaN, Infinity, 0, 3].map(index => ({ op: 'insert', index, block: { type: 'divider' } }))
     invalid.push(...[null, {}, { id: 'a', side: 'before' }, { id: 'b', side: 'after' }, { id: 'b', side: 'middle' }].map(anchor => ({ op: 'insert', index: 1, block: { type: 'divider' }, anchor })))
     expect(limitToSelection(doc, 'b', invalid, 'filter')).toEqual({ ops: [], dropped: invalid })
+  })
+  it('accepts a numeric string at the adjacent boundary and normalizes it before anchoring', () => {
+    const result = limitToSelection(doc, 'b', [{ op: 'insert', index: '1', block: { type: 'divider' } }], 'filter')
+    expect(result.dropped).toEqual([])
+    expect(result.ops).toEqual([{ op: 'insert', index: 1, block: { type: 'divider' }, anchor: { id: 'b', side: 'before' } }])
   })
   it('anchors accepted inserts to the selection when earlier operations shift its index', () => {
     const ops = limitToSelection(doc, 'b', [raw[3], raw[4]], 'filter').ops

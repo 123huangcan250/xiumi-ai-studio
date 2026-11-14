@@ -1,6 +1,6 @@
 // 输出到微信：图片处理（内嵌 / 上传微信 / 原链接）+ 富文本剪贴板。
 // 剪贴板写入方式参考 doocs/md（WTFPL）：ClipboardItem 优先，execCommand 兜底；首尾加零高度段落。
-import { compileDoc, css, type CompileResult } from '../core/compiler'
+import { compileDoc, css, REPLAY_ERROR, type CompileResult } from '../core/compiler'
 import { fitRatio } from '../core/photos'
 import { asciiHtml, makeZip, replaceLocalImages, checkedXiumiParts } from '../core/xiumiExport'
 import type { Doc } from '../core/types'
@@ -29,7 +29,18 @@ async function toDataUrl(url: string): Promise<string> {
 }
 
 export async function compileForWechat(doc: Doc, mode: ImageMode, onProgress?: (msg: string) => void): Promise<CompileResult> {
-  const urls = collectImageUrls(doc).filter((u) => u.startsWith('/media/'))
+  return compileWechatSources(doc, mode, collectImageUrls(doc), onProgress)
+}
+
+async function compileWechatSources(doc: Doc, mode: ImageMode, all: string[], onProgress?: (msg: string) => void): Promise<CompileResult> {
+  // 编辑回放的文字栅格图是 data URL：上传到微信前先存成本地素材，之后和普通图片一样处理
+  const glyphs = mode === 'embed' ? [] : all.filter((u) => u.startsWith('data:image/png'))
+  const glyphMap: Record<string, string> = {}
+  for (let i = 0; i < glyphs.length; i += 40) {
+    onProgress?.(`保存文字图片 ${Math.min(i + 40, glyphs.length)}/${glyphs.length}`)
+    Object.assign(glyphMap, await api.replayGlyphs(glyphs.slice(i, i + 40)))
+  }
+  const urls = [...new Set([...all.filter((u) => u.startsWith('/media/')), ...Object.values(glyphMap)])]
   const map: Record<string, string> = {}
   if (mode === 'embed') {
     let i = 0
@@ -43,8 +54,15 @@ export async function compileForWechat(doc: Doc, mode: ImageMode, onProgress?: (
   } else {
     for (const u of urls) map[u] = location.origin + u
   }
-  const r = compileDoc(doc, { mapImage: (u) => map[u] ?? u })
+  const r = compileDoc(doc, { mapImage: (u) => map[glyphMap[u] ?? u] ?? glyphMap[u] ?? u })
   if (mode === 'embed') r.warnings = r.warnings.filter((w) => !w.includes('20,000'))
+  return r
+}
+
+/** 编辑回放没有通过 wechat-svg-lint 时停止导出（错误会显示在导出报告里） */
+export function assertReplayOk(r: CompileResult): CompileResult {
+  const bad = r.warnings.filter((w) => w.startsWith(REPLAY_ERROR))
+  if (bad.length) throw new Error(`编辑回放未通过检查，已停止导出：${bad[0].slice(REPLAY_ERROR.length).trim()}`)
   return r
 }
 
@@ -172,7 +190,11 @@ function xiumiZip(files: { name: string; data: Uint8Array }[], images: number): 
 
 /** 导出给秀米（不需要公众号接口）：本地图片换成占位图，另附按出现顺序编号的图片包 */
 export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void): Promise<XiumiDownload> {
-  const replaced = replaceLocalImages(compileDoc(doc).html, (url, i) => placeholder(i + 1, fitRatio(url)))
+  // 秀米不接受内嵌图片：编辑回放的文字改用 SVG 文字输出，否则导入后文字全是空白
+  const compiled = compileDoc(doc, { replaySvgText: true }).html
+  // 编辑回放里的图片在 SVG 内部：秀米不接受内嵌图片，导入后也选不中、无法替换，只能先传到微信图床
+  if (/<image\s[^>]*href="\/media\//.test(compiled)) throw new Error('编辑回放里有本地图片：它们在动画内部，秀米不接受内嵌图片，导入后也无法替换。请先配置公众号接口，改用“上传图片并下载”；或把这些图片改用普通的图片模块')
+  const replaced = replaceLocalImages(compiled, (url, i) => placeholder(i + 1, fitRatio(url)))
   const { urls } = replaced
   const files = xiumiFiles(replaced.html)
   for (const [i, url] of urls.entries()) {
@@ -186,9 +208,20 @@ export async function xiumiPackage(doc: Doc, onProgress?: (msg: string) => void)
 }
 
 /** 导出给秀米（已配置公众号接口）：本地图片先传到微信图床，全部变成秀米能接受的地址 */
+/** A fresh immutable document snapshot; callers cannot substitute an unchecked document at upload time. */
+export function prepareXiumiUpload(doc: Doc): { parts: number; upload: (onProgress?: (msg: string) => void) => Promise<XiumiDownload> } {
+  const snapshot = structuredClone(doc)
+  const urls = new Set<string>()
+  const source = assertReplayOk(compileDoc(snapshot, { mapImage: url => { urls.add(url); return url } }))
+  const parts = checkedXiumiParts(source.html).length
+  return { parts, upload: async onProgress => {
+    const { html } = assertReplayOk(await compileWechatSources(snapshot, 'wechat', [...urls], onProgress))
+    // Replay images may be SVG hrefs; rewritten output must pass the final check as well.
+    if (/(?:src="|href="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
+    return xiumiZip(xiumiFiles(html), 0)
+  } }
+}
+
 export async function xiumiUploaded(doc: Doc, onProgress?: (msg: string) => void): Promise<XiumiDownload> {
-  checkedXiumiParts(compileDoc(doc).html)
-  const { html } = await compileForWechat(doc, 'wechat', onProgress)
-  if (/(?:src="|url\((?:&quot;|["']?))\/media\//.test(html)) throw new Error('有图片没有上传成功，请重试')
-  return xiumiZip(xiumiFiles(html), 0)
+  return prepareXiumiUpload(doc).upload(onProgress)
 }

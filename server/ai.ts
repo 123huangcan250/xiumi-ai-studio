@@ -40,6 +40,7 @@ interface ChatOpts {
   keepEffort?: boolean
   /** Capability probes only need an accepted request, not a complete answer. */
   allowTruncated?: boolean
+  signal?: AbortSignal
   timeoutMs?: number
 }
 
@@ -105,6 +106,9 @@ async function sendAdaptive(send: (w: Wire) => Promise<Response>, start: Wire, k
     if (res.ok) return res
     const message = await readError(res)
     const next = res.status === 400 || res.status === 422 ? adjustWire(w, message, keepEffort) : null
+    if (!next && w.effort && keepEffort && (res.status === 400 || res.status === 422) && /reasoning|effort|thinking/i.test(message) && /unsupported|not supported|not allowed|unknown|unrecognized|invalid|must be|不支持|无效/i.test(message)) {
+      throw Object.assign(new Error(`该模型拒绝了配置的思考强度。请在 AI 模型设置中清空“思考强度”后重试，或选择该模型支持的强度。配置未被自动修改。服务返回 ${res.status}: ${message}`), { status: 502 })
+    }
     if (!next || attempted.has(JSON.stringify(next))) throw Object.assign(new Error(`AI 请求失败 ${res.status}: ${message}`), { status: 502 })
     w = next
   }
@@ -113,9 +117,13 @@ async function sendAdaptive(send: (w: Wire) => Promise<Response>, start: Wire, k
 
 /** 调用模型，返回文本。OpenAI 兼容接口或 Anthropic */
 export async function chatText(system: string, user: string, opts: ChatOpts = {}): Promise<string> {
+  opts.signal?.throwIfAborted()
   const p = opts.profile ?? (await getProfile(opts.profileId))
+  opts.signal?.throwIfAborted()
   if (!p || !p.baseUrl || !p.model) throw Object.assign(new Error('尚未配置 AI 模型：请在「AI 模型设置」中添加'), { status: 503 })
   const ctrl = new AbortController()
+  const cancel = () => ctrl.abort(opts.signal?.reason)
+  opts.signal?.addEventListener('abort', cancel, { once: true })
   const timeout = opts.timeoutMs ?? 180_000
   const timer = setTimeout(() => ctrl.abort(), timeout)
   try {
@@ -151,6 +159,7 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
         Boolean(effort) || Boolean(opts.keepEffort),
       )
       const data: any = await res.json()
+      ctrl.signal.throwIfAborted()
       if (!opts.allowTruncated && data.stop_reason === 'max_tokens') throw new Error('AI 已响应，但输出达到 token 上限；请降低思考强度或减少输入后重试')
       return data.content?.map((c: any) => c.text ?? '').join('') ?? ''
     }
@@ -178,13 +187,16 @@ export async function chatText(system: string, user: string, opts: ChatOpts = {}
       Boolean(effort) || Boolean(opts.keepEffort),
     )
     const data: any = await res.json()
+    ctrl.signal.throwIfAborted()
     if (!opts.allowTruncated && data.choices?.[0]?.finish_reason === 'length') throw new Error('AI 已响应，但输出达到 token 上限；请降低思考强度或减少输入后重试')
     return data.choices?.[0]?.message?.content ?? ''
   } catch (e: any) {
+    if (opts.signal?.aborted) throw opts.signal.reason
     if (e.name === 'AbortError') throw Object.assign(new Error(`AI 请求超时（${Math.round(timeout / 1000)} 秒）`), { status: 504 })
     throw e
   } finally {
     clearTimeout(timer)
+    opts.signal?.removeEventListener('abort', cancel)
   }
 }
 

@@ -10,6 +10,7 @@ import { registerTheme } from '../core/themes'
 import type { Block, Doc, SourceKind } from '../core/types'
 import { articleToHtmlBlocks, articleToMarkdown, cardContent, extractArticle, type ImportedArticle } from '../core/wxImport'
 import { api, assetRef, type Asset } from './api'
+import { fluidizeArticle } from './fluidize'
 import { ImportWizard } from './ImportWizard'
 import { Modal } from './Modal'
 import { saveNow, useStore } from './store'
@@ -74,7 +75,10 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
     if (!html) return // 纯文本交给默认行为
     e.preventDefault()
     try {
-      accept(extractArticle(parse(html)))
+      const a = extractArticle(parse(html))
+      // 复制出来的尺寸是来源页面宽度下的像素值，换回百分比才能适应画布和手机
+      fluidizeArticle(a.root)
+      accept(a)
     } catch (err: any) {
       notify(err.message, 'error')
     }

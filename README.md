@@ -90,6 +90,7 @@
 - **主题**：6 套主题，可微调并另存；参考风格学习生成原创主题
 - **素材**：自动纠正方向和压缩、裁剪另存、按比例智能裁切、封面设计
 - **AI 设计助手**：自然语言修改，逐条审阅接受/拒绝；另有离线规则动作
+- **编辑回放（动效）**：把写作过程做成 SVG 动画——元素依次被“编辑出来”（线框描出、打字、拖入图片、故障定稿），多个彩色光标演示协作；只用 SMIL，导出前用 wechat-svg-lint 检查。微信真机效果待验证，见 [兼容性清单](docs/edit-replay/COMPAT.md)
 - **导出**：Markdown、编辑器 JSON、微信 HTML、富文本剪贴板、导入秀米的 HTML 与图片包、公众号草稿箱（需确认）
 
 ## 开发与打包
@@ -119,7 +120,7 @@ tests/         unit（Vitest）与 e2e（Playwright）
 
 ## 文档与许可
 
-- [P0 调研与技术选型](docs/01-research.md) · [微信兼容性测试](docs/03-wechat-compat-test.md) · [秀米互通实测](docs/05-xiumi-compat-probe.md) · [多 Agent 协作流程](docs/04-multi-agent-workflow.md)
+- [P0 调研与技术选型](docs/01-research.md) · [微信兼容性测试](docs/03-wechat-compat-test.md) · [秀米互通实测](docs/05-xiumi-compat-probe.md) · [多 Agent 协作流程](docs/04-multi-agent-workflow.md) · [编辑回放：接入说明](docs/edit-replay/INTEGRATION.md) · [编辑回放：兼容性清单](docs/edit-replay/COMPAT.md)
 - [第三方声明](THIRD_PARTY_NOTICES.md)；打包产物的 `app/licenses` 内含 Node.js 与全部生产依赖的许可文本
 
 ### 源码兼容性与 AI 边界

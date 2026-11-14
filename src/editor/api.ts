@@ -108,8 +108,8 @@ export interface MergeResult {
   envCopied: boolean
 }
 
-async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const init: RequestInit = { method }
+async function req<T>(method: string, url: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  const init: RequestInit = { method, ...(signal ? { signal } : {}) }
   if (body instanceof FormData) init.body = body
   else if (body !== undefined) {
     init.body = JSON.stringify(body)
@@ -176,7 +176,7 @@ export const api = {
   aiCopywrite: (body: { brief: string; style: string; length: string; levels: number; extra: string; previous?: string; revise?: string; profileId?: string }) => req<{ markdown?: string }>('POST', '/api/ai/copywrite', body),
   aiEnrichCopy: (body: { text: string; photos: unknown[]; keep: string[]; profileId?: string }) => req<{ markdown?: string; changes?: string[] }>('POST', '/api/ai/enrich-copy', body),
   aiPlacePhotos: (body: unknown) => req<{ placements?: unknown[] }>('POST', '/api/ai/place-photos', body),
-  aiSuggestInstruction: (context: unknown, profileId?: string, selectedId?: string) => req<{ suggestion: string }>('POST', '/api/ai/suggest-instruction', { context, profileId, selectedId }),
+  aiSuggestInstruction: (context: unknown, profileId?: string, selectedId?: string, signal?: AbortSignal) => req<{ suggestion: string }>('POST', '/api/ai/suggest-instruction', { context, profileId, selectedId }, signal),
   aiEdit: (context: unknown, instruction: string, profileId?: string, selectedId?: string) => req<{ summary: string; ops: any[]; selectionPolicy?: SelectionPolicy; ignoredOps?: number }>('POST', '/api/ai/edit', { context, instruction, profileId, selectedId }),
   fetchReference: (url: string) => req<{ html: string }>('POST', '/api/reference/fetch', { url }),
   fetchArticle: (url: string) => req<{ html: string }>('POST', '/api/article/fetch', { url }),
@@ -196,6 +196,7 @@ export const api = {
 
   wechatStatus: () => req<{ configured: boolean; appid: string }>('GET', '/api/wechat/status'),
   wechatUploadImages: (urls: string[]) => req<Record<string, string>>('POST', '/api/wechat/upload-images', { urls }),
+  replayGlyphs: (images: string[]) => req<Record<string, string>>('POST', '/api/replay/glyphs', { images }),
   wechatDraft: (body: { title: string; author: string; digest: string; html: string; cover: string; confirm: true }) =>
     req<{ media_id: string }>('POST', '/api/wechat/draft', body),
 }

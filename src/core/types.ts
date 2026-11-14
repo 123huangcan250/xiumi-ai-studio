@@ -1,4 +1,5 @@
 // 文档模型：编辑器、AI、编译器共享的唯一事实来源。
+import type { ReplayDoc } from './replay/types'
 
 /** ProseMirror / tiptap JSON 节点（富文本字段） */
 export interface RichNode {
@@ -37,6 +38,7 @@ export type BlockType =
   | 'carousel'
   | 'frame'
   | 'photos'
+  | 'replay'
 
 /** 套件图片模块的一个图片位：图片可以为空（导出时跳过），图注可以留空 */
 export interface PicItem {
@@ -69,6 +71,9 @@ export interface BlockPropsMap {
   frame: { image?: ImageRef; caption: string; label: string; variant: 'flag' | 'circuit' | 'ticket' }
   /** 双图 / 三图 / 四图 */
   photos: { count: 2 | 3 | 4; layout: 'even' | 'feature'; ratio: '4:3' | '3:4' | '1:1'; pics: PicItem[] }
+  // ---- 动效 ----
+  /** 编辑回放：把写作过程做成 SVG 动画（见 docs/edit-replay） */
+  replay: ReplayDoc
 }
 
 /** 导入内容的来源，收藏为组件时带入，便于追溯 */
@@ -139,7 +144,7 @@ export interface Theme extends ThemeTokens {
   description: string
 }
 
-/** Selected AI edits are strict unless the server explicitly enables filtering. */
+/** Selected AI edits default to filtering; explicit strict mode rejects mixed batches atomically. */
 export type SelectionPolicy = 'strict' | 'filter'
 export interface InsertAnchor { id: string; side: 'before' | 'after' }
 

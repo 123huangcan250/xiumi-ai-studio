@@ -143,6 +143,51 @@ test('粘贴公众号推文，保留原样式导入并保存为模板', async ({
   await expect(page.getByTestId('canvas')).toContainText('社团招新季')
 })
 
+test('粘贴整页复制的富文本：去掉页面外框，版面随画布宽度缩放', async ({ page }) => {
+  const fixture = readFileSync(join(import.meta.dirname, '..', 'fixtures', 'pasted-reader-page.html'), 'utf8')
+  await page.goto('/')
+  await page.getByTestId('open-article-import').click()
+  await page.getByRole('button', { name: '粘贴富文本' }).click()
+  const box = page.getByTestId('article-paste')
+  await box.click()
+  await box.evaluate((el, html) => {
+    const dt = new DataTransfer()
+    dt.setData('text/html', html)
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+  }, fixture)
+  // 标题栏、阅读数、扫码面板不算版块；标题取自页面标题栏
+  await expect(page.getByText(/识别到 3 个版块/)).toBeVisible()
+  await expect(page.locator('.modal label.field input').first()).toHaveValue('夏季运动会报名通知')
+  // 不存模板：后面的用例按“最近保存的模板”取模板
+  await page.getByLabel('同时保存为模板').uncheck()
+  await page.getByTestId('article-authorized').check()
+  await page.getByTestId('article-import').click()
+  await expect(page.locator('.toast')).toContainText('已导入 3 个原文片段')
+
+  const canvas = page.getByTestId('canvas')
+  await expect(canvas.locator('[data-block-type=html]')).toHaveCount(3)
+  await expect(canvas).not.toContainText('投诉')
+  const m = await canvas.evaluate((el) => {
+    const rect = (n: Element) => n.getBoundingClientRect()
+    const block = rect(el.querySelector('[data-block-type=html]')!)
+    const grid = rect(el.querySelector('section[style*="display: grid"]')!)
+    const deco = rect(el.querySelector('img[src*="DECOright01"]')!.parentElement!.parentElement!)
+    const cols = [...el.querySelectorAll('section[style*="inline-block"]')].map(rect)
+    const widest = Math.max(...[...el.querySelectorAll('[data-block-type=html] *')].map((n) => rect(n).right))
+    return { block: block.width, blockRight: block.right, grid: grid.width, ratio: grid.width / grid.height, deco: deco.width / grid.width, decoGap: grid.right - deco.right, decoTop: (deco.top - grid.top) / grid.width, colTops: cols.map((c) => c.top), colWidth: cols[0].width / grid.width, widest }
+  })
+  // 来源栏宽是 600px，画布不是：版面按比例缩放，装饰仍贴着右边，两栏仍并排
+  expect(Math.abs(m.block - 600)).toBeGreaterThan(10)
+  expect(Math.abs(m.grid - m.block)).toBeLessThan(1.5)
+  expect(m.ratio).toBeCloseTo(1.5, 1)
+  expect(m.deco).toBeCloseTo(108.5 / 600, 2)
+  expect(Math.abs(m.decoGap)).toBeLessThan(1.5)
+  expect(m.decoTop).toBeCloseTo(51.1875 / 600, 2)
+  expect(Math.abs(m.colTops[0] - m.colTops[1])).toBeLessThan(1.5)
+  expect(m.colWidth).toBeCloseTo(0.5, 2)
+  expect(m.widest).toBeLessThanOrEqual(m.blockRight + 1.5)
+})
+
 test('AI 写文案、按标准名称套用模板模块并安排照片，再按槽位改字', async ({ page }) => {
   page.on('dialog', (d) => d.accept())
   await page.goto('/')

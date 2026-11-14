@@ -13,7 +13,7 @@ describe('review: actionable fetch timeouts', () => {
   })
   it('reports response body deadline as a Chinese gateway timeout', async () => {
     const fetcher = (async () => new Response(new ReadableStream())) as typeof fetch
-    await expect(safeFetch('https://example.com', { timeoutMs: 10, resolve: async () => [{ address: '8.8.8.8' }], fetcher })).rejects.toMatchObject({ status: 504, message: expect.stringContaining('超时') })
+    await expect(safeFetch('https://example.com', { bodyTimeoutMs: 10, resolve: async () => [{ address: '8.8.8.8' }], fetcher })).rejects.toMatchObject({ status: 504, message: expect.stringContaining('超时') })
   })
 })
 

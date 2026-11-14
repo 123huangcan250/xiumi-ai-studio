@@ -64,7 +64,10 @@ export interface SafeFetchOptions {
   /** 只允许这些域名（重定向目标同样检查） */
   allowHost?: (host: string) => boolean
   maxRedirects?: number
+  /** Total DNS, redirects and response-header budget (default 20 seconds). */
   timeoutMs?: number
+  /** One complete decoded-body budget, not renewed per chunk (default 60 seconds). */
+  bodyTimeoutMs?: number
   /** 解压后的响应体上限；在读取过程中检查，而不是完整下载后截断。 */
   maxBytes?: number
   resolve?: Lookup
@@ -96,7 +99,7 @@ async function boundedBody(response: Response, maxBytes: number, signal: AbortSi
     const declared = Number(response.headers.get('content-length'))
     if (declared > maxBytes) throw httpError('响应体超过大小限制', 413)
     while (true) {
-      const { done, value } = await reader.read()
+      const { done, value } = await withDeadline(reader.read(), signal)
       signal.throwIfAborted()
       if (done) break
       size += value.byteLength
@@ -112,10 +115,13 @@ async function boundedBody(response: Response, maxBytes: number, signal: AbortSi
 }
 
 export async function safeFetch(raw: string, opts: SafeFetchOptions = {}): Promise<Response> {
-  const { headers, allowHost, maxRedirects = 3, timeoutMs = 20_000, maxBytes = 30 * 1024 * 1024, resolve, fetcher = transportFetch as unknown as typeof fetch } = opts
+  const { headers, allowHost, maxRedirects = 3, timeoutMs = 20_000, bodyTimeoutMs = 60_000, maxBytes = 30 * 1024 * 1024, resolve, fetcher = transportFetch as unknown as typeof fetch } = opts
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw httpError('非法响应体大小限制')
-  // 同一个截止时间涵盖所有跳转及最终响应体读取。
-  const signal = AbortSignal.timeout(timeoutMs)
+  if (![timeoutMs, bodyTimeoutMs].every(ms => Number.isSafeInteger(ms) && ms > 0 && ms <= 2_147_483_647)) throw httpError('非法抓取时间预算')
+  const controller = new AbortController()
+  const signal = controller.signal
+  const expire = () => controller.abort(new DOMException('Fetch deadline exceeded', 'TimeoutError'))
+  let timer = setTimeout(expire, timeoutMs)
   try {
     let url = new URL(raw)
     for (let hop = 0; ; hop++) {
@@ -130,13 +136,16 @@ export async function safeFetch(raw: string, opts: SafeFetchOptions = {}): Promi
       } } })
       try {
         const init: RequestInit & { dispatcher: Agent } = { headers, redirect: 'manual', signal, dispatcher }
-        const response = await fetcher(url, init)
+        const response = await withDeadline(fetcher(url, init), signal)
         if (response.status >= 300 && response.status < 400 && response.headers.get('location')) {
-          await response.body?.cancel()
+          if (response.body) await withDeadline(response.body.cancel(), signal)
           if (hop >= maxRedirects) throw httpError('重定向次数过多', 502)
           url = new URL(response.headers.get('location')!, url)
           continue
         }
+        signal.throwIfAborted()
+        clearTimeout(timer)
+        timer = setTimeout(expire, bodyTimeoutMs)
         const body = await boundedBody(response, maxBytes, signal)
         // fetch 已自动解压，缓冲结果不再带有压缩体的长度/编码。
         const resultHeaders = new Headers(response.headers)
@@ -150,6 +159,8 @@ export async function safeFetch(raw: string, opts: SafeFetchOptions = {}): Promi
   } catch (error) {
     if (signal.aborted) throw httpError('抓取超时，请稍后重试或改用文件导入', 504)
     throw error
+  } finally {
+    clearTimeout(timer)
   }
 }
 

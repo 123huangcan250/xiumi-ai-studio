@@ -19,6 +19,7 @@ import { api } from './api'
 import { clampZoom, wheelFactor, ZOOM_MAX, ZOOM_MIN } from './zoom'
 import { openCollect, setInlineTarget } from './componentActions'
 import { ErrorBoundary } from './ErrorBoundary'
+import { ReplayCanvasBody } from './ReplayPreview'
 import { useStore } from './store'
 
 /** "a:b;c:d" → React style 对象 */
@@ -310,7 +311,7 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
     notify(`已拆成 ${parts.length} 个模块，可撤销`)
   }
 
-  let body = block.type === 'box' ? <BoxBody block={block} theme={theme} /> : <BlockHtml block={block} theme={theme} inBox={inBox} />
+  let body = block.type === 'box' ? <BoxBody block={block} theme={theme} /> : block.type === 'replay' ? <ReplayCanvasBody block={block} /> : <BlockHtml block={block} theme={theme} inBox={inBox} />
   if (picking && block.type === 'html') body = <FragmentPicker block={block} theme={theme} onDone={() => setPicking(null)} />
   else if (editing && block.type === 'html') body = <HtmlEditor block={block} onDone={() => setEditing(null)} />
   else if (editing && canText) {

@@ -3,7 +3,7 @@ import type { SelectionPolicy } from '../src/core/types'
 
 /** Only the server's environment selects the policy, never a request or model response. */
 export function selectionPolicy(): SelectionPolicy {
-  const configured = process.env.AI_SELECTION_POLICY
+  const configured = process.env.AI_SELECTION_POLICY?.trim().toLowerCase()
   return !configured || configured === 'filter' ? 'filter' : 'strict'
 }
 

@@ -33,14 +33,74 @@ export function detectSource(doc: Document, url = ''): SourceKind {
   return Array.from(doc.querySelectorAll('[powered-by]')).some((e) => /xiumi/i.test(e.getAttribute('powered-by') ?? '')) ? 'xiumi' : 'other'
 }
 
+const weight = (el: Element) => text(el).length + el.querySelectorAll('img').length * 200
+const styleOf = (el: Element) => el.getAttribute('style') ?? ''
+
+/**
+ * 整页全选复制时，正文前后还带着阅读页自己的外框：标题栏、阅读数和投诉链接、悬浮在一旁的扫码面板。
+ * 它们不是正文，带进来会多出几个模块，外框的负边距还会把版面挤向一侧。
+ * 找到正文节点和页面标题；不是这种页面返回 null。
+ */
+function pageBody(doc: Document): { content: Element; title: string } | null {
+  const marked = doc.querySelector('.tn-article-body')
+  if (marked) return { content: marked, title: text(doc.querySelector('.tn-board-head h1, .tn-board-head h2, .tn-board-head h3')) }
+  // 复制出来的内容不带类名时按结构判断：一个版块装着绝大部分内容，旁边有悬浮面板或投诉链接
+  let layer: Element = doc.body
+  while (layer.children.length === 1 && !Array.from(layer.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? '').trim())) layer = layer.children[0]
+  const kids = Array.from(layer.children)
+  if (kids.length < 2) return null
+  const main = kids.reduce((a, b) => (weight(b) > weight(a) ? b : a))
+  if (weight(main) < weight(layer) * 0.7) return null
+  const others = kids.filter((k) => k !== main)
+  const floating = (k: Element) => /position\s*:\s*(absolute|fixed)/i.test(styleOf(k))
+  const report = (k: Element) => Array.from(k.querySelectorAll('a[href]')).some((a) => /\/report\//i.test(a.getAttribute('href') ?? ''))
+  if (!others.some((k) => floating(k) || report(k))) return null
+  const head = kids.slice(0, kids.indexOf(main)).find((k) => !k.querySelector('img') && k.querySelector('h1, h2, h3, h4'))
+  return { content: main, title: text(head?.querySelector('h1, h2, h3, h4') ?? null) }
+}
+
+/**
+ * 正文外层的单栏外壳如果带负的左右外边距，那是来源页面用来抵消自己栏距的（配套的还有左右内边距），
+ * 换了容器就会让整篇内容伸出画布：去掉这一对边距。
+ */
+function stripFrame(root: Element) {
+  let cur = root
+  for (let i = 0; i < 16 && cur.children.length === 1; i++) {
+    cur = cur.children[0]
+    const decls = splitDecls(styleOf(cur))
+    const prop = (d: string) => d.slice(0, d.indexOf(':')).trim().toLowerCase()
+    if (!decls.some((d) => /^margin-(left|right)$/.test(prop(d)) && /:\s*-\d/.test(d))) continue
+    const kept = decls.filter((d) => !/^(margin|padding)-(left|right)$/.test(prop(d)))
+    if (kept.length) cur.setAttribute('style', kept.map((d) => d.trim()).join('; '))
+    else cur.removeAttribute('style')
+  }
+}
+
+/**
+ * 淡入动画的起始状态：图层写着 opacity="0"，靠里面的 <animate> 显示出来。
+ * 复制富文本时 <animate> 不会进剪贴板，只剩下 opacity="0"，图层就再也不会出现。
+ * 整个 SVG 里一个动画都没有时，把这类图层恢复为可见；点击区域之类的透明图形（rect、path）不动。
+ */
+function showFadedLayers(root: Element) {
+  for (const el of Array.from(root.querySelectorAll('svg [opacity="0"]'))) {
+    if (!['svg', 'g', 'foreignobject', 'image'].includes(el.tagName.toLowerCase())) continue
+    let top = el.closest('svg')!
+    for (let up = top.parentElement?.closest('svg'); up; up = up.parentElement?.closest('svg')) top = up
+    if (!top.querySelector('animate, set, animateTransform, animateMotion')) el.removeAttribute('opacity')
+  }
+}
+
 /** doc 可以是完整文章页，也可以是只包含正文的片段；url 是抓取时的链接，粘贴时没有 */
 export function extractArticle(doc: Document, url = ''): ImportedArticle {
   const kind = detectSource(doc, url)
-  const content = doc.querySelector('#js_content') ?? doc.querySelector('.rich_media_content') ?? doc.body
+  const page = doc.querySelector('#js_content') ? null : pageBody(doc)
+  const content = doc.querySelector('#js_content') ?? doc.querySelector('.rich_media_content') ?? page?.content ?? doc.body
   const root = content.cloneNode(true) as Element
   sanitizeTree(root)
+  stripFrame(root)
+  showFadedLayers(root)
   const scriptTitle = doc.documentElement.innerHTML.match(/var\s+msg_title\s*=\s*['"]([^'"]+)['"]/)?.[1]
-  const title = meta(doc, 'meta[property="og:title"]') || text(doc.querySelector('#activity-name')) || scriptTitle || text(doc.querySelector('h1')) || ''
+  const title = meta(doc, 'meta[property="og:title"]') || text(doc.querySelector('#activity-name')) || scriptTitle || page?.title || text(doc.querySelector('h1')) || ''
   const account = text(doc.querySelector('#js_name')) || meta(doc, 'meta[property="og:article:author"]')
   return {
     title,
@@ -110,6 +170,10 @@ function pieceStyle(style: string, first: boolean, last: boolean): string {
   if (!last) for (const k of ['padding-bottom', 'margin-bottom']) if (decls.has(k)) decls.set(k, '0')
   if (!first && decls.has('border-top')) decls.set('border-top', 'none')
   if (!last && decls.has('border-bottom')) decls.set('border-bottom', 'none')
+  // 拆开前，块与块之间的外边距落在外壳里面，由外壳的背景铺满；拆开后外边距会穿出外壳，露出一条条底色。
+  // 让带背景的外壳自己包住里面的外边距
+  const hasBg = [...decls.keys()].some((k) => k.startsWith('background'))
+  if (hasBg && !(first && last) && /^(block)?$/.test(decls.get('display') ?? '')) decls.set('display', 'flow-root')
   return [...decls].map(([k, v]) => `${k}: ${v}`).join('; ')
 }
 
@@ -337,7 +401,8 @@ function splitLayer(layer: Element, maxPlainRun: number, depth = 0, force = fals
     if (node.nodeType !== 1) continue
     const el = node as Element
     if (isEmpty(el)) {
-      // 空行保留在当前块末尾，维持原文节奏
+      // 空行保留在当前块末尾，维持原文节奏；开头的空壳前面没有内容可依附，单独成块只会多出一个空模块
+      if (!buf.length && !blocks.length && !BOXY.test(el.outerHTML.replace(/box-sizing:[^;"]*/gi, ''))) continue
       if (buf.length || !blocks.length) buf.push(el.outerHTML)
       else {
         const last = blocks[blocks.length - 1] as Block<'html'>

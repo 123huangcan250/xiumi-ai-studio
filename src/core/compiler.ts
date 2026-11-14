@@ -1,6 +1,7 @@
 // 微信 HTML 编译器：文档 JSON → 全内联样式 HTML。
 // 画布、手机预览、复制、草稿箱都使用同一份输出，保证所见即所得。
 import { boxParts, boxTheme, KIT_RENDERERS, KIT_TYPES, kitEmptySlots, type KitCtx } from './kit'
+import { renderReplay, type ReplayOutput } from './replay/render'
 import { guardHtml } from './sanitize'
 import { css, esc, safeColor } from './style'
 import { resolveTheme } from './themes'
@@ -18,6 +19,8 @@ export interface CompileOptions {
   hints?: boolean
   /** 模块位于大型文本框内：按文本框的字号、颜色和间距自适应 */
   inBox?: boolean
+  /** 编辑回放的文字一律输出为 SVG 文字（秀米不接受内嵌图片，栅格化的文字导入后会变成空白） */
+  replaySvgText?: boolean
 }
 
 /** 给本地素材附加裁切参数（服务器用 sharp 生成对应尺寸） */
@@ -80,10 +83,39 @@ class Ctx implements KitCtx {
 
 // ---------- 富文本 ----------
 
-function renderInline(n: RichNode, ctx: Ctx): string {
-  if (n.type === 'hardBreak') return '<br>'
-  if (n.type !== 'text') return (n.content ?? []).map((x) => renderInline(x, ctx)).join('')
-  let html = esc(n.text ?? '').replace(/(^ +| {2,}| +$)/g, (spaces) => '&nbsp;'.repeat(spaces.length))
+/** Whitespace belongs to a visual line, not to each differently marked text node. */
+function renderInlines(nodes: RichNode[], ctx: Ctx): string {
+  const leaves: RichNode[] = []
+  const visit = (node: RichNode) => {
+    if (node.type === 'text' || node.type === 'hardBreak') leaves.push(node)
+    else (node.content ?? []).forEach(visit)
+  }
+  nodes.forEach(visit)
+  const hardBreaks = new Set<number>()
+  let position = 0
+  const source = leaves.map(node => {
+    if (node.type === 'hardBreak') { hardBreaks.add(position++); return '\n' }
+    const text = node.text ?? ''
+    position += text.length
+    return text
+  }).join('')
+  let offset = 0
+  return leaves.map(node => {
+    if (node.type === 'hardBreak') { offset++; return '<br>' }
+    const text = node.text ?? ''
+    const preserved = text.replace(/ +/g, (spaces, local: number) => {
+      const start = offset + local, end = start + spaces.length
+      const atEdge = start === 0 || end === source.length || hardBreaks.has(start - 1) || hardBreaks.has(end)
+      const repeated = spaces.length > 1 || source[start - 1] === ' ' || source[end] === ' '
+      return atEdge || repeated ? '\u00a0'.repeat(spaces.length) : spaces
+    })
+    offset += text.length
+    return renderInline(node, ctx, esc(preserved).replaceAll('\u00a0', '&nbsp;'))
+  }).join('')
+}
+
+function renderInline(n: RichNode, ctx: Ctx, textHtml: string): string {
+  let html = textHtml
   let linkHref: string | undefined
   // 加粗默认用主题色；文字设了颜色时以文字颜色为准（加粗标签在内层，它的颜色会盖住外层）
   const textColor = safeColor(n.marks?.find((m) => m.type === 'textStyle')?.attrs?.color)
@@ -134,16 +166,16 @@ export function renderRich(rich: RichText | undefined, ctx: Ctx, align = 'justif
     const mb = last ? 0 : gap
     const nodeAlign = n.attrs?.textAlign ?? align
     if (n.type === 'paragraph') {
-      const inner = (n.content ?? []).map((x) => renderInline(x, ctx)).join('')
+      const inner = renderInlines(n.content ?? [], ctx)
       out.push(ctx.p(inner || '<br>', { 'margin-bottom': mb, 'text-align': nodeAlign }))
     } else if (n.type === 'heading') {
-      const inner = (n.content ?? []).map((x) => renderInline(x, ctx)).join('')
+      const inner = renderInlines(n.content ?? [], ctx)
       out.push(ctx.p(inner, { 'margin-bottom': mb, 'text-align': nodeAlign, 'font-weight': 700, 'font-size': ctx.t.h2Size - 1, color: ctx.c.primary }))
     } else if (n.type === 'bulletList' || n.type === 'orderedList') {
       // 微信对 ul/ol 的缩进处理不稳定，统一渲染为带符号的段落
       ;(n.content ?? []).forEach((li, j) => {
         const marker = n.type === 'bulletList' ? '●' : `${j + 1}.`
-        const inner = (li.content ?? []).map((x) => (x.content ?? []).map((y) => renderInline(y, ctx)).join('')).join('<br>')
+        const inner = (li.content ?? []).map((x) => renderInlines(x.content ?? [], ctx)).join('<br>')
         const isLast = j === (n.content?.length ?? 0) - 1
         out.push(
           ctx.p(
@@ -164,7 +196,7 @@ export function renderRich(rich: RichText | undefined, ctx: Ctx, align = 'justif
 // ---------- 模块 ----------
 
 type Renderer<T extends Block['type']> = (b: Extract<Block, { type: T }>, ctx: Ctx) => string
-type Renderers = { [K in Exclude<Block['type'], 'html' | (typeof KIT_TYPES)[number]>]: Renderer<K> }
+type Renderers = { [K in Exclude<Block['type'], 'html' | 'replay' | (typeof KIT_TYPES)[number]>]: Renderer<K> }
 
 const R: Renderers = {
   cover(b, ctx) {
@@ -474,6 +506,7 @@ export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = 
   const t = opts.inBox ? boxTheme(theme) : theme
   const ctx = new Ctx(t, opts)
   if (block.type === 'html') return renderHtml(block, ctx)
+  if (block.type === 'replay') return compileReplay(block, opts).html
   if (block.type === 'box') {
     const parts = boxParts(block.props, ctx)
     const kids = block.props.children.filter((c) => c.type !== 'box')
@@ -489,6 +522,12 @@ export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = 
   if (kit) return kit(block, ctx)
   const render = R[block.type as keyof Renderers] as Renderer<keyof Renderers>
   return render(block as never, ctx)
+}
+
+/** 编辑回放：每个模块用自己的 id 前缀，避免同一篇里多个回放的 id 冲突（点击开始方案） */
+export function compileReplay(block: Extract<Block, { type: 'replay' }>, opts: CompileOptions = {}, showCursors?: boolean): ReplayOutput {
+  const props = opts.replaySvgText && block.props.textMode !== 'svg-text' ? { ...block.props, textMode: 'svg-text' as const } : block.props
+  return renderReplay(props, { mapImage: opts.mapImage, showCursors, idPrefix: `rp${block.id.replace(/[^A-Za-z0-9]/g, '').slice(0, 6)}` })
 }
 
 export interface CompileResult {
@@ -512,10 +551,15 @@ export function blockGap(block: Block, next: Block | undefined, theme: Theme): n
 export function compileDoc(doc: Doc, opts: CompileOptions = {}): CompileResult {
   const theme = resolveTheme(doc)
   const failed: number[] = []
+  const replayIssues: string[] = []
   const parts = doc.blocks.map((b, i) => {
     let inner: string
     try {
-      inner = compileBlock(b, theme, opts)
+      if (b.type === 'replay') {
+        const r = compileReplay(b, opts)
+        replayIssues.push(...r.errors.map((e) => `${REPLAY_ERROR} ${e}`), ...r.warnings.map((w) => `编辑回放：${w}`))
+        inner = r.html
+      } else inner = compileBlock(b, theme, opts)
     } catch {
       // 单个模块数据损坏时跳过，不影响整篇输出
       failed.push(i + 1)
@@ -531,8 +575,12 @@ export function compileDoc(doc: Doc, opts: CompileOptions = {}): CompileResult {
   const empty = flatBlocks(doc.blocks).reduce((n, b) => n + kitEmptySlots(b), 0)
   if (empty) warnings.push(`有 ${empty} 个图片位置还没放图片，导出时会留空`)
   if (failed.length) warnings.unshift(`第 ${failed.join('、')} 个模块数据异常，已跳过输出`)
+  warnings.push(...new Set(replayIssues))
   return { html, charCount: html.length, warnings }
 }
+
+/** 编辑回放 lint 错误的前缀：导出面板据此禁止复制 */
+export const REPLAY_ERROR = '编辑回放 ✕'
 
 /** 针对公众号编辑器已知限制的静态检查（不等于真机验证） */
 export function lintWechatHtml(html: string): string[] {

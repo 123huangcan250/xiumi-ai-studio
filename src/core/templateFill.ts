@@ -48,7 +48,7 @@ const BUILTIN_TEXT: Partial<Record<BlockType, [string, SlotRole][]>> = {
 const BUILTIN_KIND: Record<Exclude<BlockType, 'html'>, PartKind> = {
   cover: 'cover', heading: 'heading', paragraph: 'body', card: 'body', quote: 'body', imageText: 'mixed', image: 'image',
   gallery: 'image', timeline: 'body', table: 'body', profile: 'mixed', divider: 'decor', ending: 'ending',
-  box: 'body', carousel: 'image', frame: 'image', photos: 'image',
+  box: 'body', carousel: 'image', frame: 'image', photos: 'image', replay: 'decor',
 }
 const BUILTIN_PHOTOS: Partial<Record<BlockType, number>> = { cover: 1, imageText: 1, image: 1, profile: 1 }
 /** 模板里缺少某类部件时可用的内置模块（跟随文档主题） */

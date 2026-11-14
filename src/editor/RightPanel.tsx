@@ -132,7 +132,7 @@ function AiPanel() {
     if (!autoSuggest || !ai?.enabled || instruction || busy || !context?.blocks.length) return
     const controller = new AbortController()
     const timer = setTimeout(() => {
-      instructionSuggestions.get(contextKey, () => api.aiSuggestInstruction(context, ai.profileId, selectedId), controller.signal)
+      instructionSuggestions.get(contextKey, () => api.aiSuggestInstruction(context, ai.profileId, selectedId, controller.signal), controller.signal)
         .then((text) => { if (!controller.signal.aborted) setSuggestion({ key: contextKey, text, error: '' }) })
         .catch(() => { if (!controller.signal.aborted) setSuggestion({ key: contextKey, text: '', error: '自动建议暂不可用，可以直接输入修改要求。' }) })
     }, 1500)

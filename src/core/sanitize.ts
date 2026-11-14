@@ -178,6 +178,7 @@ export function guardHtml(html: string): string {
   return html
     .replace(/<(script|style|iframe|object|embed)[\s\S]*?<\/\1\s*>/gi, '')
     .replace(/<(script|style|iframe|object|embed)\b[^>]*>/gi, '')
-    .replace(/\s(on\w+|class|id)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    // id 保留：SVG 互动（“开始阅读”统一触发、↻ 重播）要用 begin="某id.click"，秀米和公众号实测会保留 id
+    .replace(/\s(on\w+|class)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/javascript:/gi, '')
 }

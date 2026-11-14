@@ -7,7 +7,7 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import multer from 'multer'
 import { nanoid } from 'nanoid'
 import { APP_ID, DATA, DATA_ENV, LOG_DIR, PACKAGED, TMP_DIR } from './paths'
-import { cropAsset, deleteAsset, listAssets, saveAsset, variantPath } from './assets'
+import { cropAsset, deleteAsset, listAssets, saveAsset, saveGlyph, variantPath } from './assets'
 import { applyMerge, CATEGORIES, extractBackup, planMerge, resolveLegacy, writeBackup, type MergePlan } from './dataTools'
 import { listComponents, removeComponent, saveComponent, updateComponent } from './components'
 import { IMAGE_HOST, MAX_PAGE_BYTES, safeFetch, WECHAT_IMAGE_HOST } from './net'
@@ -196,6 +196,17 @@ app.post('/api/assets', upload.array('files'), h(async (req, res) => {
   const out = []
   for (const f of files) out.push(await saveAsset(f.buffer, fixName(f.originalname)))
   res.json(out)
+}))
+// 编辑回放：文字栅格图（data URL）→ /media/rp-*.png，之后走和普通图片相同的微信上传
+app.post('/api/replay/glyphs', h(async (req, res) => {
+  const images: unknown[] = Array.isArray(req.body.images) ? req.body.images.slice(0, 800) : []
+  const map: Record<string, string> = {}
+  for (const d of images) {
+    if (typeof d !== 'string') continue
+    const file = await saveGlyph(d)
+    if (file) map[d] = `/media/${file}?w=2400`
+  }
+  res.json(map)
 }))
 app.post('/api/assets/:id/crop', h(async (req, res) => res.json(await cropAsset(String(req.params.id), req.body))))
 app.delete('/api/assets/:id', h(async (req, res) => {
@@ -414,7 +425,21 @@ app.post('/api/ai/suggest-instruction', h(async (req, res) => {
     throw Object.assign(new Error('无效的选中模块'), { status: 400 })
   }
   const prompt = suggestionPrompt(context, selectedId)
-  res.json(readSuggestion(await chatJson(SUGGESTION_SYSTEM, prompt, { maxTokens: 2000, profileId: pid(req) })))
+  const controller = new AbortController()
+  const disconnect = () => { if (!res.writableEnded) controller.abort() }
+  req.once('aborted', disconnect)
+  res.once('close', disconnect)
+  try {
+    if (req.aborted || res.destroyed) controller.abort()
+    controller.signal.throwIfAborted()
+    const result = await chatJson(SUGGESTION_SYSTEM, prompt, { maxTokens: 2000, profileId: pid(req), signal: controller.signal })
+    if (!controller.signal.aborted) res.json(readSuggestion(result))
+  } catch (error) {
+    if (!controller.signal.aborted) throw error
+  } finally {
+    req.removeListener('aborted', disconnect)
+    res.removeListener('close', disconnect)
+  }
 }))
 app.post('/api/ai/edit', h(async (req, res) => {
   const { context, instruction } = req.body

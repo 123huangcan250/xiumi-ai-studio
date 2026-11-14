@@ -25,11 +25,11 @@ export class SuggestionQueue {
     this.pending = request
     try {
       const result = await request
-      if (revision === this.revision) this.cache.set(key, result.suggestion)
-      return result.suggestion
+      if (!signal.aborted && revision === this.revision) this.cache.set(key, result.suggestion)
+      return signal.aborted ? '' : result.suggestion
     } catch (error) {
       // No automatic retry loops for a failed context (including bad credentials).
-      if (revision === this.revision) this.cache.set(key, '')
+      if (!signal.aborted && revision === this.revision) this.cache.set(key, '')
       throw error
     } finally {
       if (this.cache.size > 20) this.cache.delete(this.cache.keys().next().value!)

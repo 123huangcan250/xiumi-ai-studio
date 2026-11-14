@@ -23,7 +23,7 @@ describe('selected AI edits', () => {
 describe('server-owned selection policy', () => {
   afterEach(() => vi.unstubAllEnvs())
   it('uses filter by default and fails closed for invalid explicit values', () => {
-    for (const value of ['strict', 'STRICT', 'Filter', 'anything']) {
+    for (const value of ['strict', 'STRICT', 'anything']) {
       vi.stubEnv('AI_SELECTION_POLICY', value)
       expect(selectionPolicy()).toBe('strict')
     }

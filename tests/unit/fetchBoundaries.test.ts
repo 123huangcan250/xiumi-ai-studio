@@ -116,7 +116,7 @@ describe('red team: fetch transport boundaries', () => {
   it('stops waiting for a stalled response body at the deadline', async () => {
     let cancelled = false
     const fetcher = (async () => new Response(new ReadableStream({ cancel() { cancelled = true } }))) as typeof fetch
-    await expect(safeFetch('https://example.com/', { resolve: publicDns, fetcher, timeoutMs: 30 })).rejects.toThrow()
+    await expect(safeFetch('https://example.com/', { resolve: publicDns, fetcher, timeoutMs: 30, bodyTimeoutMs: 30 })).rejects.toMatchObject({ status: 504 })
     expect(cancelled).toBe(true)
   }, 1000)
 })

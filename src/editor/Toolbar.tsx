@@ -2,13 +2,13 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { compileDoc, variantUrl } from '../core/compiler'
 import { docToMarkdown } from '../core/exporters'
 import { displayHtml } from '../core/images'
-import { checkedXiumiParts, splitForXiumi, xiumiReport, xiumiSvgBoxes } from '../core/xiumiExport'
+import { splitForXiumi, xiumiReport, xiumiSvgBoxes } from '../core/xiumiExport'
 import { AiSettingsModal } from './AiSettingsModal'
 import { api, type AppInfo, type VersionSummary } from './api'
 import { DataModal } from './DataModal'
 import { Modal } from './Modal'
 import { flushSave, normalizeDoc, saveNow, useStore } from './store'
-import { compileForWechat, copyRichText, download, standaloneHtml, xiumiPackage, xiumiUploaded, type ImageMode } from './wechatOutput'
+import { assertReplayOk, compileForWechat, copyRichText, download, standaloneHtml, xiumiPackage, prepareXiumiUpload, type ImageMode } from './wechatOutput'
 
 const ArticleImportModal = lazy(() => import('./ArticleImport').then((m) => ({ default: m.ArticleImportModal })))
 const ImportWizard = lazy(() => import('./ImportWizard').then((m) => ({ default: m.ImportWizard })))
@@ -84,8 +84,10 @@ function ExportModal({ onClose }: { onClose: () => void }) {
   }, [])
   const base = compileDoc(doc)
   const safeName = (doc.title || 'article').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)
-  const xiumi = xiumiReport(base.html)
-  const xiumiParts = splitForXiumi(xiumiSvgBoxes(base.html)).length
+  // 秀米的统计按“导给秀米的版本”算：编辑回放的文字在那里输出为 SVG 文字
+  const xiumiHtml = compileDoc(doc, { replaySvgText: true }).html
+  const xiumi = xiumiReport(xiumiHtml)
+  const xiumiParts = splitForXiumi(xiumiSvgBoxes(xiumiHtml)).length
   /** 超出秀米一次导入的上限时先提示会导出多份文件；用户取消就不下载 */
   const confirmParts = (parts: number) =>
     parts <= 1 || confirm(`这篇超出秀米一次导入的上限（约 13 万字符，超出部分会被秀米丢掉），将导出 ${parts} 份文件（打包为 zip）。\n\n请下载后解压，按「导入秀米-1.txt」到「导入秀米-${parts}.txt」的顺序依次导入秀米。\n\n点“确定”继续导出（上传模式会先上传图片）。`)
@@ -102,7 +104,7 @@ function ExportModal({ onClose }: { onClose: () => void }) {
   const copy = async () => {
     setBusy('准备中…')
     try {
-      const compiled = compileForWechat(doc, mode, setBusy).then((r) => (setReport(r), r.html))
+      const compiled = compileForWechat(doc, mode, setBusy).then((r) => (setReport(r), assertReplayOk(r).html))
       const how = await copyRichText(compiled)
       notify(`已复制（${how === 'clipboard-api' ? '富文本' : '兼容模式'}），到公众号后台编辑器中 Ctrl+V 粘贴`)
     } catch (e: any) {
@@ -157,10 +159,11 @@ function ExportModal({ onClose }: { onClose: () => void }) {
               data-testid="xiumi-upload"
               onClick={() =>
                 runXiumi(async () => {
-                  const confirmedParts = checkedXiumiParts(base.html).length
+                  const plan = prepareXiumiUpload(doc)
+                  const confirmedParts = plan.parts
                   if (!confirmParts(confirmedParts)) return
                   setBusy('上传图片…')
-                  const r = await xiumiUploaded(doc, setBusy)
+                  const r = await plan.upload(setBusy)
                   if (r.parts !== confirmedParts && !confirm(`图片地址替换后，导入文件从 ${confirmedParts} 份变为 ${r.parts} 份。\n\n图片已上传到微信，取消只会停止下载，无法撤回已上传图片。是否按实际 ${r.parts} 份继续下载？`)) return
                   download(`${safeName}-${r.name}`, r.blob)
                   notify(r.parts > 1 ? `已下载，解压后按「说明.txt」依次导入 ${r.parts} 个文件` : '已下载，在秀米“导入 HTML 代码”里使用')
@@ -228,7 +231,7 @@ function DraftModal({ onClose }: { onClose: () => void }) {
   const push = async () => {
     try {
       setBusy('上传图片…')
-      const r = await compileForWechat(doc, 'wechat', setBusy)
+      const r = assertReplayOk(await compileForWechat(doc, 'wechat', setBusy))
       if (r.charCount >= 20000) throw new Error(`正文 HTML ${r.charCount} 字符，超过接口 20,000 字符上限。请精简模块，或使用“复制到公众号后台”。`)
       setBusy('创建草稿…')
       const res = await api.wechatDraft({ title: doc.title, author: doc.author, digest: doc.digest, html: r.html, cover: cover!, confirm: true })

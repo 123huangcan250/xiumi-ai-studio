@@ -58,15 +58,18 @@ function form(buf: Buffer, mime: string, name: string) {
 
 type Cache = { images: Record<string, string>; covers: Record<string, { media_id: string; url: string }> }
 
+const https = (u: string) => (typeof u === 'string' ? u.replace(/^http:\/\//, 'https://') : u)
+
 /** 正文图片 → mmbiz URL（media/uploadimg，不占素材库额度）；按本地路径缓存 */
 export async function uploadContentImage(key: string, path: string): Promise<string> {
   const cache = await readJson<Cache>(CACHE, { images: {}, covers: {} })
-  if (cache.images[key]) return cache.images[key]
+  // 微信返回 http 地址：统一成 https（公众号正文和秀米都要求 https）
+  if (cache.images[key]) return https(cache.images[key])
   const { buf, mime, name } = await wechatReady(path)
   const data: any = await withToken((t) => fetch(`${API}/media/uploadimg?access_token=${t}`, { method: 'POST', body: form(buf, mime, name) }).then((r) => r.json()), '上传正文图片')
-  cache.images[key] = data.url
+  cache.images[key] = https(data.url)
   await writeJson(CACHE, cache)
-  return data.url
+  return cache.images[key]
 }
 
 /** 封面 → 永久素材 media_id */

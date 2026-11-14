@@ -7,7 +7,7 @@ import type { Block, Doc, DocOp, InsertAnchor, SelectionPolicy } from './types'
 /** Insert payloads are new content, never references to existing block identities. */
 function freshInsertBlock(raw: any): Block | null {
   const type = raw?.type
-  if (!BLOCK_TYPES.includes(type) || type === 'html') return null
+  if (!BLOCK_TYPES.includes(type) || type === 'html' || type === 'replay') return null
   let children: Block[] | undefined
   if (type === 'box' && raw.props?.children !== undefined) {
     if (!Array.isArray(raw.props.children)) return null
@@ -62,6 +62,7 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
         if (!Object.keys(slots).length) return { error: `修改 ${op.id} 没有有效的文字槽位` }
         return { op: { op: 'update', id: op.id, props: { html: fillSlots(b.props.html, slots, { split: false }) }, slots, reason: op.reason } }
       }
+      if (b.type === 'replay') return { error: '编辑回放模块不支持 AI 修改' }
       // Never normalize untrusted replacement children: updates cannot replace identities or content trees.
       const fields = op.props && typeof op.props === 'object' ? { ...op.props } : {}
       delete fields.children
@@ -144,25 +145,27 @@ type ScopeDocument = { blocks: { id: string; type: string; props?: any }[] }
 /** 选中模块自身和子模块；框内模块的前后插入以所在的顶层文本框为锚点。 */
 export function selectionScope(doc: ScopeDocument, selectedId: string | null | undefined): { ids: Set<string>; top: number } | null {
   if (!selectedId || !Array.isArray(doc?.blocks)) return null
-  const seen = new Set<string>()
+  const counts = new Map<string, number>()
   let selected: ScopeDocument['blocks'][number] | undefined
   let top = -1
-  let valid = true
-  const children = (b: ScopeDocument['blocks'][number]) => b.type === 'box' && Array.isArray(b.props?.children) ? b.props.children : []
+  const children = (b: ScopeDocument['blocks'][number]) => b?.type === 'box' && Array.isArray(b.props?.children) ? b.props.children : []
   const visit = (b: ScopeDocument['blocks'][number], index: number) => {
-    if (!b || typeof b.id !== 'string' || !b.id || seen.has(b.id)) { valid = false; return }
-    seen.add(b.id)
+    if (!b) return
+    if (typeof b.id === 'string' && b.id) counts.set(b.id, (counts.get(b.id) ?? 0) + 1)
     if (b.id === selectedId) { selected = b; top = index }
     children(b).forEach((child: ScopeDocument['blocks'][number]) => visit(child, index))
   }
   doc.blocks.forEach(visit)
-  if (!valid || !selected) return null
+  if (!selected) return null
   const ids = new Set<string>()
+  let valid = true
   const add = (b: ScopeDocument['blocks'][number]) => {
+    if (!b || !b.id || counts.get(b.id) !== 1) { valid = false; return }
     ids.add(b.id)
     children(b).forEach(add)
   }
   add(selected)
+  if (!valid) return null
   return { ids, top }
 }
 
@@ -177,12 +180,13 @@ export function limitToSelection(doc: ScopeDocument, selectedId: string | null |
   }
   const ops: any[] = [], dropped: any[] = []
   for (const op of rawOps) {
+    const index = typeof op?.index === 'number' || (typeof op?.index === 'string' && op.index.trim()) ? Number(op.index) : NaN
     if ((op?.op === 'update' || op?.op === 'remove') && scope.ids.has(op.id)) {
       ops.push(op)
-    } else if (op?.op === 'insert' && Number.isInteger(op.index) && (op.index === scope.top || op.index === scope.top + 1)) {
-      const anchor: InsertAnchor = { id: doc.blocks[scope.top].id, side: op.index === scope.top ? 'before' : 'after' }
-      if ('anchor' in op && (!op.anchor || op.anchor.id !== anchor.id || op.anchor.side !== anchor.side)) dropped.push(op)
-      else ops.push({ ...op, anchor })
+    } else if (op?.op === 'insert' && Number.isInteger(index) && (index === scope.top || index === scope.top + 1)) {
+      const anchor: InsertAnchor = { id: doc.blocks[scope.top].id, side: index === scope.top ? 'before' : 'after' }
+      if (!anchor.id || doc.blocks.filter(b => b?.id === anchor.id).length !== 1 || 'anchor' in op && (!op.anchor || op.anchor.id !== anchor.id || op.anchor.side !== anchor.side)) dropped.push(op)
+      else ops.push({ ...op, index, anchor })
     } else dropped.push(op)
   }
   return { ops, dropped }
@@ -241,6 +245,8 @@ export function summarize(b: Block): string {
       return `${p.count} 张图 ${p.pics.map((x: any) => x.caption).filter(Boolean).join(' / ')}`
     case 'frame':
       return `图片框 ${[p.caption, p.label].filter(Boolean).join(' · ')}`
+    case 'replay':
+      return `编辑回放 ${p.scenes.length} 个场景：${p.scenes.flatMap((s: any) => s.items.map((i: any) => i.content)).filter(Boolean).join(' / ').slice(0, 160)}`
     case 'html':
       return `${p.label}：${String(p.html).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)}`
     default:

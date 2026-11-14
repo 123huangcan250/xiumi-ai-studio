@@ -345,3 +345,34 @@ it('does not overwrite manual context tuning when key rotation refreshes matchin
   expect(input('ai-max-output').value).toBe('4096')
   expect(input('ai-effort').value).toBe('high')
 })
+
+it('keeps tuning through same-origin path editing and an incomplete URL draft',()=>{
+ changeInput(host.querySelector<HTMLInputElement>('[data-testid="ai-context"]')!,'128000')
+ changeInput(host.querySelector<HTMLInputElement>('[data-testid="ai-max-output"]')!,'8192')
+ changeInput(host.querySelector<HTMLInputElement>('[data-testid="ai-effort"]')!,'high')
+ for(const value of ['https://','https://example.invalid/custom/v1/']) changeInput(baseInput(),value)
+ expect(host.querySelector<HTMLInputElement>('[data-testid="ai-context"]')!.value).toBe('128000')
+ expect(host.querySelector<HTMLInputElement>('[data-testid="ai-max-output"]')!.value).toBe('8192')
+ expect(host.querySelector<HTMLInputElement>('[data-testid="ai-effort"]')!.value).toBe('high')
+})
+
+it('clears service metadata on a committed cross-origin discovery without changing ordinary same-origin edits',async()=>{
+ changeInput(host.querySelector<HTMLInputElement>('[data-testid="ai-context"]')!,'128000')
+ changeInput(host.querySelector<HTMLInputElement>('[data-testid="ai-max-output"]')!,'8192')
+ changeInput(host.querySelector<HTMLInputElement>('[data-testid="ai-effort"]')!,'high')
+ changeInput(baseInput(),'http://localhost:11434/v1')
+ vi.mocked(api.aiModels).mockResolvedValue([])
+ await blur(baseInput())
+ expect(api.aiModels).toHaveBeenCalledWith(expect.objectContaining({contextWindow:0,maxOutputTokens:0,reasoningEffort:''}))
+ expect(host.querySelector<HTMLInputElement>('[data-testid="ai-context"]')!.value).toBe('')
+})
+
+it('does not send requests to invalid or credential-bearing draft URLs',async()=>{
+ for(const address of ['https://','ftp://example.invalid','https://user:pass@example.invalid']) {
+  changeInput(baseInput(),address)
+  expect(fetchButton().disabled).toBe(true)
+  expect(button('测试连接').disabled).toBe(true)
+  await blur(baseInput())
+ }
+ expect(api.aiModels).not.toHaveBeenCalled();expect(api.testAi).not.toHaveBeenCalled()
+})

@@ -110,3 +110,16 @@ describe('reviewed routes survive the app/launcher split', () => {
     expect(testConnection).not.toHaveBeenCalled()
   })
 })
+
+it('cancels the provider request when the suggestion client disconnects', async()=>{
+ let ready!:()=>void, aborted!:()=>void
+ const started=new Promise<void>(r=>ready=r), cancelled=new Promise<void>(r=>aborted=r)
+ vi.mocked(chatJson).mockImplementation(async(_system,_user,opts)=>new Promise((_resolve,reject)=>{
+   expect(opts?.signal).toBeDefined()
+   opts!.signal!.addEventListener('abort',()=>{aborted();reject(opts!.signal!.reason)},{once:true});ready()
+ }))
+ const ctrl=new AbortController()
+ const pending=fetch(base+'/api/ai/suggest-instruction',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({context:{blocks:[]}}),signal:ctrl.signal})
+ const result=expect(pending).rejects.toMatchObject({name:'AbortError'})
+ await started;ctrl.abort();await result;await cancelled
+})

@@ -29,8 +29,8 @@ const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 const VERSION: string = pkg.version
 
 /** 内置的 Node.js 运行时。升级时同时修改版本号和官方 SHASUMS256.txt 中 win-x64.zip 的校验值 */
-const NODE_VERSION = '22.18.0'
-const NODE_SHA256 = 'c95d8a7e1c99e669cc08c9f1176e068c1f50847c37908fcb8c35b62482366511'
+const NODE_VERSION = '22.19.0'
+const NODE_SHA256 = 'ea3fad0e67a991d8477d8c01344b56e69c676ccb733f065b22436994b1253f86'
 const NODE_MIRRORS = ['https://nodejs.org/dist', 'https://registry.npmmirror.com/-/binary/node']
 const SEA_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'
 

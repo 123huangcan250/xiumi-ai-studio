@@ -1,12 +1,13 @@
 import { nanoid } from 'nanoid'
 import { textToRich } from './richtext'
+import { defaultReplay, normalizeReplay } from './replay/schema'
 import type { Block, BlockPropsMap, BlockType } from './types'
 
 export interface BlockMeta<T extends BlockType = BlockType> {
   type: T
   label: string
   icon: string
-  group: '结构' | '文字' | '图片' | '信息' | '套件'
+  group: '结构' | '文字' | '图片' | '信息' | '套件' | '动效'
   defaults: () => BlockPropsMap[T]
 }
 
@@ -99,6 +100,10 @@ const META: { [K in BlockType]: BlockMeta<K> } = {
     type: 'photos', label: '多图', icon: '⊞', group: '套件',
     defaults: () => ({ count: 2, layout: 'even', ratio: '4:3', pics: emptyPics(2) }),
   },
+  replay: {
+    type: 'replay', label: '编辑回放', icon: '▶', group: '动效',
+    defaults: defaultReplay,
+  },
 }
 
 export const BLOCK_TYPES = Object.keys(META) as BlockType[]
@@ -169,6 +174,8 @@ function imageRef(v: any) {
  * partial=true 时只返回传入的字段（用于 update）。
  */
 export function coerceProps<T extends BlockType>(type: T, raw: unknown, partial = false): Partial<BlockPropsMap[T]> {
+  // 编辑回放的属性结构较深，整体交给自己的 schema 校验
+  if (type === 'replay') return (partial && !(raw && typeof raw === 'object') ? {} : normalizeReplay(raw)) as Partial<BlockPropsMap[T]>
   const defaults = META[type].defaults() as Record<string, any>
   const src = raw && typeof raw === 'object' ? (raw as Record<string, any>) : {}
   const out: Record<string, any> = partial ? {} : { ...defaults }
@@ -198,7 +205,7 @@ export function coerceProps<T extends BlockType>(type: T, raw: unknown, partial 
     else if (k === 'count') out[k] = Math.min(4, Math.max(2, Math.round(Number(v)) || 2))
     else if (k === 'pics') out[k] = Array.isArray(v) ? v.slice(0, 30).map((x) => ({ ...(imageRef(x?.image) && { image: imageRef(x.image) }), caption: str(x?.caption) })) : d
     // 文本框不能嵌套：子模块里的文本框直接丢弃
-    else if (k === 'children') out[k] = normalizeBlocks(v).filter((c) => c.type !== 'box')
+    else if (k === 'children') out[k] = normalizeBlocks(v).filter((c) => c.type !== 'box' && c.type !== 'replay')
     else if (typeof d === 'string') out[k] = str(v)
     else out[k] = d
   }

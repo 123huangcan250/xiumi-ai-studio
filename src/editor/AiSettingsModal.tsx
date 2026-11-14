@@ -15,7 +15,7 @@ const blank = (): AiProfile => ({ id: '', name: '', provider: 'openai', baseUrl:
 const endpointOf = (p: AiProfile) => {
   try {
     const url = new URL(p.baseUrl)
-    return /^https?:$/.test(url.protocol) ? `${p.provider}:${url.origin}` : ''
+    return /^https?:$/.test(url.protocol) && !url.username && !url.password ? `${p.provider}:${url.origin}` : ''
   } catch { return '' }
 }
 
@@ -33,6 +33,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   const [modelStatus, setModelStatus] = useState('')
   const [fetchingModels, setFetchingModels] = useState(false)
   const modelRequest = useRef({ generation: 0, pending: false })
+  const tuningScopes = useRef(new Map<string, string>())
   const credentialScopes = useRef(new Map<string, string>())
   const [busy, setBusy] = useState(false)
   // 设置读取完成前不能新增：否则读取结果会覆盖刚选的预设
@@ -45,6 +46,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
       .then((s) => {
         if (!alive) return
         for (const p of s.profiles) {
+          if (endpointOf(p)) tuningScopes.current.set(p.id, endpointOf(p))
           if ((p.apiKey || p.hasKey) && endpointOf(p)) credentialScopes.current.set(p.id, endpointOf(p))
         }
         setProfiles(s.profiles)
@@ -65,8 +67,22 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
     const requestState = modelRequest.current
     return () => { requestState.generation++ }
   }, [cur?.id, cur?.baseUrl, cur?.provider, cur?.apiKey])
+  const serviceDraft = (p: AiProfile): AiProfile => {
+    const previous = tuningScopes.current.get(p.id)
+    const next = endpointOf(p)
+    return previous && next && previous !== next
+      ? { ...p, contextWindow: 0, maxOutputTokens: 0, efforts: [], reasoningEffort: '' } : p
+  }
   const checkCredentials = (p: AiProfile) => {
     const target = endpointOf(p)
+    if (!target) return false
+    const tuning = tuningScopes.current.get(p.id)
+    const changedService = tuning && target !== tuning
+    if (changedService) {
+      tuningScopes.current.set(p.id, target)
+      setProfiles(list => list.map(x => x.id === p.id ? { ...x, contextWindow: 0, maxOutputTokens: 0, efforts: [], reasoningEffort: '' } : x))
+    }
+    if (!tuning) tuningScopes.current.set(p.id, target)
     const bound = credentialScopes.current.get(p.id)
     if (target && bound && target !== bound) {
       // Compare the completed URL, not partially typed hostnames. Saved keys are
@@ -79,6 +95,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
     return true
   }
   const fetchModels = async (p: AiProfile) => {
+    p = serviceDraft(p)
     if (!checkCredentials(p)) return
     modelRequest.current.pending = false
     const request = ++modelRequest.current.generation
@@ -99,6 +116,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
     }
   }
   const discoverAfterEdit = (p: AiProfile, next: EventTarget | null) => {
+    p = serviceDraft(p)
     // Moving between credentials means the endpoint is still being edited.
     // A button (refresh/test/save/cancel/provider) handles its own explicit action.
     if (next instanceof Element && next.matches('button, input[type="password"], [data-testid="ai-base-url"], [data-testid="ai-add-preset"]')) return
@@ -143,7 +161,11 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
       else credentialScopes.current.delete(cur.id)
     }
     const changedProvider = cur && p.provider && p.provider !== cur.provider
-    if (changedProvider) credentialScopes.current.delete(cur.id)
+    if (changedProvider) {
+      credentialScopes.current.delete(cur.id)
+      const target = endpointOf({ ...cur, ...p })
+      if (target) tuningScopes.current.set(cur.id, target)
+    }
     actionRequest.current.probe++
     actionRequest.current.test++
     setProbing(false)
@@ -151,7 +173,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
     setEffortNote('')
     setProfiles((list) => list.map((x, i) => i === editing ? {
       ...x,
-      ...(endpoint ? { contextWindow: 0, maxOutputTokens: 0, efforts: [], reasoningEffort: '' } : {}),
+      ...(changedProvider ? { contextWindow: 0, maxOutputTokens: 0, efforts: [], reasoningEffort: '' } : {}),
       ...p,
       ...(changedProvider ? { apiKey: '', hasKey: false } : {}),
     } : x))
@@ -162,6 +184,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   const probe = async (p: AiProfile) => {
+    p = serviceDraft(p)
     if (!checkCredentials(p)) return
     const request = ++actionRequest.current.probe
     setProbing(true)
@@ -188,6 +211,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
     const pre = AI_PRESETS.find((p) => p.key === key)!
     const p: AiProfile = { ...blank(), id: `p${Date.now().toString(36)}`, name: pre.name.replace(/（.*）/, ''), provider: pre.provider, baseUrl: pre.baseUrl, model: pre.model }
     invalidate()
+    if (endpointOf(p)) tuningScopes.current.set(p.id, endpointOf(p))
     setProfiles((list) => [...list, p])
     setEditing(profiles.length)
     if (!activeId) setActiveId(p.id)
@@ -196,8 +220,9 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   const save = async () => {
     setBusy(true)
     try {
-      if (profiles.some((p) => !checkCredentials(p))) throw new Error('更换服务商地址或接口类型后，请重新输入 API Key')
-      const s = await api.saveAiSettings({ activeId, profiles: profiles.filter((p) => !p.readonly) })
+      const drafts = profiles.map(serviceDraft)
+      if (drafts.some((p) => !checkCredentials(p))) throw new Error('更换服务商地址或接口类型后，请重新输入 API Key')
+      const s = await api.saveAiSettings({ activeId, profiles: drafts.filter((p) => !p.readonly) })
       setProfiles(s.profiles)
       setActiveId(s.activeId)
       notify('AI 模型设置已保存')
@@ -211,6 +236,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
   }
 
   const test = async (p: AiProfile) => {
+    p = serviceDraft(p)
     if (!checkCredentials(p)) return
     const request = ++actionRequest.current.test
     setTesting('测试中…')
@@ -265,7 +291,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
                 <input type="password" value={cur.apiKey} disabled={cur.readonly} placeholder={cur.hasKey ? '已保存（清空将删除密钥）' : '粘贴密钥'} autoComplete="off" onChange={(e) => patch({ apiKey: e.target.value, hasKey: Boolean(e.target.value.trim()) })} onBlur={(e) => discoverAfterEdit(cur, e.relatedTarget)} />
               </label>
               <label className="field"><span>模型名称</span><input data-testid="ai-model" value={cur.model} disabled={cur.readonly} placeholder="例如 deepseek-chat / qwen-plus / claude-sonnet-5-5" onChange={(e) => patch({ model: e.target.value })} /></label>
-              <button data-testid="ai-load-models" disabled={!cur.baseUrl || fetchingModels} onClick={() => fetchModels(cur)}>{fetchingModels ? '获取中…' : '从服务商获取模型列表'}</button>
+              <button data-testid="ai-load-models" disabled={!endpointOf(cur) || fetchingModels} onClick={() => fetchModels(cur)}>{fetchingModels ? '获取中…' : '从服务商获取模型列表'}</button>
               <p className="hint">填好地址和密钥后，离开输入框会自动获取模型列表；不会在打开设置或逐字输入时请求，也可点击按钮刷新。本地服务可不填密钥；更换服务商域名或接口类型后需重新输入密钥，或明确清空以使用无密钥服务。</p>
               {modelStatus && <p className="hint" role="status" data-testid="ai-model-note">{modelStatus}</p>}
               {modelList.length > 0 && (
@@ -288,7 +314,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
               <p className="hint">仅填写服务商支持的强度；OpenAI 兼容接口发送 reasoning_effort，兼容服务优先使用 max_tokens，OpenAI 官方接口设置强度时使用 max_completion_tokens；服务明确要求时才切换字段；Claude 发送 output_config.effort。设置强度时不发送 temperature；被拒绝的强度会显示错误，不会静默去掉。请求被接受不代表强度一定生效，请查阅服务商文档。</p>
               <label className="field"><span>单次最大输出（tokens）</span><input data-testid="ai-max-output" type="number" min="0" step="1" value={cur.maxOutputTokens || ''} disabled={cur.readonly} placeholder="未知" onChange={(e) => patch({ maxOutputTokens: Number(e.target.value) || 0 })} /></label>
               <p className="hint">请求的输出上限不会超过此值；留空使用任务默认值。</p>
-              <button data-testid="ai-probe-effort" disabled={!cur.baseUrl || !cur.model || probing} onClick={() => probe(cur)}>{probing ? '检测中…' : '检测支持的强度'}</button>
+              <button data-testid="ai-probe-effort" disabled={!endpointOf(cur) || !cur.model || probing} onClick={() => probe(cur)}>{probing ? '检测中…' : '检测支持的强度'}</button>
               <p className="hint">检测会向当前服务商发送多条请求，可能产生 API 费用；只有点击检测才会发送。</p>
               <p className="hint" data-testid="ai-effort-note">{effortNote || (cur.efforts?.length ? `已知强度：${cur.efforts.join('、')}` : '可手动填写服务商支持的强度，或点击检测。')}</p>
               {ignoredExtras.length > 0 && <p className="hint warn" role="status" data-testid="ai-extra-ignored">额外参数中的 {ignoredExtras.join('、')} 会被忽略；请使用上方对应设置，JSON 格式由任务控制。</p>}
@@ -303,7 +329,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
                 请求 JSON 模式（response_format；服务不支持时会自动关闭重试）
               </label>
               <div className="row gap">
-                <button onClick={() => test(cur)} disabled={!cur.baseUrl || !cur.model}>测试连接</button>
+                <button onClick={() => test(cur)} disabled={!endpointOf(cur) || !cur.model}>测试连接</button>
                 {!cur.readonly && (
                   <button
                     className="danger"
@@ -324,7 +350,7 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
       </div>
       <div className="modal-actions">
         <button onClick={close}>取消</button>
-        <button className="primary" disabled={!loaded || busy || profiles.some((p) => !validExtra(p.extraBody))} onClick={save}>保存</button>
+        <button className="primary" disabled={!loaded || busy || profiles.some((p) => !validExtra(p.extraBody) || (!!p.baseUrl.trim() && !endpointOf(p)))} onClick={save}>保存</button>
       </div>
     </Modal>
   )
