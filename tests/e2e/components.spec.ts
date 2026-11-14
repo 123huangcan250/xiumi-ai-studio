@@ -1,6 +1,22 @@
 // 组件库闭环：粘贴导入 → 拆分收藏 → 检索 → 跨来源混排 → 配色统一 → 换背景图 → 撤销 → 刷新保留 → 导出
 import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
+import { captureNetworkFailures } from './helpers/networkDiagnostics'
+
+const networkCaptures = new WeakMap<Page, ReturnType<typeof captureNetworkFailures>>()
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.title === '粘贴秀米内容：转存图片、记录来源、拆分加入组件库') networkCaptures.set(page, captureNetworkFailures(page))
+})
+test.afterEach(async ({ page }, testInfo) => {
+  const stop = networkCaptures.get(page)
+  networkCaptures.delete(page)
+  if (!stop) return
+  const report = stop()
+  if (report.failures.length) {
+    try { await testInfo.attach('local-api-network-failures', { body: JSON.stringify(report), contentType: 'application/json' }) }
+    catch { console.warn('Network failure diagnostic attachment unavailable') }
+  }
+})
 
 const JPG = (n: number) => `https://mmbiz.qpic.cn/sz_mmbiz_jpg/p${n}/640?wx_fmt=jpeg`
 const card = (t: string, color: string) => `<section style="margin: 10px 0"><section style="display: inline-block; width: 100%; padding: 5px; border: 1px solid ${color}"><img src="${JPG(1)}" style="width: 100%"><p style="font-size: 13px; color: ${color}">${t}</p></section></section>`
