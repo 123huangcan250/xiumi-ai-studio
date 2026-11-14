@@ -3,12 +3,13 @@
 import { copyFileSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
-export function copyDir(src: string, dst: string) {
+export function copyDir(src: string, dst: string, skip = new Set<string>()) {
   mkdirSync(dst, { recursive: true })
   for (const name of readdirSync(src)) {
+    if (skip.has(name)) continue
     const from = join(src, name)
     const to = join(dst, name)
-    if (statSync(from).isDirectory()) copyDir(from, to)
+    if (statSync(from).isDirectory()) copyDir(from, to, skip)
     else copyFileSync(from, to)
   }
 }

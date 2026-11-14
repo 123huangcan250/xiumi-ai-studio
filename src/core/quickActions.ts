@@ -1,7 +1,7 @@
 // 无需大模型的规则化“AI”动作：同样产出 ops，走同一套差异审阅流程。
 import { createBlock } from './blocks'
 import { richToPlain, textToRich } from './richtext'
-import { summarize } from './ops'
+import { selectionScopes, summarize } from './ops'
 import { extractSlots } from './slots'
 import { findBlock } from './tree'
 import type { Block, Doc, DocOp } from './types'
@@ -88,7 +88,7 @@ export const QUICK_ACTIONS: QuickAction[] = [
 ]
 
 /** 发送给大模型的精简文档上下文（富文本转纯文本，图片只给数量） */
-export function aiContext(doc: Doc, focusId?: string | null) {
+export function aiContext(doc: Doc, focusId?: string | string[] | null) {
   const block = (b: Block, index: number): Record<string, unknown> => {
     // 原文片段只给文字槽位，AI 按槽位修改
     if (b.type === 'html') {
@@ -107,14 +107,18 @@ export function aiContext(doc: Doc, focusId?: string | null) {
     return { index, id: b.id, type: b.type, props: p }
   }
   // 选中了模块：只把它（所在的顶层模块）完整交给模型，其余模块只给一行摘要，当作位置参考
-  const focus = findBlock(doc.blocks, focusId)
+  if (focusId === '' || Array.isArray(focusId) && !focusId.length) throw new Error('无效的选中模块')
+  const requested = Array.isArray(focusId) ? focusId : focusId ? [focusId] : []
+  const focuses = requested.map(id => findBlock(doc.blocks, id))
+  if (requested.length && !selectionScopes(doc, requested)) throw new Error('选中的模块已不存在，请重新选择')
+  const focus = focuses[0]
   if (focus) {
-    const top = focus.parent ?? focus.block
+    const tops = new Set(focuses.map(at => (at!.parent ?? at!.block).id))
     return {
       title: doc.title,
       themeId: doc.themeId,
-      focus: { id: focus.block.id, type: focus.block.type },
-      blocks: doc.blocks.map((b, i) => (b.id === top.id ? block(b, i) : { index: i, id: b.id, type: b.type, summary: summarize(b).slice(0, 30) })),
+      focus: Array.isArray(focusId) ? { ids: requested } : { id: focus.block.id, type: focus.block.type },
+      blocks: doc.blocks.map((b, i) => (tops.has(b.id) ? block(b, i) : { index: i, id: b.id, type: b.type, summary: summarize(b).slice(0, 30) })),
     }
   }
   return { title: doc.title, themeId: doc.themeId, blocks: doc.blocks.map(block) }

@@ -1,6 +1,7 @@
+import { resolveProposalItems } from './proposalSafety'
 import { create } from 'zustand'
 import { cloneBlock, createBlock, newId, normalizeBlocks } from '../core/blocks'
-import { applyOp, limitToSelection, orderInsert, validateOp } from '../core/ops'
+import { applyOp, limitToSelection, selectionScope, validateOp } from '../core/ops'
 import { allThemes, registerTheme } from '../core/themes'
 import { findBlock, insertBlocksAt, insertionPoint, moveBlockTo, removeBlockById, replaceBlockWith, TOP_ONLY, updateBlock } from '../core/tree'
 import type { Block, BlockType, Doc, DocOp, SelectionPolicy, Theme } from '../core/types'
@@ -13,6 +14,8 @@ export interface ProposalItem {
   status: 'pending' | 'accepted' | 'rejected'
 }
 export interface Proposal {
+  /** Actual successful structural operations in acceptance order, not item order. */
+  appliedStructure?: DocOp[]
   summary: string
   items: ProposalItem[]
   errors: string[]
@@ -28,12 +31,14 @@ export type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error'
 interface State {
   doc: Doc
   selectedId: string | null
+  selectedIds: string[]
   editingId: string | null
   past: Doc[]
   future: Doc[]
   lastCoalesce: { key: string; at: number } | null
   saveStatus: SaveStatus
   saveError: string
+  proposalVersion: number
   proposal: Proposal | null
   themes: Theme[]
   toast: { text: string; kind: 'ok' | 'error' } | null
@@ -45,7 +50,7 @@ interface State {
   /** 所有文档修改的唯一入口：记录历史 */
   commit: (next: Doc, coalesceKey?: string) => void
   load: (doc: Doc) => void
-  select: (id: string | null) => void
+  select: (id: string | null, options?: { toggle?: boolean }) => void
   setEditing: (id: string | null) => void
   setPicking: (id: string | null) => void
   setMatchColors: (on: boolean) => void
@@ -54,6 +59,7 @@ interface State {
   insertBlock: (typeOrBlock: BlockType | Block, index?: number, parentId?: string | null) => string
   insertBlocks: (blocks: Block[], index?: number) => void
   removeBlock: (id: string) => void
+  removeSelected: () => void
   /** 用几个模块替换一个模块（拆开模块），可撤销 */
   replaceBlock: (id: string, blocks: Block[]) => void
   duplicateBlock: (id: string) => void
@@ -65,8 +71,8 @@ interface State {
   undo: () => void
   redo: () => void
   /** selectedId：用户选中了模块时，只接受落在这个模块上的操作 */
-  propose: (summary: string, rawOps: any[], selectedId?: string | null, options?: { policy?: SelectionPolicy; ignoredOps?: number }) => void
-  resolveProposal: (index: number | 'all', status: 'accepted' | 'rejected') => void
+  propose: (summary: string, rawOps: any[], selectedId?: string | string[] | null, options?: { policy?: SelectionPolicy; ignoredOps?: number; expectedVersion?: number }) => void
+  resolveProposal: (index: number | 'all', status: 'accepted' | 'rejected', expectedProposal?: Proposal) => void
   clearProposal: () => void
   refreshThemes: () => void
   notify: (text: string, kind?: 'ok' | 'error') => void
@@ -104,15 +110,25 @@ export function emptyDoc(): Doc {
   }
 }
 
+/** Selection is UI state, not document history; prune references after every structural change. */
+function validSelection(doc: Doc, state: Pick<State, 'selectedId' | 'selectedIds' | 'editingId' | 'pickingId'>) {
+  const valid = (id: string | null) => !!id && !!selectionScope(doc, id)
+  const selectedIds = [...new Set(state.selectedIds)].filter(valid)
+  const selectedId = selectedIds.includes(state.selectedId ?? '') ? state.selectedId : selectedIds.at(-1) ?? null
+  return { selectedIds, selectedId, editingId: selectedIds.length === 1 && state.editingId === selectedId ? selectedId : null, pickingId: selectedIds.length === 1 && state.pickingId === selectedId ? selectedId : null }
+}
+
 export const useStore = create<State>((set, get) => ({
   doc: emptyDoc(),
   selectedId: null,
+  selectedIds: [],
   editingId: null,
   past: [],
   future: [],
   lastCoalesce: null,
   saveStatus: 'saved',
   saveError: '',
+  proposalVersion: 0,
   proposal: null,
   themes: allThemes(),
   toast: null,
@@ -125,6 +141,7 @@ export const useStore = create<State>((set, get) => ({
     const merge = coalesceKey && lastCoalesce?.key === coalesceKey && now - lastCoalesce.at < 1500
     set({
       doc: { ...next, updatedAt: now },
+      ...validSelection(next, get()),
       past: merge ? past : [...past, doc].slice(-HISTORY_LIMIT),
       future: [],
       lastCoalesce: coalesceKey ? { key: coalesceKey, at: now } : null,
@@ -135,15 +152,26 @@ export const useStore = create<State>((set, get) => ({
     // 加载时修复历史数据（例如旧版本保存的、字段类型不对的 AI 修改）
     const doc = normalizeDoc(raw)
     const repaired = JSON.stringify(doc.blocks) !== JSON.stringify(raw.blocks)
-    set({ doc, past: [], future: [], selectedId: null, editingId: null, pickingId: null, proposal: null, saveStatus: repaired ? 'dirty' : 'saved', lastCoalesce: null })
+    set({ proposalVersion: get().proposalVersion + 1, doc, past: [], future: [], selectedId: null, selectedIds: [], editingId: null, pickingId: null, proposal: null, saveStatus: repaired ? 'dirty' : 'saved', lastCoalesce: null })
     if (repaired) {
       saveNow()
       get().notify('已自动修复文档中格式异常的模块')
     }
   },
-  select: (id) => set((s) => ({ selectedId: id, editingId: s.editingId === id ? s.editingId : null, pickingId: s.pickingId === id ? s.pickingId : null })),
-  setEditing: (id) => set({ editingId: id, selectedId: id ?? get().selectedId, pickingId: null }),
-  setPicking: (id) => set({ pickingId: id, editingId: null, selectedId: id ?? get().selectedId }),
+  select(id, options) {
+    const state = get()
+    const valid = id && selectionScope(state.doc, id) ? id : null
+    const selectedIds = !valid ? [] : options?.toggle ? state.selectedIds.includes(valid) ? state.selectedIds.filter(value => value !== valid) : [...state.selectedIds, valid] : [valid]
+    set(validSelection(state.doc, { ...state, selectedIds, selectedId: selectedIds.at(-1) ?? null }))
+  },
+  setEditing(id) {
+    if (id) get().select(id)
+    set({ editingId: id && get().selectedId === id ? id : null, pickingId: null })
+  },
+  setPicking(id) {
+    if (id) get().select(id)
+    set({ pickingId: id && get().selectedId === id ? id : null, editingId: null })
+  },
   setMatchColors: (on) => set({ matchColors: on }),
   updateProps(id, props, coalesceKey) {
     const { doc, commit } = get()
@@ -155,7 +183,7 @@ export const useStore = create<State>((set, get) => ({
     const top = TOP_ONLY.has(block.type)
     const at = index === undefined ? insertionPoint(doc.blocks, selectedId, top) : { parentId: top ? null : parentId, index }
     commit({ ...doc, blocks: insertBlocksAt(doc.blocks, at.parentId, at.index, [block]) })
-    set({ selectedId: block.id })
+    get().select(block.id)
     return block.id
   },
   insertBlocks(list, index) {
@@ -165,18 +193,27 @@ export const useStore = create<State>((set, get) => ({
     commit({ ...doc, blocks: insertBlocksAt(doc.blocks, at.parentId, at.index, blocks) })
   },
   removeBlock(id) {
-    const { doc, commit, selectedId } = get()
+    const { doc, commit, selectedId, selectedIds } = get()
     const at = findBlock(doc.blocks, id)
     if (!at) return
     const siblings = at.parent ? at.parent.props.children : doc.blocks
     commit({ ...doc, blocks: removeBlockById(doc.blocks, id) })
-    if (selectedId === id) set({ selectedId: siblings[at.index + 1]?.id ?? siblings[at.index - 1]?.id ?? at.parent?.id ?? null, editingId: null })
+    if (selectedIds.length === 1 && selectedId === id) get().select(siblings[at.index + 1]?.id ?? siblings[at.index - 1]?.id ?? at.parent?.id ?? null)
+  },
+  removeSelected() {
+    const { doc, selectedIds, commit } = get()
+    const valid = selectedIds.filter(id => !!selectionScope(doc, id))
+    if (!valid.length) return
+    if (valid.length === 1) { get().removeBlock(valid[0]); return }
+    // Removing an ancestor already removes descendants; repeated child removal is a no-op.
+    const blocks = valid.reduce((blocks, id) => removeBlockById(blocks, id), doc.blocks)
+    if (blocks !== doc.blocks) commit({ ...doc, blocks })
   },
   replaceBlock(id, list) {
     const { doc, commit } = get()
     if (!findBlock(doc.blocks, id) || !list.length) return
     commit({ ...doc, blocks: replaceBlockWith(doc.blocks, id, list) })
-    set({ selectedId: list[0].id, editingId: null, pickingId: null })
+    get().select(list[0].id)
   },
   duplicateBlock(id) {
     const { doc, commit } = get()
@@ -184,7 +221,7 @@ export const useStore = create<State>((set, get) => ({
     if (!at) return
     const copy = cloneBlock(at.block)
     commit({ ...doc, blocks: insertBlocksAt(doc.blocks, at.parent?.id ?? null, at.index + 1, [copy]) })
-    set({ selectedId: copy.id })
+    get().select(copy.id)
   },
   moveBlock(id, to) {
     const { doc, commit } = get()
@@ -204,15 +241,16 @@ export const useStore = create<State>((set, get) => ({
   undo() {
     const { past, doc, future } = get()
     if (!past.length) return
-    set({ doc: past[past.length - 1], past: past.slice(0, -1), future: [doc, ...future], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
+    set({ proposalVersion: get().proposalVersion + 1, proposal: null, doc: past[past.length - 1], ...validSelection(past[past.length - 1], get()), past: past.slice(0, -1), future: [doc, ...future], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
   },
   redo() {
     const { past, doc, future } = get()
     if (!future.length) return
-    set({ doc: future[0], future: future.slice(1), past: [...past, doc], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
+    set({ proposalVersion: get().proposalVersion + 1, proposal: null, doc: future[0], ...validSelection(future[0], get()), future: future.slice(1), past: [...past, doc], lastCoalesce: null, saveStatus: 'dirty', editingId: null })
   },
 
   propose(summary, rawOps, selectedId, options) {
+    if (options?.expectedVersion !== undefined && options.expectedVersion !== get().proposalVersion) return
     const policy = options?.policy === 'filter' ? 'filter' : 'strict'
     const count = options?.ignoredOps
     const ignoredOps = typeof count === 'number' && Number.isSafeInteger(count) && count >= 0 ? count : 0
@@ -226,36 +264,16 @@ export const useStore = create<State>((set, get) => ({
       if (op) items.push({ op, status: 'pending' })
       else errors.push(error!)
     }
-    set({ proposal: { summary, items, errors, base, ignoredOps, selectionPolicy: policy } })
+    set({ proposalVersion: get().proposalVersion + 1, proposal: { summary, items, errors, base, ignoredOps, selectionPolicy: policy } })
   },
-  resolveProposal(index, status) {
+  resolveProposal(index, status, expectedProposal) {
     const { proposal, doc, commit } = get()
-    if (!proposal) return
-    const targets = index === 'all' ? proposal.items.map((_, i) => i).filter((i) => proposal.items[i].status === 'pending') : [index]
-    let next = doc
-    const items = [...proposal.items]
-    const errors = [...proposal.errors]
-    for (const i of targets) {
-      if (!items[i] || items[i].status !== 'pending') continue
-      if (status === 'accepted') {
-        // 用户可能在提案之后改过文档：按当前文档重新校验
-        const { op, error } = validateOp(next, items[i].op)
-        if (!op) {
-          items[i] = { ...items[i], status: 'rejected' }
-          errors.push(error ?? '操作已失效，请重新生成修改建议')
-          continue
-        }
-        const accepted = (list: ProposalItem[]) => list.filter(item => item.status === 'accepted').map(item => item.op)
-        next = applyOp(next, orderInsert(next, op, accepted(items.slice(0, i)), accepted(items.slice(i + 1))))
-        // Retain the original selection anchor and the actual newly generated block IDs.
-        items[i] = { ...items[i], op }
-      }
-      items[i] = { ...items[i], status }
-    }
-    if (next !== doc) commit(next)
-    set({ proposal: { ...proposal, items, errors } })
+    if (!proposal || (expectedProposal && proposal !== expectedProposal)) return
+    const result = resolveProposalItems(proposal, doc, index, status)
+    if (result.doc !== doc) commit(result.doc)
+    set({ proposal: result.proposal, proposalVersion: get().proposalVersion + 1 })
   },
-  clearProposal: () => set({ proposal: null }),
+  clearProposal: () => set(s => ({ proposal: null, proposalVersion: s.proposalVersion + 1 })),
   refreshThemes: () => set({ themes: allThemes() }),
   notify(text, kind = 'ok') {
     set({ toast: { text, kind } })
