@@ -1,0 +1,10 @@
+import {afterAll,beforeAll,expect,it,vi} from 'vitest'
+import {mkdtemp,readFile,rm} from 'node:fs/promises'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
+let root:string,store:typeof import('../../server/store')
+beforeAll(async()=>{root=await mkdtemp(join(tmpdir(),'xiumi-json-transaction-'));vi.stubEnv('XIUMI_DATA_DIR',root);vi.stubEnv('XIUMI_SKIP_ENV_FILES','1');store=await import('../../server/store')})
+afterAll(async()=>{vi.unstubAllEnvs();await rm(root,{recursive:true,force:true})})
+it('retains all concurrent updates and recovers after a failed transaction',async()=>{const file=join(root,'counter.json');await Promise.all(Array.from({length:20},(_,i)=>store.mutateJson<Record<string,number>>(file,{},async data=>{await new Promise(r=>setImmediate(r));data[String(i)]=i})));expect(Object.keys(JSON.parse(await readFile(file,'utf8')))).toHaveLength(20);await expect(store.mutateJson(file,{},()=>{throw Error('failed update')})).rejects.toThrow('failed update');await store.mutateJson<Record<string,number>>(file,{},data=>{data.next=21});expect(JSON.parse(await readFile(file,'utf8')).next).toBe(21)})
+it('does not block independent target paths and false avoids publication',async()=>{let release!:()=>void;const held=store.mutateJson(join(root,'held.json'),{},()=>new Promise<void>(r=>release=r));await vi.waitFor(()=>expect(release).toBeTypeOf('function'));await store.mutateJson<Record<string,number>>(join(root,'independent.json'),{},data=>{data.ok=1});release();await held;await store.mutateJson(join(root,'not-published.json'),{},()=>false);await expect(readFile(join(root,'not-published.json'))).rejects.toMatchObject({code:'ENOENT'})})
+it.runIf(process.platform==='win32')('serializes Windows case aliases of the same actual file',async()=>{const file=join(root,'Case.json');await Promise.all([store.mutateJson<Record<string,number>>(file,{},async data=>{await new Promise(r=>setTimeout(r,10));data.first=1}),store.mutateJson<Record<string,number>>(file.toUpperCase(),{},data=>{data.second=2})]);expect(JSON.parse(await readFile(file,'utf8'))).toEqual({first:1,second:2})})

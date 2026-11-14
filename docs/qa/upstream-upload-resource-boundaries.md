@@ -1,0 +1,29 @@
+# Upstream upload/resource safety alignment
+
+Base: upstream aec2e753 (merged PR #4). This is an isolated port of already-tested fork resource boundaries, not a replacement of upstream assets, replay, portable or dataTools behavior.
+
+## Compatibility and intentional resource limits
+
+- Ordinary `/api/assets` and `/api/import` keep 30 MiB per file and 50 files; streamed temporary storage counts at most 64 MiB cumulative file bytes per request. Two ordinary requests may be active through downstream processing, even after a client disconnect. The 120-second deadline covers upload only, not model/conversion duration. Unsupported text fields are rejected; both existing client APIs submit only `files` or `file`. Parts are limited to 50.
+- Backup restore retains its separate disk-based `backupUpload` and original **8 GiB** single-file limit. No backup API, migration semantics or capacity was removed. This patch does not claim that backup ZIP expansion has these DOCX limits.
+- DOCX preflight reads actual expanded streams: at most 2,048 ZIP entries, 32 MiB per entry and 128 MiB total. It rejects duplicate names and malformed size declarations before Mammoth. External-file access is explicitly disabled. At most 256 image conversions and 128 MiB of newly encoded image output are accepted; budget failure rolls back only this import's assets after already-started image tasks settle. Cleanup failures preserve the original error and are reported by count.
+- Shared image admission: one active Sharp operation, at most 64 waiting. Input pixel limit is 64,000,000; derived crop variants also enforce a 64 MP output limit. These limits intentionally reject exceptionally large images previously accepted. They do not silently resize an extreme requested aspect ratio.
+- **Animated metadata uses the total multi-page vertical strip pixel count, not just one frame.** A long animation can therefore be rejected even if each frame is below 64 MP. A real 8x8 three-frame GIF with a 100-pixel experimental limit confirms animated metadata rejects while page 0 metadata succeeds. Normal transparent-first/fullest-later GIF selection remains intact. Every metadata and sampled-frame stats pipeline is bounded and runs under the same permit as selection/encoding; crop releases its extraction permit before calling saveAsset to avoid nested-queue deadlock.
+- Managed replay PNG filenames/protocol are unchanged. Variant and managed glyph output use unique same-directory temporary files and rename publication. Failed writers remove only their own temporary output, never a different writer's final cache file.
+- Asset index read/modify/write now shares a target-path transaction with dataTools asset-index merge, including Windows case normalization. Existing local IDs still win, and the dataTools `target` argument remains respected. This is in-process coordination over normalized paths, not a cross-process file lock, symlink-alias ownership system or repair of previously malformed JSON/cache data.
+
+## Verification evidence
+
+Focused red/green checks include actual HTTP third-upload admission, unsupported multipart fields, timeout/ENOSPC/disconnect cleanup, late tracked cleanup and throwing error middleware, actual ZIP expansion and real Mammoth repeated image relationships, partial cache writes, and both orders of actual-file restore/upload index interleaving. Test doubles are used for controlled faults and selected encoders; they are not live provider or 8 GiB stress tests. Existing real-GIF `fluid.test.ts` cases preserve fullest-frame selection.
+
+Final frozen-source verification (Node 24.19.0): ESLint, TypeScript, all **68 test files / 692 mixed tests**, and production build passed. The original complete upstream browser suite passed **43/43 in 2.6 minutes**, with one worker, `--update-snapshots=none --retries=0`; no snapshot was created or updated. Existing replay, animation, backup/restore, editor and export behavior was exercised by those original tests. New safety cases are in the mixed suite and include actual HTTP/filesystem/ZIP interactions, not additional browser cases. Build retains the existing >500 kB chunk warning.
+
+The complete run used an isolated worktree, `XIUMI_SKIP_ENV_FILES=1` and private `DATA_DIR`, without `XIUMI_DATA_DIR` overriding individual fixtures. Browser servers used the original 5273/5274 ports and their private `data-e2e`; both ports were checked free before and after. A SHA-256 manifest of source/test files was unchanged throughout verification. No production service, user data, real API credentials, deployment or Sonar state was touched.
+
+The real 50-file compatibility test confirms 50 one-pixel assets succeed and 51 are rejected; request abort listeners are shared and removed after the last file. Independent static review found no remaining blocker in the shared index transaction, multipart field policy, glyph publication or listener lifecycle. Tests under `tests/unit` include HTTP/filesystem/component integrations; this patch does not claim strictly isolated unit coverage or a whole-source coverage percentage.
+
+## Remaining resource risks
+
+64 MiB is a file-payload budget, not total request/heap/RSS/disk consumption. Decompression, Sharp/libvips, encoded output, metadata, JSON requests and concurrent backup operations have separate costs. Queued image callers can retain their input buffers. There is no complete whole-process CPU/RSS deadline or inter-process quota. Hard process termination may leave owned upload temporary directories; no unsafe age/PID-based janitor is introduced. A single output crossing the DOCX result budget can exist briefly before rollback, and disk cleanup itself can fail.
+
+The retained 30 MiB ordinary upload allowance exceeds Sonar S5693's recommendation. Prior user acceptance of that exact residual risk is not represented as a false positive or as eliminating the risk; no Sonar rule, gate or issue state is changed here.
