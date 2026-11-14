@@ -8,7 +8,7 @@
 //   app/server.cjs        服务端（esbuild 打包，含全部 JS 依赖）
 //   app/dist/             前端
 //   app/samples/          验收样例
-//   app/node_modules/     sharp 及其 Windows 原生库（唯一不能打进 server.cjs 的依赖）
+//   app/node_modules/     Sharp 原生库与 DOMPurify/jsdom 的常规运行时依赖闭包
 //   app/licenses/         Node.js 与全部生产依赖的许可文本
 //
 // 需要：Windows x64、已执行 pnpm install。首次运行会下载 Node.js 运行时到 .cache/（之后离线可用）。
