@@ -171,7 +171,7 @@ function FragmentPicker({ block, theme, onDone }: { block: Block<'html'>; theme:
     if (el) mark(el)
   }
   const collect = () => {
-    if (!picked || !ref.current) return
+    if (!picked || !ref.current || !picked.isConnected || !ref.current.contains(picked)) return
     picked.classList.remove('fragment-picked', 'fragment-hover')
     const fragment = sanitizeHtml(storedHtml(fragmentHtml(picked, ref.current)), parseDoc)
     onDone()
@@ -416,6 +416,7 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
 /** 照片拖放：拖到另一张照片上互换位置，靠近画布上下边缘时自动滚动 */
 function usePhotoDrag(scroller: React.RefObject<HTMLDivElement | null>) {
   const over = useRef<HTMLImageElement | null>(null)
+  const dragDoc = useRef<ReturnType<typeof useStore.getState>['doc'] | null>(null)
   const mark = (img: HTMLImageElement | null) => {
     if (over.current === img) return
     over.current?.classList.remove('photo-drop')
@@ -426,6 +427,7 @@ function usePhotoDrag(scroller: React.RefObject<HTMLDivElement | null>) {
     onDragStart: (e: React.DragEvent) => {
       const t = photoTarget(e.target)
       if (!t) return
+      dragDoc.current = useStore.getState().doc
       e.dataTransfer.setData(PHOTO_MIME, JSON.stringify(t.pos))
       e.dataTransfer.effectAllowed = 'move'
       t.img.classList.add('photo-dragging')
@@ -450,16 +452,33 @@ function usePhotoDrag(scroller: React.RefObject<HTMLDivElement | null>) {
       mark(null)
       if (!raw || !t) return
       e.preventDefault()
-      const from = JSON.parse(raw) as PhotoPos
-      const fromImg = document.querySelector(`[data-block-id="${from.blockId}"] img[data-photo="${from.index}"]`)
+      let value: unknown
+      try { value = JSON.parse(raw) } catch { return }
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return
+      const candidate = value as Record<string, unknown>
+      if (typeof candidate.blockId !== 'string' || !Number.isSafeInteger(candidate.index) || (candidate.index as number) < 0) return
+      const from: PhotoPos = { blockId: candidate.blockId, index: candidate.index as number }
       const s = useStore.getState()
-      const next = swapPhotos(s.doc, from, t.pos, { ratioA: shownRatio(fromImg), ratioB: shownRatio(t.img) })
+      if (dragDoc.current && dragDoc.current !== s.doc) return
+      const hasPhoto = (pos: PhotoPos) => {
+        if (!Number.isSafeInteger(pos.index) || pos.index < 0) return false
+        const block = findBlock(s.doc.blocks, pos.blockId)?.block
+        return !!block && !!blockPhotos(block)[pos.index]
+      }
+      if (!hasPhoto(from) || !hasPhoto(t.pos)) return
+      // IDs are data, not selector syntax; search only this canvas's declared photos.
+      const fromImg = Array.from(scroller.current?.querySelectorAll<HTMLImageElement>('img[data-photo]') ?? []).find(img => {
+        const pos = photoTarget(img)?.pos
+        return pos?.blockId === from.blockId && pos.index === from.index
+      })
+      const next = swapPhotos(s.doc, from, t.pos, { ratioA: shownRatio(fromImg ?? null), ratioB: shownRatio(t.img) })
       if (next !== s.doc) {
         s.commit(next)
         s.notify('已交换两张照片的位置（Ctrl+Z 可撤销）')
       }
     },
     onDragEnd: (e: React.DragEvent) => {
+      dragDoc.current = null
       mark(null)
       ;(e.target as Element).classList?.remove('photo-dragging')
     },
