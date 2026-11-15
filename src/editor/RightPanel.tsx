@@ -1,7 +1,8 @@
+import { previewProposal } from './proposalSafety'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { blockLabel } from '../core/blocks'
 import { compileDoc, variantUrl } from '../core/compiler'
-import { applyOps, describeOp, summarize } from '../core/ops'
+import { describeOp, summarize } from '../core/ops'
 import { QUICK_ACTIONS, aiContext } from '../core/quickActions'
 import { analyzeStyle, themeFromReport, type StyleReport } from '../core/styleExtract'
 import { getTheme, registerTheme, resolveTheme } from '../core/themes'
@@ -147,10 +148,11 @@ function AiPanel() {
   const run = async () => {
     if (!instruction.trim()) return
     setBusy(true)
+    const expectedVersion = useStore.getState().proposalVersion
     try {
       const r = await api.aiEdit(aiContext(doc, selectedId), instruction, undefined, selectedId)
       if (useStore.getState().doc !== doc) throw new Error('文档已在请求期间发生变化，请重新生成修改建议')
-      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [], selectedId, { policy: r.selectionPolicy, ignoredOps: r.ignoredOps })
+      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [], selectedId, { policy: r.selectionPolicy, ignoredOps: r.ignoredOps, expectedVersion })
     } catch (e: any) {
       notify(e.message, 'error')
     } finally {
@@ -201,8 +203,8 @@ function AiPanel() {
                 {d.after && <div className="diff add">＋ {d.after.slice(0, 160)}</div>}
                 {it.status === 'pending' ? (
                   <div className="op-actions">
-                    <button onClick={() => resolveProposal(i, 'rejected')}>拒绝</button>
-                    <button className="primary" onClick={() => resolveProposal(i, 'accepted')}>接受</button>
+                    <button onClick={() => resolveProposal(i, 'rejected', proposal)}>拒绝</button>
+                    <button className="primary" onClick={() => resolveProposal(i, 'accepted', proposal)}>接受</button>
                   </div>
                 ) : (
                   <div className="op-state">{it.status === 'accepted' ? '已接受' : '已拒绝'}</div>
@@ -212,9 +214,9 @@ function AiPanel() {
           })}
           {pending.length > 0 && (
             <div className="op-actions all">
-              <button onClick={() => setPreview(compileDoc(applyOps(doc, pending.map((p) => p.op))).html)}>预览效果</button>
-              <button onClick={() => resolveProposal('all', 'rejected')}>全部拒绝</button>
-              <button className="primary" onClick={() => resolveProposal('all', 'accepted')} data-testid="accept-all">全部接受（{pending.length}）</button>
+              <button onClick={() => setPreview(compileDoc(previewProposal(proposal, doc)).html)}>预览效果</button>
+              <button onClick={() => resolveProposal('all', 'rejected', proposal)}>全部拒绝</button>
+              <button className="primary" onClick={() => resolveProposal('all', 'accepted', proposal)} data-testid="accept-all">全部接受（{pending.length}）</button>
             </div>
           )}
           <p className="hint">接受后的修改可用 Ctrl+Z 撤销。</p>
