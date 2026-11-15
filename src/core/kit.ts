@@ -1,3 +1,4 @@
+import { applyImageWidths } from './imageResize'
 // 清华电机 · 德国实践套件：大型文本框、轮播、图片框、双图 / 三图 / 四图。
 // 视觉语言：清华紫做框架；德国国旗的黑红金只做细条和图注标记；
 // 电机系的签名是一组“三相正弦波”——三条相位差 120° 的波形，分别用黑、红、金。
@@ -105,7 +106,7 @@ function placeholder(ratio: string, label: string): string {
 /** 图片位：有图输出图片；空位在画布中显示占位图，导出时为空 */
 function pic(ctx: KitCtx, image: ImageRef | undefined, slot: number, fit: string | undefined, w = 1080, ratio = fit ?? '4:3'): string {
   const style = css({ width: '100%', display: 'block' })
-  if (image?.src) return `<img src="${esc(ctx.img(image, fit, w))}" alt="" style="${style}">`
+  if (image?.src) return applyImageWidths(`<img src="${esc(ctx.img(image, fit, w))}" alt="" style="${style}">`, image)
   if (ctx.hints) return `<img src="${placeholder(ratio, `图片 ${slot + 1}`)}" data-slot="${slot}" alt="" style="${style}">`
   return ''
 }

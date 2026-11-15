@@ -2,7 +2,7 @@
 import { act, createElement, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-const state = vi.hoisted(() => ({ toast: null, load: vi.fn(), notify: vi.fn(), saveStatus: 'saved' }))
+const state = vi.hoisted(() => ({ doc: { id: 'current', blocks: [] }, toast: null, load: vi.fn(), notify: vi.fn(), saveStatus: 'saved' }))
 const save = vi.hoisted(() => vi.fn(async () => {}))
 vi.mock('../../src/editor/store', () => ({
   useStore: Object.assign((selector: (s: typeof state) => unknown) => selector(state), { getState: () => state }),
@@ -26,6 +26,7 @@ let root: Root | undefined
 let host: HTMLDivElement
 beforeEach(() => {
   vi.clearAllMocks()
+  state.doc = { id: 'current', blocks: [] }
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   host = document.createElement('div'); document.body.append(host)
 })
@@ -60,6 +61,18 @@ it('rejects malformed successful JSON rather than synthesizing an empty object',
 it('still creates and saves on a verified empty array', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => [] })))
   await mount(); expect(state.load).toHaveBeenCalledTimes(1); expect(save).toHaveBeenCalledTimes(1)
+})
+it('does not replace or save a newer document while the initial list is pending', async () => {
+  let resolve!: (value: Response) => void
+  const fetch = vi.fn(() => new Promise<Response>(r => { resolve = r }))
+  vi.stubGlobal('fetch', fetch)
+  await mount()
+  expect(fetch).toHaveBeenCalledTimes(1)
+  state.doc = { id: 'newer', blocks: [] }
+  await act(async () => resolve(new Response('[]')))
+  expect(state.load).not.toHaveBeenCalled()
+  expect(save).not.toHaveBeenCalled()
+  expect(state.notify).toHaveBeenCalledWith(expect.stringContaining('已保留当前内容'), 'error')
 })
 it.each([{ error: 'specific failure' }, null])('preserves non-success HTTP error handling %j', async data => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, statusText: 'Unavailable', json: async () => { if (data === null) throw new SyntaxError('not JSON'); return data } })))

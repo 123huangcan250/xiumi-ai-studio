@@ -46,6 +46,7 @@ test('selected paragraph is sent as scope and whole-document scope remains opt-i
   await page.getByTestId('use-ai').uncheck()
   await page.getByTestId('generate').click()
   await page.getByTestId('choose-narrative').click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await page.locator('[data-testid=canvas] [data-block-type=paragraph]').first().click()
   await page.getByTestId('tab-ai').click()
   await expect(page.getByLabel('修改范围')).toHaveValue('selection')

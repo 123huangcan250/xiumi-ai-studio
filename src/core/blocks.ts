@@ -1,3 +1,4 @@
+import { validImageWidth } from './imageResize'
 import { nanoid } from 'nanoid'
 import { textToRich } from './richtext'
 import { defaultReplay, normalizeReplay } from './replay/schema'
@@ -166,7 +167,7 @@ const str = (v: unknown) => (v === null || v === undefined ? '' : typeof v === '
 const isRich = (v: any) => v && typeof v === 'object' && v.type === 'doc' && Array.isArray(v.content)
 function imageRef(v: any) {
   if (!v || typeof v !== 'object' || typeof v.src !== 'string' || !v.src) return undefined
-  return { src: v.src, ...(typeof v.assetId === 'string' && { assetId: v.assetId }), ...(typeof v.alt === 'string' && { alt: v.alt }), ...(Number(v.width) > 0 && { width: Number(v.width) }), ...(Number(v.height) > 0 && { height: Number(v.height) }) }
+  return { src: v.src, ...(validImageWidth(v.displayWidth) !== undefined && { displayWidth: validImageWidth(v.displayWidth) }), ...(typeof v.assetId === 'string' && { assetId: v.assetId }), ...(typeof v.alt === 'string' && { alt: v.alt }), ...(Number(v.width) > 0 && { width: Number(v.width) }), ...(Number(v.height) > 0 && { height: Number(v.height) }) }
 }
 
 /**

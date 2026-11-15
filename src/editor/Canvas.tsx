@@ -22,6 +22,7 @@ import { ErrorBoundary } from './ErrorBoundary'
 import { ReplayCanvasBody } from './ReplayPreview'
 import { useStore } from './store'
 import { ReviewProvider, ReviewBlock, ReviewSlot } from './InlineReview'
+import { ImageResize } from './ImageResize'
 
 /** "a:b;c:d" → React style 对象 */
 export function styleObj(s: string): React.CSSProperties {
@@ -546,6 +547,7 @@ export function Canvas() {
   const [zoom, setZoom] = useCanvasZoom()
   return (
     <ReviewProvider><MultiSelectMode.Provider value={selectionMode}><div className="canvas-wrap">
+      <ImageResize />
       <div className="selection-bar" role="group" aria-label="模块选择">
         <button data-testid="multi-select-mode" aria-pressed={selectionMode} onClick={() => setSelectionMode(value => !value)}>{selectionMode ? '完成多选' : '多选模块'}</button>
         <span role="status">{count ? `已选 ${count} 个模块` : '未选择模块'}</span>
