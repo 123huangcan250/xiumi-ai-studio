@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules() })
 
 it.each([
-  ['dev', 'http://localhost:5273'],
+  ['dev', 'http://127.0.0.1:5273'],
   ['packaged', 'http://127.0.0.1:5284'],
 ])('pins only %s test browser storage to the matching origin', async (target, origin) => {
   vi.stubEnv('E2E_TARGET', target)

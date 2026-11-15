@@ -1,8 +1,10 @@
 import { UiIcon } from './UiIcon'
+import { useSelectionScope } from './useSelectionScope'
+import { previewProposal } from './proposalSafety'
 import { useEffect, useId, useMemo, useState } from 'react'
 import { blockLabel } from '../core/blocks'
 import { compileDoc, variantUrl } from '../core/compiler'
-import { applyOps, describeOp, summarize } from '../core/ops'
+import { describeOp, summarize } from '../core/ops'
 import { QUICK_ACTIONS, aiContext } from '../core/quickActions'
 import { analyzeStyle, themeFromReport, type StyleReport } from '../core/styleExtract'
 import { getTheme, registerTheme, resolveTheme } from '../core/themes'
@@ -112,13 +114,14 @@ function ThemePanel() {
 
 function AiPanel() {
   const selected = useStore(selectedBlock)
-  const [scope, setScope] = useState<'selection' | 'document'>('selection')
+  const { scope, setScope, scopeIdentity, captureScope, isScopeCurrent } = useSelectionScope()
   const doc = useStore((s) => s.doc)
   const proposal = useStore((s) => s.proposal)
   const { propose, resolveProposal, clearProposal, notify } = useStore.getState()
   const [ai, setAi] = useState<AiStatus | null>(null)
   const [instruction, setInstruction] = useState('')
   const [busy, setBusy] = useState(false)
+  useEffect(() => { setBusy(false) }, [scopeIdentity])
   const [preview, setPreview] = useState<string | null>(null)
   const [autoSuggest, setAutoSuggest] = useState(readSuggestionPreference)
   const autoSuggestHintId = useId()
@@ -130,15 +133,17 @@ function AiPanel() {
   const suggestionRevision = instructionSuggestions.revision
   const contextKey = useMemo(() => context ? JSON.stringify([doc.id, context, selectedId, ai?.profileId, ai?.model, ai?.provider, suggestionRevision]) : '', [doc.id, context, selectedId, ai?.profileId, ai?.model, ai?.provider, suggestionRevision])
   useEffect(() => {
-    if (!autoSuggest || !ai?.enabled || instruction || busy || !context?.blocks.length) return
+    if (!isScopeCurrent(scopeIdentity) || !autoSuggest || !ai?.enabled || instruction || busy || !context?.blocks.length) return
     const controller = new AbortController()
+    const requestedScope = captureScope()
     const timer = setTimeout(() => {
+      if (!isScopeCurrent(requestedScope)) return
       instructionSuggestions.get(contextKey, () => api.aiSuggestInstruction(context, ai.profileId, selectedId, controller.signal), controller.signal)
-        .then((text) => { if (!controller.signal.aborted) setSuggestion({ key: contextKey, text, error: '' }) })
-        .catch(() => { if (!controller.signal.aborted) setSuggestion({ key: contextKey, text: '', error: '自动建议暂不可用，可以直接输入修改要求。' }) })
+        .then((text) => { if (!controller.signal.aborted && isScopeCurrent(requestedScope)) setSuggestion({ key: contextKey, text, error: '' }) })
+        .catch(() => { if (!controller.signal.aborted && isScopeCurrent(requestedScope)) setSuggestion({ key: contextKey, text: '', error: '自动建议暂不可用，可以直接输入修改要求。' }) })
     }, 1500)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [autoSuggest, ai, instruction, busy, context, contextKey, selectedId])
+  }, [autoSuggest, ai, instruction, busy, context, contextKey, selectedId, scopeIdentity, captureScope, isScopeCurrent])
   useEffect(() => {
     const load = () => api.aiStatus().then(setAi).catch(() => setAi(null))
     load()
@@ -146,16 +151,19 @@ function AiPanel() {
     return () => window.removeEventListener('ai-settings-changed', load)
   }, [])
   const run = async () => {
-    if (!instruction.trim()) return
+    if (!instruction.trim() || !isScopeCurrent(scopeIdentity)) return
     setBusy(true)
+    const expectedVersion = useStore.getState().proposalVersion
+    const requestedScope = captureScope()
     try {
       const r = await api.aiEdit(aiContext(doc, selectedId), instruction, undefined, selectedId)
+      if (!isScopeCurrent(requestedScope)) return
       if (useStore.getState().doc !== doc) throw new Error('文档已在请求期间发生变化，请重新生成修改建议')
-      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [], selectedId, { policy: r.selectionPolicy, ignoredOps: r.ignoredOps })
+      propose(r.summary ?? 'AI 修改建议', Array.isArray(r.ops) ? r.ops : [], selectedId, { policy: r.selectionPolicy, ignoredOps: r.ignoredOps, expectedVersion })
     } catch (e: any) {
-      notify(e.message, 'error')
+      if (isScopeCurrent(requestedScope)) notify(e.message, 'error')
     } finally {
-      setBusy(false)
+      if (isScopeCurrent(requestedScope)) setBusy(false)
     }
   }
   const pending = proposal?.items.filter((i) => i.status === 'pending') ?? []
@@ -202,8 +210,8 @@ function AiPanel() {
                 {d.after && <div className="diff add">＋ {d.after.slice(0, 160)}</div>}
                 {it.status === 'pending' ? (
                   <div className="op-actions">
-                    <button onClick={() => resolveProposal(i, 'rejected')}>拒绝</button>
-                    <button className="primary" onClick={() => resolveProposal(i, 'accepted')}>接受</button>
+                    <button onClick={() => resolveProposal(i, 'rejected', proposal)}>拒绝</button>
+                    <button className="primary" onClick={() => resolveProposal(i, 'accepted', proposal)}>接受</button>
                   </div>
                 ) : (
                   <div className="op-state">{it.status === 'accepted' ? '已接受' : '已拒绝'}</div>
@@ -213,9 +221,9 @@ function AiPanel() {
           })}
           {pending.length > 0 && (
             <div className="op-actions all">
-              <button onClick={() => setPreview(compileDoc(applyOps(doc, pending.map((p) => p.op))).html)}>预览效果</button>
-              <button onClick={() => resolveProposal('all', 'rejected')}>全部拒绝</button>
-              <button className="primary" onClick={() => resolveProposal('all', 'accepted')} data-testid="accept-all">全部接受（{pending.length}）</button>
+              <button onClick={() => setPreview(compileDoc(previewProposal(proposal, doc)).html)}>预览效果</button>
+              <button onClick={() => resolveProposal('all', 'rejected', proposal)}>全部拒绝</button>
+              <button className="primary" onClick={() => resolveProposal('all', 'accepted', proposal)} data-testid="accept-all">全部接受（{pending.length}）</button>
             </div>
           )}
           <p className="hint">接受后的修改可用 Ctrl+Z 撤销。</p>

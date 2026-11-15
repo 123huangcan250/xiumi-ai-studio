@@ -1,5 +1,6 @@
+import { loadIfUnchanged } from './documentNavigation'
 // 导入公众号推文：链接抓取或粘贴富文本 → 保留原样式（原文片段）或重新排版 → 可保存为模板/主题
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createBlock, newId } from '../core/blocks'
 import { compileDoc } from '../core/compiler'
 import { makeDraft, SOURCE_LABEL } from '../core/components'
@@ -13,12 +14,15 @@ import { api, assetRef, type Asset } from './api'
 import { fluidizeArticle } from './fluidize'
 import { ImportWizard } from './ImportWizard'
 import { Modal } from './Modal'
-import { saveNow, useStore } from './store'
+import { saveBeforeLeave, saveNow, useStore } from './store'
 
 const parse = (html: string) => new DOMParser().parseFromString(html, 'text/html')
 
 export function ArticleImportModal({ onClose }: { onClose: () => void }) {
-  const { load, notify, refreshThemes } = useStore.getState()
+  const active = useRef(true)
+  const importing = useRef(false)
+  useEffect(() => { active.current = true; return () => { active.current = false } }, [])
+  const { notify, refreshThemes } = useStore.getState()
   const [tab, setTab] = useState<'url' | 'paste'>('url')
   const [url, setUrl] = useState('')
   const [article, setArticle] = useState<ImportedArticle | null>(null)
@@ -84,9 +88,21 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const doImport = () =>
-    run(async () => {
-      if (!article) return
+  const doImport = () => {
+    if (importing.current) return
+    importing.current = true
+    const expected = useStore.getState().doc
+    let staleReported = false
+    const current = () => {
+      if (active.current && useStore.getState().doc === expected) return true
+      if (!staleReported) {
+        staleReported = true
+        notify('当前文稿未替换；已经完成的素材或模板保存仍保留。')
+      }
+      return false
+    }
+    return run(async () => {
+      if (!article || !current()) return
       if (mode === 'relayout') {
         setBusy('下载图片到素材库…')
         const { markdown, images } = articleToMarkdown({ ...article, title })
@@ -94,6 +110,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
         // 图片地址替换为本地素材，便于排版引擎按章节分配与裁切
         const md = markdown.replace(/!\[\]\(([^)]+)\)/g, (m, u) => (map[u] ? `![](/media/${map[u].file})` : m))
         window.dispatchEvent(new Event('assets-changed'))
+        if (!current()) return
         setWizard({ text: md, images: images.map((u) => map[u]).filter(Boolean) })
         return
       }
@@ -112,14 +129,17 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
         rehostFailed = urls.length - Object.keys(map).length
         kept = kept.map((b) => (b.type === 'html' ? { ...b, props: { ...b.props, html: rewriteImages(b.props.html, map, parse) } } : b))
         window.dispatchEvent(new Event('assets-changed'))
+        if (!current()) return
       }
       // 保留原样式：封面下载到素材库（草稿箱需要本地封面）
       let cover: Doc['cover']
       if (article.cover) {
         setBusy('保存封面…')
         const r = await api.fetchAssets([article.cover]).catch(() => ({}) as Record<string, Asset>)
-        if (r[article.cover]) cover = assetRef(r[article.cover])
+        if (r[article.cover]) { cover = assetRef(r[article.cover]); window.dispatchEvent(new Event('assets-changed')) }
+        if (!current()) return
       }
+      if (!current()) return
       const now = Date.now()
       const doc: Doc = { id: newId(), title, author: '', digest: article.digest.slice(0, 120), themeId: 'minimal-magazine', cover, blocks: kept, createdAt: now, updatedAt: now }
       if (asTheme) {
@@ -127,9 +147,14 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
         await api.saveTheme(t)
         registerTheme(t)
         refreshThemes()
+        if (!current()) return
         doc.themeId = t.id
       }
-      if (asTemplate) await api.saveTemplate(templateName || title || '导入的推文模板', kept, doc)
+      if (asTemplate) {
+        await api.saveTemplate(templateName || title || '导入的推文模板', kept, doc)
+        window.dispatchEvent(new Event('templates-changed'))
+        if (!current()) return
+      }
       let added = 0
       let repeated = 0
       if (asComponents) {
@@ -142,20 +167,21 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
           for (const piece of componentPieces(html, b.props.label, parse)) {
             const block = createBlock('html', { html: piece.html, label: piece.label, source })
             const r = await api.saveComponent(makeDraft({ name: piece.label, block, source, via: 'import', attested: authorized }, parse))
+            if (!current()) { window.dispatchEvent(new Event('components-changed')); return }
             if (r.duplicate) repeated++
             else added++
           }
         }
         window.dispatchEvent(new Event('components-changed'))
       }
-      await saveNow()
-      load(doc)
-      await saveNow()
-      window.dispatchEvent(new Event('templates-changed'))
+      if (!current() || !await saveBeforeLeave() || !current()) return
+      if (!loadIfUnchanged(doc, expected)) return
+      if (!await saveNow()) return
       const parts = [`已导入 ${kept.length} 个原文片段`, asTemplate && '并保存为模板', asComponents && `新增 ${added} 个组件${repeated ? `（${repeated} 个结构重复未收录）` : ''}`, rehostFailed && `${rehostFailed} 张图片转存失败，请在右侧替换`]
       notify(parts.filter(Boolean).join('，'), rehostFailed ? 'error' : 'ok')
       onClose()
-    }, '导入中…')
+    }, '导入中…').finally(() => { importing.current = false })
+  }
 
   if (wizard) return <ImportWizard onClose={onClose} initialText={wizard.text} initialImages={wizard.images} />
 
