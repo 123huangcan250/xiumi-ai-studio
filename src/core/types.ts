@@ -12,6 +12,8 @@ export interface RichNode {
 export type RichText = RichNode // { type: 'doc', content: [...] }
 
 export interface ImageRef {
+  /** Display width (%) inside the existing layout cell, independent of pixel metadata. */
+  displayWidth?: number
   src: string
   assetId?: string
   alt?: string

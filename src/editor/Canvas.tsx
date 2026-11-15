@@ -21,6 +21,7 @@ import { openCollect, setInlineTarget } from './componentActions'
 import { ErrorBoundary } from './ErrorBoundary'
 import { ReplayCanvasBody } from './ReplayPreview'
 import { useStore } from './store'
+import { ImageResize } from './ImageResize'
 
 /** "a:b;c:d" → React style 对象 */
 export function styleObj(s: string): React.CSSProperties {
@@ -516,6 +517,7 @@ export function Canvas() {
   const [zoom, setZoom] = useCanvasZoom()
   return (
     <div className="canvas-wrap">
+      <ImageResize />
       <div className="canvas-scroll" ref={scroller} onClick={() => select(null)} {...photoDrag}>
         <div className="phone" style={zoom === 1 ? undefined : { zoom }} data-zoom={zoom}>
           <div className="phone-head">

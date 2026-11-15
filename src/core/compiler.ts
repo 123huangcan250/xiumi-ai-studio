@@ -1,3 +1,4 @@
+import { applyImageWidths } from './imageResize'
 // 微信 HTML 编译器：文档 JSON → 全内联样式 HTML。
 // 画布、手机预览、复制、草稿箱都使用同一份输出，保证所见即所得。
 import { boxParts, boxTheme, KIT_RENDERERS, KIT_TYPES, kitEmptySlots, type KitCtx } from './kit'
@@ -208,7 +209,7 @@ const R: Renderers = {
     const { t, c } = ctx
     const p = b.props
     const v = p.variant === 'auto' ? t.coverVariant : p.variant
-    const img = p.image ? `<img src="${esc(ctx.img(p.image, '16:10'))}" alt="" style="${css({ width: '100%', display: 'block', 'border-radius': v === 'band' ? 0 : t.imageRadius })}">` : ''
+    const img = p.image ? applyImageWidths(`<img src="${esc(ctx.img(p.image, '16:10'))}" alt="" style="${css({ width: '100%', display: 'block', 'border-radius': v === 'band' ? 0 : t.imageRadius })}">`, p.image) : ''
     const title = (extra: Record<string, any> = {}) =>
       ctx.p(esc(p.title), { 'font-size': t.h1Size, 'font-weight': 700, 'line-height': 1.4, 'font-family': ctx.headingFont, 'letter-spacing': 1, ...extra, 'text-align': p.titleAlign && p.titleAlign !== 'auto' ? p.titleAlign : undefined })
     const sub = (extra: Record<string, any> = {}) => (p.subtitle ? ctx.p(esc(p.subtitle), { color: c.muted, 'font-size': t.fontSize - 1, ...extra }) : '')
@@ -359,7 +360,7 @@ const R: Renderers = {
     const { t, c } = ctx
     const p = b.props
     const img = p.image
-      ? `<img src="${esc(ctx.img(p.image, '3:4', 720))}" alt="" style="${css({ width: '100%', display: 'block', 'border-radius': t.imageRadius })}">`
+      ? applyImageWidths(`<img src="${esc(ctx.img(p.image, '3:4', 720))}" alt="" style="${css({ width: '100%', display: 'block', 'border-radius': t.imageRadius })}">`, p.image)
       : ctx.spacer({ height: 160, 'background-color': c.primarySoft, 'border-radius': t.imageRadius })
     const imgCol = `<section style="${css({ display: 'inline-block', width: '40%', 'vertical-align': 'top', 'box-sizing': 'border-box' })}">${img}</section>`
     const textCol =
@@ -378,7 +379,7 @@ const R: Renderers = {
     const radius = p.variant === 'rounded' ? 12 : t.imageRadius
     // 竖图通栏会占满整屏，裁成 4:5
     const portrait = (p.image.height ?? 0) > (p.image.width ?? 0) * 1.1
-    const img = `<img src="${esc(ctx.img(p.image, portrait ? '4:5' : undefined))}" alt="${esc(p.image.alt ?? '')}" style="${css({ width: '100%', display: 'block', 'border-radius': radius })}">`
+    const img = applyImageWidths(`<img src="${esc(ctx.img(p.image, portrait ? '4:5' : undefined))}" alt="${esc(p.image.alt ?? '')}" style="${css({ width: '100%', display: 'block', 'border-radius': radius })}">`, p.image)
     const framed = p.variant === 'framed'
     const cap = p.caption ? ctx.p(`<span style="${css({ color: c.primary, 'margin-right': 4 })}">▲</span>${esc(p.caption)}`, { 'font-size': t.smallSize, color: c.muted, 'text-align': 'center', 'margin-top': 8 }) : ''
     return framed
@@ -397,7 +398,7 @@ const R: Renderers = {
     const rows: string[] = []
     for (let i = 0; i < p.images.length; i += cols) {
       const cells = p.images.slice(i, i + cols).map((im, j) => {
-        const img = `<img src="${esc(ctx.img(im, fit, cols === 1 ? 1080 : 720))}" alt="" style="${css({ width: '100%', display: 'block', 'border-radius': t.imageRadius })}">`
+        const img = applyImageWidths(`<img src="${esc(ctx.img(im, fit, cols === 1 ? 1080 : 720))}" alt="" style="${css({ width: '100%', display: 'block', 'border-radius': t.imageRadius })}">`, im)
         return `<section style="${css({ display: 'inline-block', width: `${w}%`, 'vertical-align': 'top', 'margin-left': j === 0 ? 0 : `${gapPct}%` })}">${img}</section>`
       })
       const last = i + cols >= p.images.length
@@ -440,7 +441,7 @@ const R: Renderers = {
     const { t, c } = ctx
     const p = b.props
     const avatar = p.image
-      ? `<img src="${esc(ctx.img(p.image, '1:1', 240))}" alt="" style="${css({ width: 64, height: 64, display: 'block', 'border-radius': 999, border: `2px solid ${c.primary}` })}">`
+      ? applyImageWidths(`<img src="${esc(ctx.img(p.image, '1:1', 240))}" alt="" style="${css({ width: 64, height: 64, display: 'block', 'border-radius': 999, border: `2px solid ${c.primary}` })}">`, p.image)
       : `<p style="${css({ margin: 0, width: 64, height: 64, 'line-height': 64, 'border-radius': 999, 'background-color': c.primary, color: '#fff', 'text-align': 'center', 'font-size': 24, 'font-weight': 700 })}">${esc(p.name.slice(0, 1))}</p>`
     return (
       `<section style="${css({ 'background-color': c.surface, 'border-radius': t.radius, padding: 16, border: `1px solid ${c.border}` })}">` +
