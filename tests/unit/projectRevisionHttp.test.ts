@@ -60,3 +60,22 @@ it.each(['null','false','0','[]','"text"','{"id":"other"}'])('refuses existing n
  expect((await put('shape',{title:'blind'})).status).toBe(409)
  expect(await readFile(file,'utf8')).toBe(raw)
 })
+
+it('rejects the old repeated shell seed and accepts the revision-aware fixture writer', async () => {
+ const id='editorial-shell-fixture'
+ const fixture={id,title:'shell fixture',blocks:[]}
+ expect((await put(id,fixture)).status).toBe(200)
+ const initial=await get(id)
+ expect((await put(id,{...fixture,title:'repeat without revision'})).status).toBe(409)
+ expect(await get(id)).toEqual(initial)
+ const { request } = await import('@playwright/test')
+ const client=await request.newContext({baseURL:base})
+ try {
+  const { seedShellProject }=await import('../shell/fixtures/project')
+  const updated=await seedShellProject(client,{...fixture,title:'revision-aware reset'})
+  expect(updated.revision).not.toBe(initial.revision)
+  expect(await get(id)).toMatchObject({title:'revision-aware reset',revision:updated.revision})
+  const created=await seedShellProject(client,{id:'fresh-shell-fixture',title:'fresh seed',blocks:[]})
+  expect(await get('fresh-shell-fixture')).toMatchObject({title:'fresh seed',revision:created.revision})
+ } finally { await client.dispose() }
+})
