@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { loadIfUnchanged } from './documentNavigation'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { buildFromDesign, normalizeDesign, outlineBrief } from '../core/aiDesign'
 import { assemble, kitLevels, type Placement } from '../core/assemble'
 import { normalizeBlocks } from '../core/blocks'
@@ -17,7 +18,7 @@ import { kitCandidates, KitPicker, layoutOptions, resolveKit, useComponents, typ
 import { Modal } from './Modal'
 import { PhotoPlanner, type PhotoGroup } from './PhotoPlanner'
 import { PlanIssues } from './PlanIssues'
-import { saveNow, useStore } from './store'
+import { saveBeforeLeave, useStore } from './store'
 
 const Copywriter = lazy(() => import('./Copywriter').then((m) => ({ default: m.Copywriter })))
 
@@ -75,7 +76,7 @@ const HINTS = ['清华风格，庄重典雅', '科技感，冷静理性', '温�
 
 export function ImportWizard({ onClose, initialText, initialImages, initialTemplates }: { onClose: () => void; initialText?: string; initialImages?: Asset[]; initialTemplates?: string[] }) {
   const themes = useStore((s) => s.themes)
-  const { load, notify } = useStore.getState()
+  const { notify } = useStore.getState()
   const [text, setText] = useState(initialText ?? '')
   const [images, setImages] = useState<Asset[]>(initialImages ?? [])
   const [ai, setAi] = useState<AiStatus | null>(null)
@@ -277,13 +278,38 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
       if (levels > n) notify(`改写后仍有 ${levels} 级标题，可以再点“改为加粗正文”`, 'error')
     }, 'AI 改写中…')
 
+  const choosing = useRef(false)
+  const active = useRef(true)
+  const persisted = useRef(new Map<string, { signature: string; doc: Doc }>())
+  useEffect(() => { active.current = true; return () => { active.current = false } }, [])
+  const persistVariant = async (doc: Doc): Promise<Doc> => {
+    const signature = JSON.stringify({ ...doc, revision: undefined })
+    const previous = persisted.current.get(doc.id)
+    if (previous?.signature === signature) return previous.doc
+    const response = await api.saveProject({ ...doc, revision: previous?.doc.revision ?? doc.revision })
+    const saved = { ...doc, revision: response.revision }
+    persisted.current.set(doc.id, { signature, doc: saved })
+    return saved
+  }
   const choose = async (doc: Doc, all?: Variant[]) => {
-    await saveNow()
-    if (all) for (const v of all) if (v.doc !== doc) await api.saveProject(v.doc)
-    load(doc)
-    await saveNow()
-    notify(all ? `${all.length} 套方案均已保存为项目，可在「项目」中切换` : '已打开所选方案')
-    onClose()
+    if (choosing.current) return
+    choosing.current = true
+    const expected = useStore.getState().doc
+    setBusy('保存方案…')
+    try {
+      if (!await saveBeforeLeave()) return
+      if (!active.current || useStore.getState().doc !== expected) return
+      if (all) for (const v of all) if (v.doc.id !== doc.id) {
+        await persistVariant(v.doc)
+        if (!active.current || useStore.getState().doc !== expected) return
+      }
+      const saved = await persistVariant(doc)
+      if (!active.current || !loadIfUnchanged(saved, expected)) return
+      notify(all ? `${all.length} 套方案均已保存为项目，可在「项目」中切换` : '已打开所选方案')
+      onClose()
+    } catch (error) {
+      if (active.current) notify((error as Error).message, 'error')
+    } finally { choosing.current = false; if (active.current) setBusy('') }
   }
 
   const card = (v: Variant, i: number) => (
@@ -300,7 +326,7 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
       {v.warnings?.map((w) => <p key={w} className="warn">{w}</p>)}
       <MiniPreview doc={v.doc} />
       <p className="hint">{v.doc.blocks.length} 个模块 · {compileDoc(v.doc).charCount.toLocaleString()} 字符</p>
-      <button className="primary wide" onClick={() => choose(v.doc)} data-testid={`choose-${v.key}`}>使用此方案</button>
+      <button className="primary wide" disabled={!!busy} onClick={() => choose(v.doc)} data-testid={`choose-${v.key}`}>使用此方案</button>
     </div>
   )
 
@@ -494,7 +520,7 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
           <h4 className="variants-title">内置版式</h4>
           <div className="variant-grid">{builtin.map(card)}</div>
           <div className="modal-actions">
-            <button onClick={() => choose((tplDocs[0] ?? aiDocs[0] ?? builtin[0]).doc, [...tplDocs, ...aiDocs, ...builtin])}>全部保存为项目，并打开第一套</button>
+            <button disabled={!!busy} onClick={() => choose((tplDocs[0] ?? aiDocs[0] ?? builtin[0]).doc, [...tplDocs, ...aiDocs, ...builtin])}>全部保存为项目，并打开第一套</button>
           </div>
         </div>
       )}
