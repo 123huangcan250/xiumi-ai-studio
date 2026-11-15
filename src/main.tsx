@@ -4,7 +4,7 @@ import App from './App'
 import { ColorModeProvider } from './editor/ColorModeControl'
 import { canvasEnv, setReplayEnv } from './core/replay'
 import { ErrorBoundary } from './editor/ErrorBoundary'
-import { saveNow, useStore } from './editor/store'
+import { saveBeforeLeave, useStore } from './editor/store'
 import './styles.css'
 import './theme/fonts/fonts.css'
 import './help.css'
@@ -19,7 +19,7 @@ function Crashed({ error, reset }: { error: Error; reset: () => void }) {
     <div className="crash">
       <h2>编辑器遇到错误</h2>
       <p>{error.message}</p>
-      <p className="hint">你的内容已自动保存。可以先撤销最近一步操作，或重新加载页面。</p>
+      <p className="hint">尚未确认内容全部保存。请先尝试撤销；重新加载前会再次确认保存结果。</p>
       <div className="row gap">
         <button
           className="primary"
@@ -30,7 +30,7 @@ function Crashed({ error, reset }: { error: Error; reset: () => void }) {
         >
           撤销上一步并恢复
         </button>
-        <button onClick={() => saveNow().finally(() => location.reload())}>重新加载</button>
+        <button onClick={async () => { if (await saveBeforeLeave()) location.reload() }}>重新加载</button>
       </div>
     </div>
   )

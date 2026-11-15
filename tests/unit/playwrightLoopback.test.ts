@@ -32,3 +32,8 @@ it('preserves the separate packaged mode and its launch environment', async () =
   expect(servers[0].env).toEqual({ XIUMI_DATA_DIR: 'data-e2e-pkg', XIUMI_PORT: '5284', XIUMI_NO_BROWSER: '1', XIUMI_NO_PAUSE: '1' })
   expect(servers[0].reuseExistingServer).toBe(false)
 })
+it.each(['', 'packaged'])('retains failure traces without adding retries in %s mode', async target => {
+  const settings = await config(target)
+  expect(settings.use?.trace).toBe('retain-on-failure')
+  expect(settings.retries).toBeUndefined()
+})

@@ -39,6 +39,7 @@ test('三种排版结构不同，且都使用了全部 10 张图', async ({ page
       await page.getByTestId('generate').click()
     }
     await page.getByTestId(`choose-${id}`).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
     await waitSaved(page)
     signatures.push((await blockTypes(page)).join(','))
     await waitImages(page)
@@ -54,6 +55,7 @@ test('三种排版结构不同，且都使用了全部 10 张图', async ({ page
 test('拖拽添加与排序、撤销重做、保存后刷新仍在', async ({ page }) => {
   await importSample(page)
   await page.getByTestId('choose-cards').click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await waitSaved(page)
   const before = await blockTypes(page)
 
@@ -98,6 +100,7 @@ test('拖拽添加与排序、撤销重做、保存后刷新仍在', async ({ pa
 test('导出 Markdown / JSON / HTML，并以富文本复制到剪贴板', async ({ page }) => {
   await importSample(page)
   await page.getByTestId('choose-narrative').click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
   await waitSaved(page)
   await page.getByTestId('open-export').click()
 

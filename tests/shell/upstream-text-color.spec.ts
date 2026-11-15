@@ -1,5 +1,6 @@
 // 文字颜色：正文富文本选中文字改色，原文片段按行改色，默认颜色可恢复
 import { expect, test, type Page } from '@playwright/test'
+import { seedShellProject } from './fixtures/project'
 
 test.beforeEach(async ({page}) => { await page.addInitScript(() => localStorage.setItem('xiumi-color-mode','dark')) })
 
@@ -8,8 +9,7 @@ const rich = (text: string) => ({ type: 'doc', content: [{ type: 'paragraph', co
 async function seed(page: Page, name: string, blocks: unknown[]) {
   const now = Date.now()
   const id = `color-${now}-${Math.floor(Math.random() * 1e6)}`
-  const res = await page.request.put(`/api/projects/${id}`, { data: { id, title: name, author: '', digest: '', themeId: 'minimal-magazine', createdAt: now, updatedAt: now, blocks } })
-  expect(res.ok(), await res.text()).toBe(true)
+  await seedShellProject(page.request, { id, title: name, author: '', digest: '', themeId: 'minimal-magazine', createdAt: now, updatedAt: now, blocks })
   await page.goto('/')
   await page.reload()
   await expect(page.locator('.title-input')).toHaveValue(name)

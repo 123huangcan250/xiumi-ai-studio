@@ -1,16 +1,26 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type APIRequestContext } from '@playwright/test'
+import { seedShellProject } from './fixtures/project'
 import { mkdirSync, writeFileSync } from 'node:fs'
 const phase=process.env.SHELL_PHASE??'before'
 const dir='visual-evidence/editorial-shell'
 const title='计算机系统概论：从逻辑门到程序执行的完整学习笔记'
 const rich=(text:string)=>({type:'doc',content:[{type:'paragraph',content:[{type:'text',text}]}]})
 const blocks=[{id:'heading',type:'heading',props:{index:'01',title:'计算机如何理解一条指令',subtitle:'Computer Systems / 2026',variant:'number'}},...Array.from({length:18},(_,i)=>({id:'paragraph-'+i,type:'paragraph',props:{content:rich('第'+(i+1)+'节：计算机系统由硬件与软件共同构成。处理器从内存读取指令，解释操作码，然后执行运算并保存结果。理解数据的表示、存储层次和程序运行过程，有助于把抽象算法与真实机器联系起来。Memory 1024 / CPU 64-bit。'),align:'justify'}}))]
-test.beforeEach(async({page})=>{ const r=await page.request.put('/api/projects/editorial-shell-fixture',{data:{id:'editorial-shell-fixture',title,author:'示例作者',digest:'仅用于隔离视觉验收',themeId:'minimal-magazine',createdAt:1,updatedAt:Date.now(),blocks}});expect(r.ok()).toBeTruthy() })
+const fixtureId='editorial-shell-fixture'
+const seed = () => ({id:fixtureId,title,author:'示例作者',digest:'仅用于隔离视觉验收',themeId:'minimal-magazine',createdAt:1,updatedAt:Date.now(),blocks})
+async function expectActiveSeed(request: APIRequestContext) {
+ const list=await request.get('/api/projects')
+ expect(list.status()).toBe(200)
+ expect((await list.json())[0]?.id).toBe(fixtureId)
+}
+test.beforeEach(async({page})=>{
+ await seedShellProject(page.request,seed())
+ await expectActiveSeed(page.request)
+})
 
 test('same fixture visual evidence',async({page})=>{
  mkdirSync(dir,{recursive:true})
- const seed={id:'editorial-shell-fixture',title,author:'示例作者',digest:'仅用于隔离视觉验收',themeId:'minimal-magazine',createdAt:1,updatedAt:Date.now(),blocks}
- const res=await page.request.put('/api/projects/'+seed.id,{data:seed});expect(res.ok()).toBeTruthy()
+ await seedShellProject(page.request,seed())
  await page.addInitScript(()=>{localStorage.setItem('xiumi-color-mode','dark');localStorage.removeItem('xiumi-panel-widths');localStorage.removeItem('xiumi-canvas-zoom')})
  await page.goto('/');await expect(page.locator('.title-input')).toHaveValue(title)
  await expect(page.locator('[data-block-id="paragraph-0"]')).toBeVisible()
@@ -133,7 +143,8 @@ test('upstream quit flow remains accessible and saves before isolated quit',asyn
 
 test('authored heading paragraph HTML and code retain computed presentation and export',async({page})=>{
  const special={id:'editorial-shell-fixture',title,author:'',digest:'',themeId:'minimal-magazine',createdAt:1,updatedAt:Date.now(),blocks:[...blocks,{id:'authored-code',type:'html',props:{label:'Authored HTML',html:'<section style="background:#faf5e9;color:#302c28;font-family:Georgia,serif;font-size:17px"><p>原文 HTML 与 code 2048</p><code style="font-family:monospace;font-size:16px;color:#124820;background:#e1f2dc">const n = 2048</code></section>'}}]}
- expect((await page.request.put('/api/projects/'+special.id,{data:special})).ok()).toBeTruthy()
+ await seedShellProject(page.request,special)
+ await expectActiveSeed(page.request)
  await page.addInitScript(()=>localStorage.setItem('xiumi-color-mode','light'))
  await page.goto('/');await expect(page.locator('[data-block-id="authored-code"]')).toBeVisible()
  const capture=()=>page.locator('.phone .block-html, .phone .block-html *').evaluateAll(nodes=>nodes.map(node=>{const s=getComputedStyle(node);return {html:node.innerHTML,font:s.fontFamily,size:s.fontSize,color:s.color,background:s.backgroundColor}}))

@@ -43,6 +43,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
     ...devices['Desktop Chrome'],
+    trace: 'retain-on-failure',
     baseURL: packaged ? 'http://127.0.0.1:5284' : 'http://127.0.0.1:5273',
     // Test-only determinism: product automatic day/night mode remains unchanged.
     storageState: { cookies: [], origins: [{ origin: packaged ? 'http://127.0.0.1:5284' : 'http://127.0.0.1:5273', localStorage: [{ name: 'xiumi-color-mode', value: 'light' }] }] },

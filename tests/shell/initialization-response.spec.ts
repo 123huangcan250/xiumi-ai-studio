@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test'
+import { seedShellProject } from './fixtures/project'
 
 test('failed success-body read never persists an empty project and reload recovers the seed', async ({ page }) => {
   const id = `body-boundary-${Date.now()}`
   const title = '初始化响应中断后仍恢复原文稿'
   const now = Date.now()
-  expect((await page.request.put('/api/projects/' + id, { data: { id, title, author: '', digest: '', themeId: 'minimal-magazine', createdAt: now, updatedAt: now, blocks: [] } })).ok()).toBeTruthy()
+  await seedShellProject(page.request, { id, title, author: '', digest: '', themeId: 'minimal-magazine', createdAt: now, updatedAt: now, blocks: [] })
   const before = await (await page.request.get('/api/projects')).json()
   await page.addInitScript(() => {
     const original = window.fetch.bind(window)
