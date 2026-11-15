@@ -4,6 +4,7 @@ import { boxParts, boxTheme, KIT_RENDERERS, KIT_TYPES, kitEmptySlots, type KitCt
 import { renderReplay, type ReplayOutput } from './replay/render'
 import { guardHtml } from './sanitize'
 import { css, esc, safeColor } from './style'
+import { safeTextFont, safeTextSize } from './textTypography'
 import { resolveTheme } from './themes'
 import { flatBlocks } from './tree'
 import type { Block, Doc, ImageRef, RichNode, RichText, Theme } from './types'
@@ -140,7 +141,9 @@ function renderInline(n: RichNode, ctx: Ctx, textHtml: string): string {
         break
       case 'textStyle': {
         const color = safeColor(m.attrs?.color)
-        if (color) html = `<span style="${css({ color })}">${html}</span>`
+        const fontFamily = safeTextFont(m.attrs?.fontFamily)
+        const fontSize = safeTextSize(m.attrs?.fontSize)
+        if (color || fontFamily || fontSize) html = `<span style="${css({ color, 'font-family': fontFamily, 'font-size': fontSize })}">${html}</span>`
         break
       }
       case 'link':
