@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { zipSync } from 'fflate'
 import sharp from 'sharp'
+import { sharpNativePackage } from './verifyPackageNative'
 
 const ROOT = join(import.meta.dirname, '..')
 const VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version
@@ -135,7 +136,8 @@ console.log(`程序位置：${DIR}\n数据位置：${DATA}\nPATH 已去掉 Node.
 // ---------- 第一次启动 ----------
 const a = await start()
 await check('zip 解压后文件齐全，exe 带版本信息', () => {
-  for (const f of ['XIUMI AI Studio.exe', '使用说明.txt', 'THIRD_PARTY_NOTICES.md', 'app/server.cjs', 'app/dist/index.html', 'app/samples/activity.txt', 'app/node_modules/@img/sharp-win32-x64/package.json', 'app/licenses/THIRD_PARTY_LICENSES.txt', 'app/licenses/Node.js-LICENSE.txt']) assert(existsSync(join(DIR, f)), `缺少 ${f}`)
+  for (const f of ['XIUMI AI Studio.exe', '使用说明.txt', 'THIRD_PARTY_NOTICES.md', 'app/server.cjs', 'app/dist/index.html', 'app/samples/activity.txt', 'app/licenses/THIRD_PARTY_LICENSES.txt', 'app/licenses/Node.js-LICENSE.txt']) assert(existsSync(join(DIR, f)), `缺少 ${f}`)
+  assert(existsSync(sharpNativePackage(DIR)), '缺少可从打包 Sharp 解析的原生依赖')
   const v = execFileSync('powershell', ['-NoProfile', '-Command', '(Get-Item -LiteralPath $env:XEXE).VersionInfo.ProductName + " " + (Get-Item -LiteralPath $env:XEXE).VersionInfo.FileVersion'], { env: { ...process.env, XEXE: EXE }, encoding: 'utf8' }).trim()
   assert(v.startsWith('XIUMI AI Studio'), v)
   return v
