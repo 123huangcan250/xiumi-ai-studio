@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { compileDoc, variantUrl } from '../core/compiler'
 import { docToMarkdown } from '../core/exporters'
 import { displayHtml } from '../core/images'
@@ -7,7 +7,7 @@ import { AiSettingsModal } from './AiSettingsModal'
 import { api, type AppInfo, type VersionSummary } from './api'
 import { DataModal } from './DataModal'
 import { Modal } from './Modal'
-import { flushSave, normalizeDoc, saveNow, useStore } from './store'
+import { flushSave, normalizeDoc, saveConflictCopy, saveNow, useStore } from './store'
 import { assertReplayOk, compileForWechat, copyRichText, download, standaloneHtml, xiumiPackage, prepareXiumiUpload, type ImageMode } from './wechatOutput'
 
 const ArticleImportModal = lazy(() => import('./ArticleImport').then((m) => ({ default: m.ArticleImportModal })))
@@ -26,24 +26,61 @@ export function PhonePreview({ html, title, onClose }: { html: string; title: st
 }
 
 function VersionsModal({ onClose }: { onClose: () => void }) {
+  const active = useRef(true)
+  const request = useRef(0)
+  const listRequest = useRef(0)
+  const contextVersion = useRef(0)
+  const saving = useRef(false)
+  const [saveBusy, setSaveBusy] = useState(false)
+  useEffect(() => { active.current = true; return () => { active.current = false } }, [])
+  useEffect(() => useStore.subscribe((next, previous) => {
+    if (next.doc !== previous.doc) ++contextVersion.current
+  }), [])
   const doc = useStore((s) => s.doc)
   const { commit, notify } = useStore.getState()
   const [list, setList] = useState<VersionSummary[]>([])
-  const refresh = () => api.versions(doc.id).then(setList).catch(() => {})
+  const refresh = async (id = doc.id) => {
+    const generation = ++listRequest.current
+    try {
+      const versions = await api.versions(id)
+      if (active.current && generation === listRequest.current && useStore.getState().doc.id === id) setList(versions)
+    } catch (error) {
+      if (active.current && generation === listRequest.current && useStore.getState().doc.id === id) notify(`加载版本列表失败：${error instanceof Error ? error.message : String(error)}`, 'error')
+    }
+  }
   useEffect(() => {
-    refresh()
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    setList([])
+    void refresh(doc.id)
+    return () => { ++listRequest.current }
+  }, [doc.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const saveVersion = async () => {
+    if (saving.current || !active.current) return
+    const expected = useStore.getState().doc
+    const expectedVersion = contextVersion.current
+    if (expected !== doc) return
+    saving.current = true
+    try {
+      const label = prompt('版本说明', `手动保存 ${new Date().toLocaleTimeString()}`)
+      if (label === null || !active.current || contextVersion.current !== expectedVersion || useStore.getState().doc !== expected) return
+      setSaveBusy(true)
+      await api.saveVersion(expected, label || '手动保存')
+      if (active.current && contextVersion.current === expectedVersion && useStore.getState().doc === expected) {
+        notify('版本已保存')
+        void refresh(expected.id)
+      }
+    } catch (error) {
+      if (active.current && contextVersion.current === expectedVersion && useStore.getState().doc === expected) notify(error instanceof Error ? error.message : String(error), 'error')
+    } finally {
+      saving.current = false
+      if (active.current) setSaveBusy(false)
+    }
+  }
   return (
     <Modal title="历史版本" onClose={onClose}>
       <button
         className="primary wide"
-        onClick={async () => {
-          const label = prompt('版本说明', `手动保存 ${new Date().toLocaleTimeString()}`)
-          if (label === null) return
-          await api.saveVersion(doc, label || '手动保存')
-          refresh()
-          notify('版本已保存')
-        }}
+        disabled={saveBusy}
+        onClick={saveVersion}
       >
         保存当前为新版本
       </button>
@@ -56,10 +93,23 @@ function VersionsModal({ onClose }: { onClose: () => void }) {
           </div>
           <button
             onClick={async () => {
-              const { doc: old } = await api.version(doc.id, v.id)
-              commit(normalizeDoc({ ...old, id: doc.id }))
-              notify(`已恢复「${v.label}」`)
-              onClose()
+              const expected = useStore.getState().doc
+              if (!active.current || expected !== doc) return
+              const generation = ++request.current
+              const expectedVersion = contextVersion.current
+              try {
+                const { doc: old } = await api.version(doc.id, v.id)
+                if (!active.current || generation !== request.current) return
+                if (contextVersion.current !== expectedVersion || useStore.getState().doc !== expected) {
+                  notify('等待期间文稿已变化，未覆盖新编辑。请重试恢复。', 'error')
+                  return
+                }
+                commit(normalizeDoc({ ...old, id: doc.id }))
+                notify(`已恢复「${v.label}」`)
+                onClose()
+              } catch (error) {
+                if (active.current && generation === request.current && contextVersion.current === expectedVersion && useStore.getState().doc === expected) notify(error instanceof Error ? error.message : String(error), 'error')
+              }
             }}
           >
             恢复
@@ -270,6 +320,7 @@ export function Toolbar() {
   const doc = useStore((s) => s.doc)
   const saveStatus = useStore((s) => s.saveStatus)
   const saveError = useStore((s) => s.saveError)
+  const saveConflict = useStore((s) => s.saveConflict)
   const canUndo = useStore((s) => s.past.length > 0)
   const canRedo = useStore((s) => s.future.length > 0)
   const { undo, redo, setDocFields } = useStore.getState()
@@ -317,6 +368,7 @@ export function Toolbar() {
       <span className={`save ${saveStatus}`} title={saveError} data-testid="save-status">
         {{ saved: '已保存', dirty: '未保存', saving: '保存中…', error: '保存失败' }[saveStatus]}
       </span>
+      {saveConflict && <button onClick={() => void saveConflictCopy()} data-testid="save-conflict-copy">另存冲突副本</button>}
       <div className="spacer" />
       <button onClick={undo} disabled={!canUndo} title="撤销 Ctrl+Z">↶ 撤销</button>
       <button onClick={redo} disabled={!canRedo} title="重做 Ctrl+Y">↷ 重做</button>
