@@ -1,3 +1,5 @@
+import { guardedHtml } from './htmlGuard'
+
 // 原文 HTML 清洗：用于导入公众号推文和“原文片段”模块的就地编辑。
 // 白名单保留标签与内联样式，移除脚本、事件、class/id、隐藏元素与外部资源；
 // 图片统一为 https 的微信图片地址（data-src 懒加载 → src）。
@@ -20,6 +22,9 @@ const WX_WIDGETS: Record<string, string> = {
 }
 const ATTRS = new Set(['style', 'src', 'href', 'alt', 'colspan', 'rowspan', 'width', 'height', 'align', 'valign', 'color', 'size', 'face'])
 const SVG_ATTR_BAD = /^on|^(href|xlink:href)$/i
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const SVG_ANIMATIONS = new Set(['animate', 'animatetransform', 'animatemotion', 'set'])
+const SVG_IMPORT_ID = /^[A-Za-z_][\w.:-]*$/
 
 const isWxImage = (u: string) => /^https?:\/\/[^/]*(qpic\.cn|qlogo\.cn)\//i.test(u)
 /** 秀米图床：官方说明外站请求会被拦截，导入时要转存到本地，所以清洗阶段先保留地址 */
@@ -81,7 +86,7 @@ function isHidden(el: Element) {
 }
 
 /** 原地清洗 DOM 子树 */
-export function sanitizeTree(root: Element) {
+export function sanitizeTree(root: Element, { articleSvgAnimations = false } = {}) {
   const doc = root.ownerDocument
   const walk = (el: Element, inSvg: boolean) => {
     for (const child of Array.from(el.children)) {
@@ -103,9 +108,12 @@ export function sanitizeTree(root: Element) {
           child.remove()
           continue
         }
+        const preserveAnimationReferences = articleSvgAnimations && child.namespaceURI === SVG_NS
         for (const a of Array.from(child.attributes)) {
-          if (SVG_ATTR_BAD.test(a.name) && !(a.name.endsWith('href') && isKnownImage(normalizeImg(a.value)))) child.removeAttribute(a.name)
-          else if (a.name === 'class' || a.name === 'id') child.removeAttribute(a.name)
+          const localAnimationTarget = preserveAnimationReferences && SVG_ANIMATIONS.has(tag)
+            && a.name.endsWith('href') && a.value.startsWith('#') && SVG_IMPORT_ID.test(a.value.slice(1))
+          if (SVG_ATTR_BAD.test(a.name) && !localAnimationTarget && !(a.name.endsWith('href') && isKnownImage(normalizeImg(a.value)))) child.removeAttribute(a.name)
+          else if (a.name === 'class' || (a.name === 'id' && !(preserveAnimationReferences && SVG_IMPORT_ID.test(a.value)))) child.removeAttribute(a.name)
           else if (a.name === 'style') child.setAttribute('style', cleanStyle(a.value))
         }
         // foreignObject 内部是 HTML（秀米等编辑器的 SVG 版式把标题文字放在这里），按 HTML 规则清洗
@@ -173,12 +181,7 @@ export function sanitizeHtml(html: string, parse: (s: string) => Document): stri
   return root.innerHTML
 }
 
-/** 编译阶段的最后防线（字符串级）：即使存储的数据被篡改也不会输出脚本 */
+/** Final parse-based boundary for stored HTML; imported layout normalization remains separate. */
 export function guardHtml(html: string): string {
-  return html
-    .replace(/<(script|style|iframe|object|embed)[\s\S]*?<\/\1\s*>/gi, '')
-    .replace(/<(script|style|iframe|object|embed)\b[^>]*>/gi, '')
-    // id 保留：SVG 互动（“开始阅读”统一触发、↻ 重播）要用 begin="某id.click"，秀米和公众号实测会保留 id
-    .replace(/\s(on\w+|class)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/javascript:/gi, '')
+  return guardedHtml(html)
 }
