@@ -96,7 +96,8 @@ export function extractArticle(doc: Document, url = ''): ImportedArticle {
   const page = doc.querySelector('#js_content') ? null : pageBody(doc)
   const content = doc.querySelector('#js_content') ?? doc.querySelector('.rich_media_content') ?? page?.content ?? doc.body
   const root = content.cloneNode(true) as Element
-  sanitizeTree(root)
+  // The output guard resolves these references only against the purified article being exported.
+  sanitizeTree(root, { articleSvgAnimations: true })
   stripFrame(root)
   showFadedLayers(root)
   const scriptTitle = doc.documentElement.innerHTML.match(/var\s+msg_title\s*=\s*['"]([^'"]+)['"]/)?.[1]
