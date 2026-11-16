@@ -1,3 +1,4 @@
+import { THEMES } from '../src/core/themes'
 import { safeProviderError } from './providerError'
 // AI 提供方抽象：OpenAI 兼容接口（DeepSeek / 通义 / Kimi / 智谱 / MiniMax / MiMo / 豆包 / OpenAI / Gemini / Ollama…）或 Anthropic。
 // 密钥只在服务端读取；所有输出都要求是 JSON，再由调用方校验。
@@ -294,7 +295,8 @@ frame{caption,label,variant:flag|circuit|ticket}（图片框）
 photos{pics:[{caption}],layout:even|feature}（双图 / 三图 / 四图；pics 只能改图注）
 规则：不得编造事实；修改正文时保留原意；操作尽量少而精准。
 字段类型：除 columns 为数字 1-3 外，所有字段值都必须是字符串（例如 index 写 "01" 而不是 1）；items、headers、rows、pics 为数组；不要输出 image、images、html、children 字段。
-原文片段（type=html，导入推文的原版式）：只能修改文字，不能插入新的原文片段、不能改结构和样式。上下文里的 slots 列出了它的文字槽位，修改方式：{"op":"update","id":模块id,"slots":{"t0":"新文字","t2":"新文字"},"reason":"原因"}。同一个片段的所有改动合并在一条 update 里；带 max 的槽位在图形里，字数不能超过 max；写 "" 会删掉这一行。
+原文片段（type=html，导入推文的原版式）：支持文字槽位修改和显式主题适配，不允许输出任意 HTML 或删除内容来假装重做。用户明确要求全文或所选模块统一视觉主题时，必须对范围内每个原文片段输出 {"op":"update","id":模块id,"themeId":目标主题id,"reason":"统一主题配色与文字层级，保留全部文字、图片及结构"}；全文范围可另输出 setTheme，不能只 setTheme 就声称原文片段已改好。主题适配由应用安全计算配色、标题字体和正文排版，可与 slots 合并在同一条 update。它保留布局结构，不会重绘照片、位图内文字或SVG几何，不能承诺这些内容已改变。可用主题：${THEMES.map(t => `${t.id}（${t.name}）`).join("、")}。上下文里的 slots 列出了它的文字槽位，修改方式：{"op":"update","id":模块id,"slots":{"t0":"新文字","t2":"新文字"},"reason":"原因"}。同一个片段的所有改动合并在一条 update 里；带 max 的槽位在图形里，字数不能超过 max；写 "" 会删掉这一行。
+用户明确要求重做模块、重排或改变布局时，HTML 的 update 必须同时给 themeId 和 layout:"editorial"（连续编辑式分段）或 layout:"chapters"（按标题分章）。不要仅 setTheme 或仅换颜色字体冒充结构重做。例：{"op":"update","id":"原模块id","themeId":"tsinghua-purple","layout":"chapters","reason":"按章节重新组织全文"}。布局由本地确定性转换生成，保留全部文字、图片、链接及阅读顺序。表格、SVG、背景图片和复杂定位结构以完整原子区块保留；仅其余安全段落重排，必须明确不能承诺所有复杂控件都重新绘制。完全无法安全拆分的片段会拒绝重排，不能宣称已完成。结构重排不改变图片像素内容。
 输出 JSON：{"summary":"一句话说明做了什么","ops":[...]}`
 
 export const COPY_SYSTEM = `你是高校公众号的资深主笔，写的活动推文读起来像一个在现场的人写的，而不是机器生成的。根据用户给的活动描述，写一篇完整的推文文案。

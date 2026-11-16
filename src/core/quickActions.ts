@@ -92,7 +92,7 @@ export function aiContext(doc: Doc, focusId?: string | string[] | null) {
   const block = (b: Block, index: number): Record<string, unknown> => {
     // 原文片段只给文字槽位，AI 按槽位修改
     if (b.type === 'html') {
-      const slots = extractSlots(b.props.html).flatMap((s) => (s.kind === 'text' ? [{ id: s.id, role: s.role, text: s.text.slice(0, 300), ...(s.tight && { max: s.max }) }] : []))
+      const slots = extractSlots(b.props.html).flatMap((s) => (s.kind === 'text' ? [{ id: s.id, role: s.role, text: s.text, ...(s.tight && { max: s.max }) }] : []))
       return { index, id: b.id, type: b.type, props: { label: b.props.label, slots } }
     }
     const p: any = { ...b.props }

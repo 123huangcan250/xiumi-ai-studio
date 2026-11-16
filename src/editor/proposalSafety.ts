@@ -43,6 +43,7 @@ export function prepareProposalItem(proposal: Proposal, doc: Doc, index: number)
     if (original.op !== 'update') {
       if (!same(before, current)) return { error: changed }
     } else if (before.type === 'html' && current.type === 'html') {
+      if ((original.themeId || original.layout) && before.props.html !== current.props.html) return { error: changed }
       // skeleton preserves styling/color and topology. Slot text IDs must still match.
       const a = slotRawTexts(before.props.html), b = slotRawTexts(current.props.html)
       if (skeleton(before.props.html) !== skeleton(current.props.html) || !same(Object.keys(a), Object.keys(b)) ||
