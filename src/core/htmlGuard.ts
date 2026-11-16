@@ -4,6 +4,7 @@ import type { Config, UponSanitizeElementHook } from 'dompurify'
 const SVG = 'http://www.w3.org/2000/svg'
 const animations = new Set(['animate', 'animatetransform', 'animatemotion', 'set'])
 const numericAttributes = new Set(['opacity', 'fill-opacity', 'stroke-opacity', 'transform', 'x', 'y', 'cx', 'cy', 'r', 'rx', 'ry', 'width', 'height', 'stroke-width', 'stroke-dashoffset', 'stroke-dasharray'])
+const visibilityValues = new Set(['visible', 'hidden', 'collapse'])
 const colorAttributes = new Set(['fill', 'stroke', 'color', 'stop-color', 'flood-color', 'lighting-color'])
 const config: Config = {
   ADD_TAGS: ['foreignObject', 'use', ...animations],
@@ -29,7 +30,9 @@ function valuesSafe(el: Element, attribute: string): boolean {
   for (const name of ['values', 'from', 'to', 'by']) {
     const value = el.getAttribute(name)
     if (value === null) continue
-    if (colorAttributes.has(attribute)) {
+    if (attribute === 'visibility') {
+      if (name === 'by' || !(name === 'values' ? value.split(';') : [value]).every(v => visibilityValues.has(v.trim()))) return false
+    } else if (colorAttributes.has(attribute)) {
       if (!value.split(';').every(v => color(v, el.ownerDocument))) return false
     } else if (!numeric(value)) return false
   }
@@ -51,13 +54,23 @@ function uniqueIds(root: DocumentFragment): Map<string, Element> {
   return ids
 }
 const clock = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:h|min|s|ms)?$/i
-function timingSafe(value: string, ids: Map<string, Element>): boolean {
-  return value.split(';').every(raw => {
+function timingTargets(value: string, resolve: (id: string) => Element | undefined): Element[] | null {
+  const targets: Element[] = []
+  for (const raw of value.split(';')) {
     const term = raw.trim()
-    if (term === 'indefinite' || clock.test(term) || /^\d+:\d{2}(?::\d{2})?(?:\.\d+)?$/.test(term)) return true
-    const match = /^(.*)\.(click|begin|end)([+-].+)?$/.exec(term)
-    return !!match && ids.has(match[1]) && (!match[3] || clock.test(match[3]))
-  })
+    if (term === 'indefinite' || clock.test(term) || /^\d+:\d{2}(?::\d{2})?(?:\.\d+)?$/.test(term)) continue
+    if (/^(?:click|touchstart)(?:[+-].+)?$/.test(term)) {
+      const offset = term.replace(/^(?:click|touchstart)/, '')
+      if (offset && !clock.test(offset)) return null
+      continue
+    }
+    const match = /^(.*)\.(click|touchstart|begin|end)([+-].+)?$/.exec(term)
+    if (!match || (match[3] && !clock.test(match[3]))) return null
+    const target = resolve(match[1])
+    if (!target) return null
+    targets.push(target)
+  }
+  return targets
 }
 function localTarget(value: string, ids: Map<string, Element>): Element | undefined {
   return value.startsWith('#') ? ids.get(value.slice(1)) : undefined
@@ -70,24 +83,34 @@ const animationPolicy: UponSanitizeElementHook = (node, data) => {
     const value = el.getAttribute(name)
     return value !== null && !value.startsWith('#')
   })
-  if (el.namespaceURI !== SVG || remoteTarget || (data.tagName !== 'animatemotion' && !numericAttributes.has(attribute) && !colorAttributes.has(attribute)) || !valuesSafe(el, attribute)) el.remove()
+  const visible = attribute === 'visibility' && (data.tagName === 'set' || data.tagName === 'animate')
+  if (el.namespaceURI !== SVG || remoteTarget || (data.tagName !== 'animatemotion' && !visible && !numericAttributes.has(attribute) && !colorAttributes.has(attribute)) || !valuesSafe(el, attribute)) el.remove()
 }
-function pruneReferences(root: DocumentFragment, ids: Map<string, Element>): void {
-  // Reverse dependencies propagate removals without repeatedly scanning the whole tree.
-  const dependents = new Map<string, Set<() => void>>()
-  const removed: string[] = []
+
+interface ReferencePruning {
+  articleIds: Map<string, Element> | undefined
+  dependents: Map<Element, Set<() => void>>
+  removed: Set<Element>
+}
+function pruneReferences(root: DocumentFragment, ids: Map<string, Element>, { articleIds, dependents, removed }: ReferencePruning): void {
+  // Only SVG animation references may leave their fragment, and only within the purified article.
+  const animationTarget = (id: string) => {
+    if (!articleIds) return ids.get(id)
+    const target = articleIds.get(id)
+    return target && (ids.get(id) === target || target.namespaceURI === SVG) && !removed.has(target) ? target : undefined
+  }
   const removeNode = (el: Element) => {
     if (!root.contains(el)) return
     for (const node of [el, ...el.querySelectorAll('[id]')]) {
       const id = node.getAttribute('id')
-      if (id && ids.get(id) === node) { ids.delete(id); removed.push(id) }
+      if (id && ids.get(id) === node) { ids.delete(id); removed.add(node) }
     }
     el.remove()
   }
-  const depend = (id: string, invalid: () => void) => {
-    if (!ids.has(id)) { invalid(); return }
-    const callbacks = dependents.get(id) ?? new Set<() => void>()
-    callbacks.add(invalid); dependents.set(id, callbacks)
+  const depend = (target: Element | undefined, invalid: () => void) => {
+    if (!target || removed.has(target)) { invalid(); return }
+    const callbacks = dependents.get(target) ?? new Set<() => void>()
+    callbacks.add(invalid); dependents.set(target, callbacks)
   }
   for (const el of root.querySelectorAll('*')) {
     if (!root.contains(el)) continue
@@ -97,26 +120,25 @@ function pruneReferences(root: DocumentFragment, ids: Map<string, Element>): voi
       const value = el.getAttribute(name)
       if (value === null) continue
       if (animation || (el.namespaceURI === SVG && el.localName === 'use')) {
-        if (localTarget(value, ids)?.namespaceURI !== SVG) { remove(); break }
-        depend(value.slice(1), remove)
-      } else if (value.startsWith('#')) depend(value.slice(1), () => el.removeAttribute(name))
+        const target = animation && value.startsWith('#') ? animationTarget(value.slice(1)) : localTarget(value, ids)
+        if (target?.namespaceURI !== SVG) { remove(); break }
+        depend(target, remove)
+      } else if (value.startsWith('#')) depend(localTarget(value, ids), () => el.removeAttribute(name))
     }
     if (!root.contains(el)) continue
     if (animation) {
       for (const name of ['begin', 'end']) {
         const value = el.getAttribute(name)
         if (value === null) continue
-        if (!timingSafe(value, ids)) { remove(); break }
-        for (const term of value.split(';')) {
-          const match = /^(.*)\.(click|begin|end)([+-].+)?$/.exec(term.trim())
-          if (match) depend(match[1], remove)
-        }
+        const targets = timingTargets(value, animationTarget)
+        if (!targets) { remove(); break }
+        for (const target of targets) depend(target, remove)
       }
     }
     for (const name of ['fill', 'stroke', 'clip-path', 'mask', 'filter']) {
       const value = el.getAttribute(name) ?? ''
       for (const ref of value.matchAll(/url\(\s*(?:(["'])#([^"']+)\1|#([^\s)]+))\s*\)/gi)) {
-        depend(ref[2] ?? ref[3], () => {
+        depend(ids.get(ref[2] ?? ref[3]), () => {
           const remaining = (el.getAttribute(name) ?? '').split(ref[0]).join('').trim()
           if (remaining) el.setAttribute(name, remaining)
           else el.removeAttribute(name)
@@ -126,7 +148,7 @@ function pruneReferences(root: DocumentFragment, ids: Map<string, Element>): voi
       const styled = style?.getPropertyValue(name)
       if (styled) {
         for (const ref of styled.matchAll(/url\(\s*(?:(["'])#([^"']+)\1|#([^\s)]+))\s*\)/gi)) {
-          depend(ref[2] ?? ref[3], () => {
+          depend(ids.get(ref[2] ?? ref[3]), () => {
             const remaining = style.getPropertyValue(name).split(ref[0]).join('').trim()
             if (remaining) style.setProperty(name, remaining, style.getPropertyPriority(name))
             else style.removeProperty(name)
@@ -135,20 +157,39 @@ function pruneReferences(root: DocumentFragment, ids: Map<string, Element>): voi
       }
     }
   }
-  for (let index = 0; index < removed.length; index++) {
-    for (const invalid of dependents.get(removed[index]) ?? []) invalid()
-  }
 }
 
-/** Parse first. Policy only removes nodes/attributes; a final purification protects the reparse boundary. */
-export function guardedHtml(html: string): string {
+/** Resolve animation references across independently purified fragments of one article. */
+export function guardedHtmlFragments(html: readonly string[]): string[] {
   // The hook sees parsed values before DOMPurify removes unsafe attributes: do not silently retarget an invalid animation.
   DOMPurify.addHook('uponSanitizeElement', animationPolicy)
   try {
-    const fragment = DOMPurify.sanitize(html, { ...config, RETURN_DOM_FRAGMENT: true })
-    pruneReferences(fragment, uniqueIds(fragment))
-    return DOMPurify.sanitize(fragment, config)
+    const fragments = html.map(part => DOMPurify.sanitize(part, { ...config, RETURN_DOM_FRAGMENT: true }))
+    const localIds = fragments.map(uniqueIds)
+    const articleIds = fragments.length > 1 ? new Map<string, Element>() : undefined
+    if (articleIds) {
+      const seen = new Set<string>()
+      for (const ids of localIds) {
+        for (const [id, node] of ids) {
+          if (seen.has(id)) articleIds.delete(id)
+          else articleIds.set(id, node)
+          seen.add(id)
+        }
+      }
+    }
+    const scope: ReferencePruning = { articleIds, dependents: new Map(), removed: new Set() }
+    fragments.forEach((fragment, index) => pruneReferences(fragment, localIds[index], scope))
+    // Iterating a Set also visits targets removed by a dependent callback during this pass.
+    for (const target of scope.removed) {
+      for (const invalid of scope.dependents.get(target) ?? []) invalid()
+    }
+    return fragments.map(fragment => DOMPurify.sanitize(fragment, config))
   } finally {
     DOMPurify.removeHook('uponSanitizeElement', animationPolicy)
   }
+}
+
+/** Keep standalone previews and callers scoped to their own parsed HTML. */
+export function guardedHtml(html: string): string {
+  return guardedHtmlFragments([html])[0]
 }

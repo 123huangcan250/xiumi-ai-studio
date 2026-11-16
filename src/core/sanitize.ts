@@ -22,6 +22,9 @@ const WX_WIDGETS: Record<string, string> = {
 }
 const ATTRS = new Set(['style', 'src', 'href', 'alt', 'colspan', 'rowspan', 'width', 'height', 'align', 'valign', 'color', 'size', 'face'])
 const SVG_ATTR_BAD = /^on|^(href|xlink:href)$/i
+const SVG_NS = 'http://www.w3.org/2000/svg'
+const SVG_ANIMATIONS = new Set(['animate', 'animatetransform', 'animatemotion', 'set'])
+const SVG_IMPORT_ID = /^[A-Za-z_][\w.:-]*$/
 
 const isWxImage = (u: string) => /^https?:\/\/[^/]*(qpic\.cn|qlogo\.cn)\//i.test(u)
 /** 秀米图床：官方说明外站请求会被拦截，导入时要转存到本地，所以清洗阶段先保留地址 */
@@ -83,7 +86,7 @@ function isHidden(el: Element) {
 }
 
 /** 原地清洗 DOM 子树 */
-export function sanitizeTree(root: Element) {
+export function sanitizeTree(root: Element, { articleSvgAnimations = false } = {}) {
   const doc = root.ownerDocument
   const walk = (el: Element, inSvg: boolean) => {
     for (const child of Array.from(el.children)) {
@@ -105,9 +108,12 @@ export function sanitizeTree(root: Element) {
           child.remove()
           continue
         }
+        const preserveAnimationReferences = articleSvgAnimations && child.namespaceURI === SVG_NS
         for (const a of Array.from(child.attributes)) {
-          if (SVG_ATTR_BAD.test(a.name) && !(a.name.endsWith('href') && isKnownImage(normalizeImg(a.value)))) child.removeAttribute(a.name)
-          else if (a.name === 'class' || a.name === 'id') child.removeAttribute(a.name)
+          const localAnimationTarget = preserveAnimationReferences && SVG_ANIMATIONS.has(tag)
+            && a.name.endsWith('href') && a.value.startsWith('#') && SVG_IMPORT_ID.test(a.value.slice(1))
+          if (SVG_ATTR_BAD.test(a.name) && !localAnimationTarget && !(a.name.endsWith('href') && isKnownImage(normalizeImg(a.value)))) child.removeAttribute(a.name)
+          else if (a.name === 'class' || (a.name === 'id' && !(preserveAnimationReferences && SVG_IMPORT_ID.test(a.value)))) child.removeAttribute(a.name)
           else if (a.name === 'style') child.setAttribute('style', cleanStyle(a.value))
         }
         // foreignObject 内部是 HTML（秀米等编辑器的 SVG 版式把标题文字放在这里），按 HTML 规则清洗
