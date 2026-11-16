@@ -1,12 +1,14 @@
 import { CoverTitleAlignment } from './CoverTitleAlignment'
 import { useEffect, useMemo, useState } from 'react'
-import { blockLabel, blockMeta } from '../core/blocks'
+import { blockLabel, blockMeta, createBlock } from '../core/blocks'
 import { displayUrl } from '../core/images'
 import { sanitizeHtml } from '../core/sanitize'
 import { setPhoto } from '../core/photos'
 import { collectColors, docMainColors, fixedDecorCount, harmonize, recolorHtml } from '../core/recolor'
 import { backgroundPhotos, editableText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, setBackgroundPhoto, setSlotAlign, setSlotColor, slotAligns, slotColors, slotRawTexts, type Align, type SlotRole, type TextSlot } from '../core/slots'
 import { resolveTheme } from '../core/themes'
+import { summarize } from '../core/ops'
+import { findBlock } from '../core/tree'
 import { richToPlain, setRichAlignment, textToRich } from '../core/richtext'
 import type { Block, ImageRef, PicItem } from '../core/types'
 import { api, type Asset } from './api'
@@ -344,6 +346,71 @@ function PicsField({ pics, onChange, removable }: { pics: PicItem[]; onChange: (
   )
 }
 
+function BoxChildren({ block }: { block: Block<'box'> }) {
+  const boxId = block.id
+  const docId = useStore(s => s.doc.id)
+  const [position, setPosition] = useState('end')
+  const children = block.props.children
+  const activePosition = position.startsWith('after:') && !children.some(child => child.id === position.slice(6))
+    ? 'end'
+    : position
+  const currentBox = () => {
+    const store = useStore.getState()
+    if (store.doc.id !== docId || store.selectedId !== boxId) return null
+    const box = findBlock(store.doc.blocks, boxId)?.block
+    return box?.type === 'box' ? { store, box } : null
+  }
+  const insert = (type: 'heading' | 'paragraph') => {
+    const current = currentBox()
+    if (!current) return
+    const { store, box } = current
+    const next = [...box.props.children]
+    const after = activePosition.startsWith('after:') ? next.findIndex(child => child.id === activePosition.slice(6)) : -1
+    if (activePosition.startsWith('after:') && after < 0) {
+      store.notify('插入位置已变化，请重新选择', 'error')
+      return
+    }
+    const index = activePosition === 'start' ? 0 : activePosition === 'end' ? next.length : after + 1
+    next.splice(index, 0, createBlock(type))
+    store.updateProps(boxId, { children: next })
+  }
+  const withChild = (id: string, action: 'select' | 'removeBlock') => {
+    const current = currentBox()
+    if (!current || !current.box.props.children.some(child => child.id === id)) return
+    current.store[action](id)
+  }
+  return (
+    <div className="field" data-testid="box-children">
+      <strong>框内模块（{children.length}）</strong>
+      {children.length === 0 && <p className="hint">暂无模块，可添加标题或正文。</p>}
+      {children.map((child, index) => {
+        const excerpt = summarize(child).replace(/\s+/g, ' ').trim()
+        const label = `${index + 1}. ${blockLabel(child)}${excerpt ? ` · ${excerpt.slice(0, 40)}${excerpt.length > 40 ? '…' : ''}` : ''}`
+        return (
+          <div className="row gap" key={child.id} data-testid="box-child" data-child-id={child.id}>
+            <button type="button" className="grow box-child-name" onClick={() => withChild(child.id, 'select')} aria-label={`编辑 ${label}`}>{label}</button>
+            <button type="button" className="danger" onClick={() => withChild(child.id, 'removeBlock')} aria-label={`删除 ${label}`} data-testid="remove-box-child">删除</button>
+          </div>
+        )
+      })}
+      {children.length > 0 && (
+        <label className="field">
+          <span>插入位置</span>
+          <select value={activePosition} onChange={event => setPosition(event.target.value)}>
+            <option value="start">开头</option>
+            {children.slice(0, -1).map((child, index) => <option key={child.id} value={`after:${child.id}`}>第 {index + 1} 个模块后</option>)}
+            <option value="end">末尾</option>
+          </select>
+        </label>
+      )}
+      <div className="row gap">
+        <button type="button" onClick={() => insert('heading')} data-testid="add-box-heading">添加标题</button>
+        <button type="button" onClick={() => insert('paragraph')} data-testid="add-box-paragraph">添加正文</button>
+      </div>
+    </div>
+  )
+}
+
 export function PropsForm({ block }: { block: Block }) {
   const updateProps = useStore((s) => s.updateProps)
   const upd: Upd = (props, field) => updateProps(block.id, props, `${block.id}:${field}`)
@@ -466,10 +533,8 @@ export function PropsForm({ block }: { block: Block }) {
           {t('标题', 'title')}
           {t('小标签（德文 / 英文）', 'label')}
           <Select label="样式" value={p.variant} options={[['plate', '紫色铭牌'], ['rule', '线框'], ['paper', '浅底']]} onChange={(v) => upd({ variant: v }, 'variant')} />
-          <p className="hint">
-            框内有 {p.children.length} 个模块。选中文本框后点击左侧模块会放进框内末尾；选中框内模块再点击，会插到它后面。
-            放进来的模块自动使用 14 号黑色正文、12 号灰色注释和文本框的宽度。
-          </p>
+          <BoxChildren block={block} />
+          <p className="hint">还可从左侧添加其他类型的模块。放进来的模块会适应文本框样式。</p>
         </>
       )
       break
