@@ -1,11 +1,13 @@
 import { useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { selectedBlock, useStore } from './store'
+import { useStore } from './store'
+import { findBlock } from '../core/tree'
 
 type Scope = 'selection' | 'document'
 /** Selection identity, not object identity: ordinary edits must not reset a manual override. */
 function selectionKey() {
-  const state = useStore.getState(), block = selectedBlock(state)
-  return JSON.stringify([state.doc.id, block?.id ?? null, block?.type ?? null])
+  const state = useStore.getState()
+  const members = state.selectedIds.map(id => findBlock(state.doc.blocks, id)?.block).filter(b => !!b).map(b => [b.id, b.type]).sort((a,b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)
+  return JSON.stringify([state.doc.id, members])
 }
 
 /** Per-mounted-panel epochs observe every store transition, including batched A -> B -> A. */
@@ -31,14 +33,14 @@ export function useSelectionScope() {
     }
   }, [])
   const version = useSyncExternalStore(tracker.subscribe, tracker.snapshot, tracker.snapshot)
-  const automatic: Scope = selectedBlock(useStore.getState()) ? 'selection' : 'document'
+  const automatic: Scope = useStore.getState().selectedIds.length ? 'selection' : 'document'
   const [choice, setChoice] = useState({ version, scope: automatic })
   // Derive immediately. Do not let children/handlers see a previous scope until an effect runs.
   const scope = choice.version === version ? choice.scope : automatic
   useLayoutEffect(() => { tracker.mount(); return tracker.unmount }, [tracker])
   const setScope = (next: Scope) => {
     tracker.choose()
-    setChoice({ version: tracker.snapshot(), scope: selectedBlock(useStore.getState()) ? next : 'document' })
+    setChoice({ version: tracker.snapshot(), scope: useStore.getState().selectedIds.length ? next : 'document' })
   }
   return { scope, setScope, scopeIdentity: tracker.token(), captureScope: tracker.token, isScopeCurrent: tracker.current }
 }

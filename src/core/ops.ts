@@ -169,10 +169,23 @@ export function selectionScope(doc: ScopeDocument, selectedId: string | null | u
   return { ids, top }
 }
 
-/** Strict stays atomic and update-only within the selected subtree. Filtering preserves valid operations. */
-export function limitToSelection(doc: ScopeDocument, selectedId: string | null | undefined, rawOps: any[], policy: SelectionPolicy = 'filter'): { ops: any[]; dropped: any[] } {
+/** Each selected identity must resolve; never degrade an invalid list into document scope. */
+export function selectionScopes(doc: ScopeDocument, selection: string | string[]): { ids: Set<string>; tops: number[] } | null {
+  const requested = Array.isArray(selection) ? selection : [selection]
+  if (!requested.length || requested.some(id => typeof id !== 'string' || !id) || new Set(requested).size !== requested.length) return null
+  const ids = new Set<string>(), tops = new Set<number>()
+  for (const id of requested) {
+    const scope = selectionScope(doc, id)
+    if (!scope) return null
+    scope.ids.forEach(value => ids.add(value)); tops.add(scope.top)
+  }
+  return { ids, tops: [...tops].sort((a, b) => a - b) }
+}
+
+/** Strict stays atomic/update-only; filter preserves descendant edits and adjacent anchored inserts. */
+export function limitToSelection(doc: ScopeDocument, selectedId: string | string[] | null | undefined, rawOps: any[], policy: SelectionPolicy = 'filter'): { ops: any[]; dropped: any[] } {
   if (selectedId == null) return { ops: rawOps, dropped: [] }
-  const scope = selectionScope(doc, selectedId)
+  const scope = selectionScopes(doc, selectedId)
   if (!scope) return { ops: [], dropped: rawOps }
   if (policy !== 'filter') {
     const valid = rawOps.every(op => op?.op === 'update' && scope.ids.has(op.id))
@@ -183,9 +196,11 @@ export function limitToSelection(doc: ScopeDocument, selectedId: string | null |
     const index = typeof op?.index === 'number' || (typeof op?.index === 'string' && op.index.trim()) ? Number(op.index) : NaN
     if ((op?.op === 'update' || op?.op === 'remove') && scope.ids.has(op.id)) {
       ops.push(op)
-    } else if (op?.op === 'insert' && Number.isInteger(index) && (index === scope.top || index === scope.top + 1)) {
-      const anchor: InsertAnchor = { id: doc.blocks[scope.top].id, side: index === scope.top ? 'before' : 'after' }
-      if (!anchor.id || doc.blocks.filter(b => b?.id === anchor.id).length !== 1 || 'anchor' in op && (!op.anchor || op.anchor.id !== anchor.id || op.anchor.side !== anchor.side)) dropped.push(op)
+    } else if (op?.op === 'insert' && Number.isInteger(index)) {
+      // Shared gaps default to the first top-level root in document order, not click order.
+      const candidates: InsertAnchor[] = scope.tops.filter(top => index === top || index === top + 1).map(top => ({ id: doc.blocks[top].id, side: index === top ? 'before' : 'after' }))
+      const anchor = 'anchor' in op ? candidates.find(candidate => candidate.id === op.anchor?.id && candidate.side === op.anchor?.side) : candidates[0]
+      if (!anchor?.id || doc.blocks.filter(b => b?.id === anchor.id).length !== 1) dropped.push(op)
       else ops.push({ ...op, index, anchor })
     } else dropped.push(op)
   }

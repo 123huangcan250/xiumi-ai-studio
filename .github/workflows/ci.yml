@@ -32,7 +32,26 @@ jobs:
       - run: pnpm build
       - run: pnpm exec playwright install chromium
       - run: pnpm sample
-      - run: pnpm e2e --update-snapshots=none
+      - name: Validate diagnostic PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null; $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/collect-network-diagnostics.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw 'Diagnostic script syntax validation failed' }
+          ./scripts/check-network-diagnostics.ps1
+      - name: Snapshot resources before E2E
+        continue-on-error: true
+        timeout-minutes: 1
+        shell: pwsh
+        run: ./scripts/collect-network-diagnostics.ps1 -Phase before-e2e
+      - id: e2e
+        run: pnpm e2e --update-snapshots=none
+      - name: Snapshot resources after E2E failure
+        if: failure() && steps.e2e.outcome == 'failure'
+        continue-on-error: true
+        timeout-minutes: 1
+        shell: pwsh
+        run: ./scripts/collect-network-diagnostics.ps1 -Phase failed-e2e
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
@@ -40,4 +59,5 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            diagnostic-results/
           retention-days: 7

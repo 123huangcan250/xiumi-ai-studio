@@ -98,3 +98,27 @@ it('does not dispatch an old rendered action between the store selection change 
  act(()=>{state().select('b');button.click()})
  expect(api.aiEdit).not.toHaveBeenCalled();expect(scope().value).toBe('selection');expect(scope().selectedOptions[0].textContent).toContain('Title b')
 })
+it('multi selection scope observes membership even when primary identity stays the same',()=>{
+ act(()=>state().select('b',{toggle:true}));changeScope('document')
+ act(()=>state().select('a',{toggle:true}));expect(state().selectedId).toBe('b');expect(scope().value).toBe('selection')
+ act(()=>state().select('a',{toggle:true}));expect(scope().selectedOptions[0].textContent).toContain('2')
+})
+it('mixed module panel never exposes the primary single-block props as shared properties',async()=>{
+ act(()=>state().select('b',{toggle:true}));await tab('style')
+ expect(host.querySelector('[data-testid="multi-selection-properties"]')).not.toBeNull();expect(host.textContent).toContain('Title a');expect(host.textContent).toContain('Title b')
+ expect(host.querySelector('.props-form input')).toBeNull()
+ const before=state().past.length;act(()=>host.querySelector<HTMLButtonElement>('[data-testid="delete-selected-blocks"]')!.click());expect(state().doc.blocks).toHaveLength(0);expect(state().past).toHaveLength(before+1)
+ act(()=>state().undo());expect(state().doc.blocks).toHaveLength(2)
+})
+it('multi request sends the selected union and rejects delayed membership ABA responses',async()=>{
+ act(()=>state().select('b',{toggle:true}));let finish!:(value:any)=>void;vi.mocked(api.aiEdit).mockReturnValueOnce(new Promise(r=>finish=r))
+ await request();expect(vi.mocked(api.aiEdit).mock.calls[0][4]).toEqual(['a','b']);expect(vi.mocked(api.aiEdit).mock.calls[0][0]).toMatchObject({focus:{ids:['a','b']}})
+ act(()=>{state().select('a',{toggle:true});state().select('a',{toggle:true})})
+ await act(async()=>finish({summary:'stale',ops:[{op:'update',id:'a',props:{title:'wrong'}}]}));expect(state().proposal).toBeNull()
+})
+it('same-event old multi button cannot send after membership change without a primary change',async()=>{
+ act(()=>state().select('b',{toggle:true}))
+ await act(async()=>{const input=host.querySelector<HTMLTextAreaElement>('textarea[aria-label="AI 修改指令"]')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,'edit');input.dispatchEvent(new Event('input',{bubbles:true}))})
+ const button=Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='生成修改建议')!
+ act(()=>{state().select('a',{toggle:true});button.click()});expect(api.aiEdit).not.toHaveBeenCalled()
+})

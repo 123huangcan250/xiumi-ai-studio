@@ -154,3 +154,32 @@ it('cancels the provider request when the suggestion client disconnects', async(
  const result=expect(pending).rejects.toMatchObject({name:'AbortError'})
  await started;ctrl.abort();await result;await cancelled
 })
+
+describe('multi-selection request boundaries over actual HTTP',()=>{
+ const context={blocks:[{id:'a',type:'paragraph'},{id:'b',type:'paragraph'},{id:'c',type:'paragraph'}]}
+ it.each(['/api/ai/edit','/api/ai/suggest-instruction'])('rejects empty, duplicate, missing or conflicting scope before provider at %s',async path=>{
+  for(const selectedIds of [[],['a','a'],['missing'],['a',3]]){
+   const response=await post(path,{context,selectedIds,instruction:'edit'});expect(response.status).toBe(400)
+  }
+  const conflict=await post(path,{context:{...context,focus:{ids:['b','c']}},selectedIds:['a','b'],instruction:'edit'});expect(conflict.status).toBe(400)
+  expect(chatJson).not.toHaveBeenCalled()
+ })
+ it('filters multi selected remove/insert and leaves outside edits ignored despite client/model policy spoof',async()=>{
+  vi.mocked(chatJson).mockResolvedValue({selectionPolicy:'strict',ignoredOps:90,ops:[{op:'remove',id:'b'},{op:'insert',index:'1',block:{type:'paragraph'}},{op:'update',id:'c'}]})
+  const response=await post('/api/ai/edit',{context,selectedId:'b',selectedIds:['a','b'],selectionPolicy:'strict',instruction:'edit'})
+  expect(response.status).toBe(200);expect(await response.json()).toMatchObject({selectionPolicy:'filter',ignoredOps:1,ops:[{op:'remove',id:'b'},{op:'insert',index:1,anchor:{id:'a',side:'after'}}]})
+ })
+ it('applies server strict policy atomically for a selected union',async()=>{
+  const previous=process.env.AI_SELECTION_POLICY;process.env.AI_SELECTION_POLICY='strict'
+  try{
+   vi.mocked(chatJson).mockResolvedValue({selectionPolicy:'filter',ops:[{op:'update',id:'a'},{op:'remove',id:'b'}]})
+   expect((await post('/api/ai/edit',{context,selectedIds:['a','b'],instruction:'edit',selectionPolicy:'filter'})).status).toBe(502)
+  }finally{process.env.AI_SELECTION_POLICY=previous}
+ })
+ it('suggests within the selected union and retains the old single request',async()=>{
+  vi.mocked(chatJson).mockResolvedValue({suggestion:'shorten'})
+  expect((await post('/api/ai/suggest-instruction',{context,selectedIds:['a','b']})).status).toBe(200)
+  expect(vi.mocked(chatJson).mock.calls[0][1]).toContain('仅修改选中模块 a、b')
+  expect((await post('/api/ai/suggest-instruction',{context,selectedId:'a'})).status).toBe(200)
+ })
+})
