@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { JSDOM } from 'jsdom'
 import { guardHtml } from '../../src/core/sanitize'
-import { compileBlock } from '../../src/core/compiler'
+import { compileBlock, compileDoc } from '../../src/core/compiler'
 import { createBlock } from '../../src/core/blocks'
 import { THEMES } from '../../src/core/themes'
 const parse = (html: string) => new JSDOM(html, {url: 'https://fixture.invalid'}).window.document
@@ -107,4 +107,54 @@ it('removes invalid paint URLs but preserves fallback colors and other filter re
 it('preserves valid paint fallback strings without rewriting them', () => {
  const d=clean('<svg><defs><linearGradient id="paint_valid"/></defs><rect fill="url(#paint_valid) red"/></svg>')
  expect(d.querySelector('rect')?.getAttribute('fill')).toBe('url(#paint_valid) red')
+})
+
+it.each(['click', 'touchstart'])('keeps the target-local %s animation event', event => {
+  const d = clean(`<svg><rect><set attributeName="opacity" to="0" begin="${event}"/></rect></svg>`)
+  expect(d.querySelector('set')?.getAttribute('begin')).toBe(event)
+})
+
+it('keeps discrete visibility values for set and animate', () => {
+  const d = clean('<svg><rect><set attributeName="visibility" to="hidden" begin="click" fill="freeze"/><animate attributeName="visibility" values="visible;hidden;collapse" dur="1s"/></rect></svg>')
+  expect(d.querySelector('set')?.getAttribute('to')).toBe('hidden')
+  expect(d.querySelector('animate')?.getAttribute('values')).toBe('visible;hidden;collapse')
+})
+
+it('does not allow arbitrary visibility values', () => {
+  const d = clean('<svg><rect><set attributeName="visibility" to="auto"/><animate attributeName="visibility" by="visible"/></rect></svg>')
+  expect(d.querySelector('set,animate')).toBeNull()
+})
+
+const articleBlock = (html: string) => createBlock('html', { html, label: 'fixture' })
+const exportBlocks = (...blocks: ReturnType<typeof articleBlock>[]) => parse(compileDoc({
+  id: 'article', title: 'Fixture', digest: '', author: '',
+  themeId: THEMES[0].id, blocks, createdAt: 0, updatedAt: 0,
+}).html)
+
+it('resolves timing and targets only within the exported article SVG scope', () => {
+  const first = articleBlock('<svg><rect id="art_trigger"/></svg>')
+  const second = articleBlock('<svg><set href="#art_trigger" attributeName="opacity" to="1" begin="art_trigger.click"/></svg>')
+  const result = exportBlocks(first, second)
+  expect(result.querySelector('set')?.getAttribute('href')).toBe('#art_trigger')
+  expect(result.querySelector('set')?.getAttribute('begin')).toBe('art_trigger.click')
+  expect(parse(compileBlock(second, THEMES[0])).querySelector('set')).toBeNull()
+  expect(exportBlocks(second).querySelector('set')).toBeNull()
+})
+
+it('does not let identical IDs in different modules resolve a timing reference', () => {
+  const first = articleBlock('<svg><rect id="article_duplicate"/></svg>')
+  const second = articleBlock('<svg><rect id="article_duplicate"><set attributeName="opacity" to="1" begin="article_duplicate.click"/></rect></svg>')
+  expect(exportBlocks(first, second).querySelector('set')).toBeNull()
+})
+
+it('propagates reference removals across article modules', () => {
+  const first = articleBlock('<svg><rect><animate attributeName="opacity" values="0;1" begin="article_removed.end"/></rect></svg>')
+  const second = articleBlock('<svg><rect><animate id="article_removed" attributeName="opacity" values="0;1" begin="article_absent.click"/></rect></svg>')
+  expect(exportBlocks(first, second).querySelector('animate')).toBeNull()
+})
+
+it('limits cross-module resolution to SVG animation references, not use or HTML IDs', () => {
+  const first = articleBlock('<svg><rect id="article_shape"/></svg><p id="article_text">Text</p>')
+  const second = articleBlock('<svg><use href="#article_shape"/><rect><set attributeName="opacity" to="1" begin="article_text.click"/></rect></svg>')
+  expect(exportBlocks(first, second).querySelector('use,set')).toBeNull()
 })

@@ -1,3 +1,4 @@
+import { guardedHtmlFragments } from './htmlGuard'
 import { applyImageWidths } from './imageResize'
 // 微信 HTML 编译器：文档 JSON → 全内联样式 HTML。
 // 画布、手机预览、复制、草稿箱都使用同一份输出，保证所见即所得。
@@ -495,9 +496,9 @@ const R: Renderers = {
 const MEDIA_BG = /url\((&quot;|["']?)(\/media\/[^"')]*?)\1\)/gi
 
 /** 原文片段：存储时已清洗，输出前再做一次字符串级防护 */
-function renderHtml(b: Extract<Block, { type: 'html' }>, ctx: Ctx): string {
+function renderHtml(b: Extract<Block, { type: 'html' }>, ctx: Ctx, guarded?: string): string {
   const map = ctx.opts.mapImage
-  const html = guardHtml(b.props.html)
+  const html = guarded ?? guardHtml(b.props.html)
   if (!map) return html
   return html
     .replace(/(<img\b[^>]*\ssrc=")([^"]+)(")/gi, (_m, a, u, z) => a + esc(map(u.replace(/&amp;/g, '&'))) + z)
@@ -508,17 +509,21 @@ function renderHtml(b: Extract<Block, { type: 'html' }>, ctx: Ctx): string {
 export const BOX_GAP = 16
 
 export function compileBlock(block: Block, theme: Theme, opts: CompileOptions = {}): string {
+  return renderBlock(block, theme, opts)
+}
+
+function renderBlock(block: Block, theme: Theme, opts: CompileOptions, htmlScope?: ReadonlyMap<Block, string>): string {
   // 文本框内的模块统一使用文本框的字号、颜色和间距
   const t = opts.inBox ? boxTheme(theme) : theme
   const ctx = new Ctx(t, opts)
-  if (block.type === 'html') return renderHtml(block, ctx)
+  if (block.type === 'html') return renderHtml(block, ctx, htmlScope?.get(block))
   if (block.type === 'replay') return compileReplay(block, opts).html
   if (block.type === 'box') {
     const parts = boxParts(block.props, ctx)
     const kids = block.props.children.filter((c) => c.type !== 'box')
     const inner = kids
       .map((c, i) => {
-        const html = compileBlock(c, theme, { ...opts, inBox: true })
+        const html = renderBlock(c, theme, { ...opts, inBox: true }, htmlScope)
         return `<section style="${css({ 'margin-bottom': i === kids.length - 1 ? 0 : BOX_GAP })}">${html}</section>`
       })
       .join('')
@@ -558,6 +563,9 @@ export function compileDoc(doc: Doc, opts: CompileOptions = {}): CompileResult {
   const theme = resolveTheme(doc)
   const failed: number[] = []
   const replayIssues: string[] = []
+  const htmlBlocks = flatBlocks(doc.blocks).filter((b): b is Block<'html'> => b?.type === 'html' && typeof b.props?.html === 'string')
+  const cleanFragments = guardedHtmlFragments(htmlBlocks.map(b => b.props.html))
+  const htmlScope = new Map(htmlBlocks.map((b, i) => [b, cleanFragments[i]]))
   const parts = doc.blocks.map((b, i) => {
     let inner: string
     try {
@@ -565,7 +573,7 @@ export function compileDoc(doc: Doc, opts: CompileOptions = {}): CompileResult {
         const r = compileReplay(b, opts)
         replayIssues.push(...r.errors.map((e) => `${REPLAY_ERROR} ${e}`), ...r.warnings.map((w) => `编辑回放：${w}`))
         inner = r.html
-      } else inner = compileBlock(b, theme, opts)
+      } else inner = renderBlock(b, theme, opts, htmlScope)
     } catch {
       // 单个模块数据损坏时跳过，不影响整篇输出
       failed.push(i + 1)
