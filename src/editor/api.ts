@@ -1,3 +1,4 @@
+import type { ArticleImageResult } from '../../server/articleImages'
 import type { ComponentDraft, LibraryComponent } from '../core/components'
 import type { RoleId } from '../core/roles'
 import type { Block, Doc, ImageRef, SelectionPolicy, Theme } from '../core/types'
@@ -187,6 +188,7 @@ export const api = {
   aiEdit: (context: unknown, instruction: string, profileId?: string, selectedId?: string, selectedIds?: string[]) => req<{ summary: string; ops: any[]; selectionPolicy?: SelectionPolicy; ignoredOps?: number }>('POST', '/api/ai/edit', { context, instruction, profileId, selectedId, selectedIds }),
   fetchReference: (url: string) => req<{ html: string }>('POST', '/api/reference/fetch', { url }),
   fetchArticle: (url: string) => req<{ html: string }>('POST', '/api/article/fetch', { url }),
+  importArticleImages: (urls: string[]) => req<ArticleImageResult[]>('POST', '/api/assets/import-article', { urls }),
   fetchAssets: (urls: string[]) => req<Record<string, Asset>>('POST', '/api/assets/fetch', { urls }),
 
   appInfo: () => req<AppInfo>('GET', '/api/app/info'),

@@ -1,7 +1,11 @@
+import { suggestionContext } from './suggestionContext'
+import { ArticleImageImport } from './ArticleImageImport'
+import { isImageLibraryRequest } from '../core/articleImages'
+import type { Doc } from '../core/types'
 import { findBlock } from '../core/tree'
 import { useSelectionScope } from './useSelectionScope'
 import { previewProposal } from './proposalSafety'
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { blockLabel } from '../core/blocks'
 import { compileDoc, variantUrl } from '../core/compiler'
 import { summarize } from '../core/ops'
@@ -122,6 +126,10 @@ function AiPanel() {
   const [ai, setAi] = useState<AiStatus | null>(null)
   const [instruction, setInstruction] = useState('')
   const [busy, setBusy] = useState(false)
+  const [collection, setCollection] = useState<{doc:Doc;selection?:string|string[];token:string;epoch:number}|null>(null)
+  const imageCommand = isImageLibraryRequest(instruction)
+  const documentEpoch = useRef(0), collectionOpen = useRef(false), suggestionController = useRef<AbortController|null>(null)
+  useLayoutEffect(() => useStore.subscribe((next, previous) => { if (next.doc !== previous.doc) documentEpoch.current++ }), [])
   useEffect(() => { setBusy(false) }, [scopeIdentity])
   const [preview, setPreview] = useState<string | null>(null)
   const [autoSuggest, setAutoSuggest] = useState(readSuggestionPreference)
@@ -131,22 +139,30 @@ function AiPanel() {
   const selectedId = scope === 'selection' ? selected?.id : undefined
   const multipleIds = useMemo(() => scope === 'selection' && selectedIds.length > 1 ? selectedIds : undefined, [scope, selectedIds])
   const selection = multipleIds ?? selectedId
+  const openCollection = () => {
+    if (!isScopeCurrent(scopeIdentity)) return
+    collectionOpen.current = true
+    suggestionController.current?.abort()
+    setCollection({doc,selection,token:captureScope(),epoch:documentEpoch.current})
+  }
+  const closeCollection = () => { collectionOpen.current = false; setCollection(null) }
   // Strip image URLs/rich metadata; multi scope retains top-root indices and summary neighbors for server boundary validation.
-  const context = useMemo(() => autoSuggest ? multipleIds ? aiContext(doc, multipleIds) : aiContext(selectedId && selected ? { ...doc, blocks: [selected] } : doc) : null, [autoSuggest, doc, selected, selectedId, multipleIds])
+  const context = useMemo(() => autoSuggest ? suggestionContext(multipleIds ? aiContext(doc, multipleIds) : aiContext(selectedId && selected ? { ...doc, blocks: [selected] } : doc)) as ReturnType<typeof aiContext> : null, [autoSuggest, doc, selected, selectedId, multipleIds])
   const suggestionRevision = instructionSuggestions.revision
   const contextKey = useMemo(() => context ? JSON.stringify([doc.id, context, selection, ai?.profileId, ai?.model, ai?.provider, suggestionRevision]) : '', [doc.id, context, selection, ai?.profileId, ai?.model, ai?.provider, suggestionRevision])
   useEffect(() => {
-    if (!isScopeCurrent(scopeIdentity) || !autoSuggest || !ai?.enabled || instruction || busy || !context?.blocks.length) return
+    if (collectionOpen.current || !isScopeCurrent(scopeIdentity) || !autoSuggest || !ai?.enabled || instruction || busy || !context?.blocks.length) return
     const controller = new AbortController()
+    suggestionController.current = controller
     const requestedScope = captureScope()
     const timer = setTimeout(() => {
-      if (!isScopeCurrent(requestedScope)) return
+      if (collectionOpen.current || !isScopeCurrent(requestedScope)) return
       instructionSuggestions.get(contextKey, () => api.aiSuggestInstruction(context, ai.profileId, selectedId, controller.signal, multipleIds), controller.signal)
         .then((text) => { if (!controller.signal.aborted && isScopeCurrent(requestedScope)) setSuggestion({ key: contextKey, text, error: '' }) })
         .catch(() => { if (!controller.signal.aborted && isScopeCurrent(requestedScope)) setSuggestion({ key: contextKey, text: '', error: '自动建议暂不可用，可以直接输入修改要求。' }) })
     }, 1500)
-    return () => { clearTimeout(timer); controller.abort() }
-  }, [autoSuggest, ai, instruction, busy, context, contextKey, selectedId, multipleIds, scopeIdentity, captureScope, isScopeCurrent])
+    return () => { clearTimeout(timer); controller.abort(); if (suggestionController.current === controller) suggestionController.current = null }
+  }, [collection, autoSuggest, ai, instruction, busy, context, contextKey, selectedId, multipleIds, scopeIdentity, captureScope, isScopeCurrent])
   useEffect(() => {
     const load = () => api.aiStatus().then(setAi).catch(() => setAi(null))
     load()
@@ -155,6 +171,7 @@ function AiPanel() {
   }, [])
   const run = async () => {
     if (!instruction.trim() || !isScopeCurrent(scopeIdentity)) return
+    if (imageCommand) { openCollection(); return }
     setBusy(true)
     const expectedVersion = useStore.getState().proposalVersion
     const requestedScope = captureScope()
@@ -186,9 +203,11 @@ function AiPanel() {
       <p className="hint">{selected && scope === 'selection' ? `仅生成已选 ${selectedIds.length} 个模块及其子模块范围内的修改建议。` : '当前范围为全文；在画布点选一个模块后，可切换为仅修改选中模块。'}</p>
       <label className="hint"><input type="checkbox" aria-describedby={autoSuggestHintId} checked={autoSuggest} onChange={(e) => { saveSuggestionPreference(e.target.checked); setAutoSuggest(e.target.checked) }} /> 自动生成输入建议</label>
       <p id={autoSuggestHintId} className="hint">默认关闭。开启后会将当前范围的文稿发送到已配置的当前模型，可能产生 API 费用；当前页面的建议请求间隔至少 30 秒。不发送图片文件。多选时会附带所在文本框内容和其他模块摘要作为布局上下文；修改范围仍受所选模块边界限制。</p>
-      <SuggestionInput value={instruction} onChange={setInstruction} disabled={!ai?.enabled || busy} suggestion={autoSuggest && suggestion.key === contextKey ? suggestion.text : ''} />
+      <SuggestionInput value={instruction} onChange={setInstruction} disabled={busy} suggestion={autoSuggest && suggestion.key === contextKey ? suggestion.text : ''} />
       {autoSuggest && suggestion.key === contextKey && suggestion.error && <p className="hint" role="status">{suggestion.error}</p>}
-      <button className="primary wide" disabled={!ai?.enabled || busy} onClick={run}>{busy ? 'AI 思考中…' : '生成修改建议'}</button>
+      <button className="primary wide" disabled={(!ai?.enabled && !imageCommand) || busy} onClick={run}>{imageCommand ? '收集图片到素材库' : busy ? 'AI 思考中…' : '生成修改建议'}</button>
+      <button disabled={busy} onClick={openCollection} data-testid="collect-article-images">收集当前范围图片到素材库</button>
+      {collection && <ArticleImageImport doc={collection.doc} selection={collection.selection} isCurrent={() => documentEpoch.current === collection.epoch && useStore.getState().doc === collection.doc && isScopeCurrent(collection.token)} onClose={closeCollection} />}
       <h4>规则动作</h4>
       <div className="quick-grid">
         {QUICK_ACTIONS.map((a) => (

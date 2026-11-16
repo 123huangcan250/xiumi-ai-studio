@@ -1,3 +1,4 @@
+import { importArticleImages } from './articleImages'
 // HTTP 服务：全部接口与前端静态文件。源码运行（index.ts）和打包运行（launcher.ts）共用。
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
@@ -470,6 +471,7 @@ app.get('/api/wx-image', h(async (req, res) => {
   res.send(Buffer.from(await r.arrayBuffer()))
 }))
 /** 把导入内容里的图片下载到素材库（仅限微信和秀米图床，重定向目标同样检查） */
+app.post('/api/assets/import-article', h(async (req,res) => res.json(await importArticleImages(req.body.urls))))
 app.post('/api/assets/fetch', h(async (req, res) => {
   const urls: string[] = (req.body.urls ?? []).slice(0, 80)
   const out: Record<string, unknown> = {}

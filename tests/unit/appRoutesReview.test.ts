@@ -183,3 +183,28 @@ describe('multi-selection request boundaries over actual HTTP',()=>{
   expect((await post('/api/ai/suggest-instruction',{context,selectedId:'a'})).status).toBe(200)
  })
 })
+
+describe('confirmed article image collection over actual local HTTP',()=>{
+ it('imports only approved remote sources, persists a digest and reuses the real indexed image',async()=>{
+  vi.mocked(safeFetch).mockResolvedValue(new Response('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>'))
+  const url='https://img.xiumi.us/article?private=fixture'
+  const response=await post('/api/assets/import-article',{urls:[url,'http://localhost/private']});expect(response.status).toBe(200)
+  const results=await response.json();expect(results.map((r:any)=>r.status)).toEqual(['imported','failed']);expect(results[0].asset.sourceKey).toMatch(/^[a-f0-9]{64}$/);expect(JSON.stringify(results[0].asset)).not.toContain('private=')
+  expect(safeFetch).toHaveBeenCalledTimes(1);const opts=vi.mocked(safeFetch).mock.calls[0][1]!;expect(opts.maxBytes).toBe(30*1024*1024);expect(opts.allowHost!('127.0.0.1')).toBe(false)
+  const again=await post('/api/assets/import-article',{urls:[url,`/media/${results[0].asset.file}?fit=3:2&w=800`]});expect((await again.json()).map((r:any)=>r.status)).toEqual(['existing','existing']);expect(safeFetch).toHaveBeenCalledTimes(1);expect(chatJson).not.toHaveBeenCalled()
+ })
+ it('rejects malformed and cross-origin collection without a provider or network call',async()=>{
+  expect((await post('/api/assets/import-article',{urls:'wrong'})).status).toBe(400)
+  expect((await fetch(base+'/api/assets/import-article',{method:'POST',headers:{origin:'https://outside.example','content-type':'application/json'},body:'{"urls":[]}'})).status).toBe(403)
+  expect(safeFetch).not.toHaveBeenCalled();expect(chatJson).not.toHaveBeenCalled()
+ })
+})
+it('recognizes a real managed replay glyph without indexing or re-encoding it',async()=>{
+ const sharp=(await import('sharp')).default
+ const bytes=await sharp({create:{width:2,height:2,channels:4,background:'#fff'}}).png().toBuffer()
+ const data='data:image/png;base64,'+bytes.toString('base64')
+ const glyph=await post('/api/replay/glyphs',{images:[data]});expect(glyph.status).toBe(200);const map=await glyph.json()
+ const before=await(await fetch(base+'/api/assets')).json()
+ const r=await post('/api/assets/import-article',{urls:[map[data]]});expect(await r.json()).toEqual([{url:map[data],status:'existing',kind:'glyph'}])
+ expect(await(await fetch(base+'/api/assets')).json()).toEqual(before);expect(safeFetch).not.toHaveBeenCalled();expect(chatJson).not.toHaveBeenCalled()
+})
