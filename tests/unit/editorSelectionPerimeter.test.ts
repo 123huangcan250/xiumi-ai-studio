@@ -65,3 +65,19 @@ it.each([false, true])('draws the current project and resize-target perimeters i
     expect(style('photo').boxSizing).toBe('border-box')
   } finally { dom.window.close() }
 })
+
+it.each(['mono-light', 'mono-dark'])('keeps the destructive color specific to editor controls (%s)', theme => {
+  const dom = editor()
+  try {
+    const doc = dom.window.document
+    doc.documentElement.dataset.uiTheme = theme
+    doc.body.insertAdjacentHTML('beforeend', `<main class="workspace"><aside class="panel right">
+      <button id="delete" class="danger">删除所选模块</button><button id="cancel">取消选择</button>
+      <div class="comp-preview"><button id="authored-delete" class="danger">原文</button></div>
+    </aside></main>`)
+    const style = (id: string) => dom.window.getComputedStyle(doc.getElementById(id)!)
+    expect(style('delete').color).toBe('var(--ui-danger)')
+    expect(style('cancel').color).toBe('var(--ui-text)')
+    expect(style('authored-delete').color).toBe('var(--danger)')
+  } finally { dom.window.close() }
+})

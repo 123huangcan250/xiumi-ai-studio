@@ -95,6 +95,16 @@ test('monochrome dark keeps blue multiselect and upstream semantic review colors
   for (const block of await page.locator('.article .block.selected').all()) {
     await expect(block).toHaveCSS('outline-color', 'rgb(37, 99, 235)')
   }
+  const deleteSelection = page.getByTestId('delete-selected-blocks')
+  const clearSelection = page.getByTestId('multi-selection-properties').getByRole('button', { name: '取消选择' })
+  await expect(deleteSelection).toHaveCSS('color', 'rgb(255, 159, 155)')
+  await expect(clearSelection).toHaveCSS('color', 'rgb(236, 236, 230)')
+  await expect(deleteSelection).toHaveCSS('background-color', 'rgb(27, 27, 26)')
+  await selectTheme(page, 'mono-light')
+  await expect(deleteSelection).toHaveCSS('color', 'rgb(152, 42, 54)')
+  await expect(clearSelection).toHaveCSS('color', 'rgb(34, 34, 32)')
+  await expect(deleteSelection).toHaveCSS('background-color', 'rgb(255, 254, 250)')
+  await selectTheme(page, 'mono-dark')
   await page.route('**/api/ai/edit', route => {
     const { selectedIds } = route.request().postDataJSON()
     return route.fulfill({ json: { summary: 'Selected pair', selectionPolicy: 'filter', ignoredOps: 0, ops: selectedIds.map((id: string, index: number) => ({ op: 'update', id, props: { title: `Accepted ${index}` } })) } })

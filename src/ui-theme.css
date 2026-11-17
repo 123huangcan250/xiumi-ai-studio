@@ -75,6 +75,12 @@
   outline-offset: -2px;
 }
 
+/* Keep the upstream destructive affordance on editor controls, not authored or review content. */
+:root[data-ui-theme] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal, .canvas-wrap > .selection-bar, .block > .block-toolbar)
+  button.danger:not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  color: var(--ui-danger);
+}
+
 /* The upstream blue perimeter and red/green review palette are semantic editor states. */
 :root[data-ui-theme] .canvas-wrap > .canvas-scroll .block > .block-select-toggle[aria-pressed='true']:not(:where(.block-html *, .html-editor *, .rich-content *)) {
   border-color: var(--ui-focus);
