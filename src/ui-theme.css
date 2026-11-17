@@ -1,0 +1,124 @@
+/* Interface-only palettes. No responsive, grid, ordering or article/export rules. */
+:root[data-ui-theme='mono-light'] {
+  --ui-bg: #f4f4f1;
+  --ui-panel: #fffefa;
+  --ui-line: #787873;
+  --ui-text: #222220;
+  --ui-sub: #575753;
+  --ui-faint: #666661;
+  --ui-hover: #eaeae5;
+  --ui-primary: #272725;
+  --ui-on-primary: #fffefa;
+  --ui-danger: #982a36;
+  --ui-ok: #216239;
+  --ui-focus: #245cc4;
+}
+
+:root[data-ui-theme='mono-dark'] {
+  --ui-bg: #141414;
+  --ui-panel: #1b1b1a;
+  --ui-line: #73736d;
+  --ui-text: #ecece6;
+  --ui-sub: #b6b6ae;
+  --ui-faint: #a5a59e;
+  --ui-hover: #30302e;
+  --ui-primary: #ecece6;
+  --ui-on-primary: #181816;
+  --ui-danger: #ff9f9b;
+  --ui-ok: #a5cfac;
+  --ui-focus: #8eb8ff;
+}
+
+:root[data-ui-theme] body { background-color: var(--ui-bg); }
+
+:root[data-ui-theme] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal, .canvas-wrap > .selection-bar, .canvas-wrap > .zoom-bar, .block > .block-toolbar, .rich-editor > .rich-toolbar):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  --panel: var(--ui-panel);
+  --line: var(--ui-line);
+  --text: var(--ui-text);
+  --sub: var(--ui-sub);
+  --faint: var(--ui-faint);
+  --brand: var(--ui-text);
+  --brand-soft: var(--ui-hover);
+  --accent: var(--ui-text);
+  --danger: var(--ui-danger);
+  --ok: var(--ui-ok);
+  color: var(--ui-text);
+  background-color: var(--ui-panel);
+  font-family: 'Noto Sans SC Variable', 'Microsoft YaHei', sans-serif;
+}
+
+:root[data-ui-theme] :is(.app > .toolbar > .brand, .modal-mask > .modal > header > h3):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  font-family: 'Noto Serif SC Variable', 'Songti SC', 'SimSun', serif;
+}
+
+:root[data-ui-theme] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal, .canvas-wrap > .selection-bar, .block > .block-toolbar)
+  :where(button, input, textarea, select):not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  color: var(--ui-text);
+  background: var(--ui-panel);
+}
+
+:root[data-ui-theme] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal, .canvas-wrap > .selection-bar, .block > .block-toolbar)
+  :where(button:hover:not(:disabled), button.on, button[aria-pressed='true']):not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  background: var(--ui-hover);
+}
+
+:root[data-ui-theme] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal)
+  :is(button.primary, button.accent):not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  color: var(--ui-on-primary);
+  border-color: var(--ui-primary);
+  background: var(--ui-primary);
+}
+
+:root[data-ui-theme] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal, .canvas-wrap > .selection-bar)
+  :where(button, input, textarea, select):focus-visible:not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: -2px;
+}
+
+/* The upstream blue perimeter and red/green review palette are semantic editor states. */
+:root[data-ui-theme] .canvas-wrap > .canvas-scroll .block > .block-select-toggle[aria-pressed='true']:not(:where(.block-html *, .html-editor *, .rich-content *)) {
+  border-color: var(--ui-focus);
+}
+
+/* Reset contained document thumbnails/paste renderings under themed editor chrome. */
+:root[data-ui-theme] :is(.workspace > .panel, .modal-mask > .modal)
+  :is(.mini-preview, .comp-preview, .paste-box):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  --bg: #f2f3f5;
+  --panel: #fff;
+  --line: #e4e6eb;
+  --text: #1f2329;
+  --sub: #646a73;
+  --faint: #8f959e;
+  --brand: #5b4bdb;
+  --brand-soft: #efedff;
+  --accent: #ff7a45;
+  --danger: #e5484d;
+  --ok: #1a9e5c;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  color: var(--text);
+  color-scheme: light;
+}
+
+/* Upstream chrome cards with fixed light fills need equally readable dark surfaces.
+   These scopes exclude article, imported HTML, previews, and the red/green review UI. */
+:root[data-ui-theme='mono-dark'] :is(.workspace > .panel, .modal-mask > .modal)
+  :is(.proposal, .ai-status, .report, .ai-box, .photo-group, .enrich-box, .data-modal code, .upload, .rp-item):not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  background-color: #252523;
+  color: var(--ui-text);
+}
+
+:root[data-ui-theme='mono-dark'] .workspace > .panel.right .ai-status.on {
+  background-color: #202d24;
+  color: var(--ui-ok);
+}
+
+:root[data-ui-theme='mono-dark'] .workspace > .panel.right .ai-status > .link {
+  background-color: transparent;
+  color: inherit;
+}
+
+:root[data-ui-theme='mono-dark'] .modal-mask > .modal .plan-issues:not(:where(.block-html *, .html-editor *, .mini-preview *, .comp-preview *, .paste-box *, .review-suggestion *)) {
+  background-color: #302a20;
+  border-color: #ac8e58;
+  color: var(--ui-text);
+}

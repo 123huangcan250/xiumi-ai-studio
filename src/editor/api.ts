@@ -125,7 +125,6 @@ async function req<T>(method: string, url: string, body?: unknown, signal?: Abor
     const data = await res.json().catch(() => null)
     throw new ApiError(data?.error ?? `${res.status} ${res.statusText}`, res.status)
   }
-  // A failed/aborted success body is not an empty result. Callers must not turn it into writes.
   if (res.status === 204 || res.status === 205) return {} as T
   return await res.json() as T
 }

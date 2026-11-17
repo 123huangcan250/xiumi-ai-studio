@@ -23,7 +23,7 @@ const devServers: PlaywrightTestConfig['webServer'] = [
     reuseExistingServer: false,
   },
 ]
-const packagedServer: PlaywrightTestConfig['webServer'] = [
+const packagedServer = [
   {
     command: `node -e "require('fs').rmSync('data-e2e-pkg',{recursive:true,force:true})" && "${exe}"`,
     env: { XIUMI_DATA_DIR: 'data-e2e-pkg', XIUMI_PORT: '5284', XIUMI_NO_BROWSER: '1', XIUMI_NO_PAUSE: '1' },
@@ -45,8 +45,6 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
     trace: 'retain-on-failure',
     baseURL: packaged ? 'http://127.0.0.1:5284' : 'http://127.0.0.1:5273',
-    // Test-only determinism: product automatic day/night mode remains unchanged.
-    storageState: { cookies: [], origins: [{ origin: packaged ? 'http://127.0.0.1:5284' : 'http://127.0.0.1:5273', localStorage: [{ name: 'xiumi-color-mode', value: 'light' }] }] },
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
     permissions: ['clipboard-read', 'clipboard-write'],

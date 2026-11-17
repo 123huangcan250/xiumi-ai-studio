@@ -1,6 +1,3 @@
-import { UiIcon } from './UiIcon'
-import { ColorModeControl } from './ColorModeControl'
-import { ToolbarMenu } from './ToolbarMenu'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { compileDoc, variantUrl } from '../core/compiler'
 import { docToMarkdown } from '../core/exporters'
@@ -373,19 +370,16 @@ export function Toolbar() {
       </span>
       {saveConflict && <button onClick={() => void saveConflictCopy()} data-testid="save-conflict-copy">另存冲突副本</button>}
       <div className="spacer" />
-      <button className="toolbar-undo" aria-label="撤销" onClick={undo} disabled={!canUndo} title="撤销 Ctrl+Z"><span className="ui-legacy-icon">↶ 撤销</span><UiIcon name="undo" /></button>
-      <button className="toolbar-redo" aria-label="重做" onClick={redo} disabled={!canRedo} title="重做 Ctrl+Y"><span className="ui-legacy-icon">↷ 重做</span><UiIcon name="redo" /></button>
-      <button onClick={() => setModal('preview')} data-testid="open-preview"><span className="ui-legacy-icon" aria-hidden="true">📱 </span><UiIcon name="preview" /> 手机预览</button>
-      <button onClick={() => setModal('article')} data-testid="open-article-import"><span className="ui-legacy-icon" aria-hidden="true">⤓ </span><UiIcon name="import" /> 导入推文</button>
-      <ToolbarMenu>
+      <button onClick={undo} disabled={!canUndo} title="撤销 Ctrl+Z">↶ 撤销</button>
+      <button onClick={redo} disabled={!canRedo} title="重做 Ctrl+Y">↷ 重做</button>
       <button onClick={() => (saveNow(), setModal('versions'))}>历史版本</button>
-      <button onClick={() => setModal('ai')} data-testid="open-ai-settings"><span className="ui-legacy-icon" aria-hidden="true">⚙ </span><UiIcon name="settings" /> AI 模型</button>
-      <button className="accent" onClick={() => (setWizardTemplates(undefined), setModal('import'))} data-testid="open-import"><span className="ui-legacy-icon" aria-hidden="true">✨ </span><UiIcon name="design" /> AI 一键排版</button>
-      <button onClick={() => setModal('data')} data-testid="open-data" title="数据保存位置、备份与恢复、从旧版本迁移"><span className="ui-legacy-icon" aria-hidden="true">💾 </span><UiIcon name="data" /> 数据</button>
-      {info?.canQuit && <button onClick={doQuit} data-testid="quit-app" title="关闭 XIUMI AI Studio"><span className="ui-legacy-icon" aria-hidden="true">⏻ </span><UiIcon name="quit" /> 退出</button>}
-        <ColorModeControl />
-      </ToolbarMenu>
+      <button onClick={() => setModal('preview')} data-testid="open-preview">📱 手机预览</button>
+      <button onClick={() => setModal('ai')} data-testid="open-ai-settings">⚙ AI 模型</button>
+      <button onClick={() => setModal('article')} data-testid="open-article-import">⤓ 导入推文</button>
+      <button className="accent" onClick={() => (setWizardTemplates(undefined), setModal('import'))} data-testid="open-import">✨ AI 一键排版</button>
       <button className="primary" onClick={() => setModal('export')} data-testid="open-export">导出 / 发布</button>
+      <button onClick={() => setModal('data')} data-testid="open-data" title="数据保存位置、备份与恢复、从旧版本迁移">💾 数据</button>
+      {info?.canQuit && <button onClick={doQuit} data-testid="quit-app" title="关闭 XIUMI AI Studio">⏻ 退出</button>}
       {modal === 'data' && <DataModal info={info} onClose={() => setModal('')} />}
       {quit && (
         <div className="quit-screen" data-testid="quit-screen">
