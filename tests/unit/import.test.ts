@@ -149,3 +149,13 @@ describe('wechat article import', () => {
     expect(exporterSmoke(articleToHtmlBlocks(a.root))).toContain('温馨提示：请携带学生证')
   })
 })
+
+it('preserves scoped SVG animation references through import, block split and article export', () => {
+  const imported = extractArticle(parse('<div id="js_content"><section style="background:#fff"><svg width="50" height="50"><rect id="slide_trigger" width="40" height="40"></rect></svg></section><section style="background:#eee"><svg width="50" height="50"><set href="#slide_trigger" attributeName="visibility" to="hidden" begin="slide_trigger.click" fill="freeze"></set></svg></section></div>'))
+  const blocks = articleToHtmlBlocks(imported.root)
+  expect(blocks).toHaveLength(2)
+  const output = parse(compileDoc(doc(blocks)).html)
+  expect(output.querySelector('rect')?.getAttribute('id')).toBe('slide_trigger')
+  expect(output.querySelector('set')?.getAttribute('href')).toBe('#slide_trigger')
+  expect(output.querySelector('set')?.getAttribute('begin')).toBe('slide_trigger.click')
+})

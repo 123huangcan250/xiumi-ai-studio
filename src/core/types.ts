@@ -155,8 +155,8 @@ export interface InsertAnchor { id: string; side: 'before' | 'after' }
 /** AI 与程序化修改统一使用的操作；AI 永远不直接产出 HTML */
 export type DocOp =
   | { op: 'insert'; index: number; block: Block; anchor?: InsertAnchor; reason?: string }
-  /** 原文片段只能按文字槽位修改：slots 为槽位 id → 新文字，props.html 由 slots 计算 */
-  | { op: 'update'; id: string; props: Record<string, any>; slots?: Record<string, string>; reason?: string }
+  /** 原文片段按文字槽位或显式主题/受控布局修改；props.html 始终由本地计算，不接受模型 HTML */
+  | { op: 'update'; id: string; props: Record<string, any>; slots?: Record<string, string>; themeId?: string; layout?: 'editorial' | 'chapters'; reason?: string }
   | { op: 'remove'; id: string; reason?: string }
   | { op: 'move'; id: string; to: number; reason?: string }
   | { op: 'setTheme'; themeId: string; reason?: string }

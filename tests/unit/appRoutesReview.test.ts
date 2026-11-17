@@ -154,3 +154,57 @@ it('cancels the provider request when the suggestion client disconnects', async(
  const result=expect(pending).rejects.toMatchObject({name:'AbortError'})
  await started;ctrl.abort();await result;await cancelled
 })
+
+describe('multi-selection request boundaries over actual HTTP',()=>{
+ const context={blocks:[{id:'a',type:'paragraph'},{id:'b',type:'paragraph'},{id:'c',type:'paragraph'}]}
+ it.each(['/api/ai/edit','/api/ai/suggest-instruction'])('rejects empty, duplicate, missing or conflicting scope before provider at %s',async path=>{
+  for(const selectedIds of [[],['a','a'],['missing'],['a',3]]){
+   const response=await post(path,{context,selectedIds,instruction:'edit'});expect(response.status).toBe(400)
+  }
+  const conflict=await post(path,{context:{...context,focus:{ids:['b','c']}},selectedIds:['a','b'],instruction:'edit'});expect(conflict.status).toBe(400)
+  expect(chatJson).not.toHaveBeenCalled()
+ })
+ it('filters multi selected remove/insert and leaves outside edits ignored despite client/model policy spoof',async()=>{
+  vi.mocked(chatJson).mockResolvedValue({selectionPolicy:'strict',ignoredOps:90,ops:[{op:'remove',id:'b'},{op:'insert',index:'1',block:{type:'paragraph'}},{op:'update',id:'c'}]})
+  const response=await post('/api/ai/edit',{context,selectedId:'b',selectedIds:['a','b'],selectionPolicy:'strict',instruction:'edit'})
+  expect(response.status).toBe(200);expect(await response.json()).toMatchObject({selectionPolicy:'filter',ignoredOps:1,ops:[{op:'remove',id:'b'},{op:'insert',index:1,anchor:{id:'a',side:'after'}}]})
+ })
+ it('applies server strict policy atomically for a selected union',async()=>{
+  const previous=process.env.AI_SELECTION_POLICY;process.env.AI_SELECTION_POLICY='strict'
+  try{
+   vi.mocked(chatJson).mockResolvedValue({selectionPolicy:'filter',ops:[{op:'update',id:'a'},{op:'remove',id:'b'}]})
+   expect((await post('/api/ai/edit',{context,selectedIds:['a','b'],instruction:'edit',selectionPolicy:'filter'})).status).toBe(502)
+  }finally{process.env.AI_SELECTION_POLICY=previous}
+ })
+ it('suggests within the selected union and retains the old single request',async()=>{
+  vi.mocked(chatJson).mockResolvedValue({suggestion:'shorten'})
+  expect((await post('/api/ai/suggest-instruction',{context,selectedIds:['a','b']})).status).toBe(200)
+  expect(vi.mocked(chatJson).mock.calls[0][1]).toContain('仅修改选中模块 a、b')
+  expect((await post('/api/ai/suggest-instruction',{context,selectedId:'a'})).status).toBe(200)
+ })
+})
+
+describe('confirmed article image collection over actual local HTTP',()=>{
+ it('imports only approved remote sources, persists a digest and reuses the real indexed image',async()=>{
+  vi.mocked(safeFetch).mockResolvedValue(new Response('<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>'))
+  const url='https://img.xiumi.us/article?private=fixture'
+  const response=await post('/api/assets/import-article',{urls:[url,'http://localhost/private']});expect(response.status).toBe(200)
+  const results=await response.json();expect(results.map((r:any)=>r.status)).toEqual(['imported','failed']);expect(results[0].asset.sourceKey).toMatch(/^[a-f0-9]{64}$/);expect(JSON.stringify(results[0].asset)).not.toContain('private=')
+  expect(safeFetch).toHaveBeenCalledTimes(1);const opts=vi.mocked(safeFetch).mock.calls[0][1]!;expect(opts.maxBytes).toBe(30*1024*1024);expect(opts.allowHost!('127.0.0.1')).toBe(false)
+  const again=await post('/api/assets/import-article',{urls:[url,`/media/${results[0].asset.file}?fit=3:2&w=800`]});expect((await again.json()).map((r:any)=>r.status)).toEqual(['existing','existing']);expect(safeFetch).toHaveBeenCalledTimes(1);expect(chatJson).not.toHaveBeenCalled()
+ })
+ it('rejects malformed and cross-origin collection without a provider or network call',async()=>{
+  expect((await post('/api/assets/import-article',{urls:'wrong'})).status).toBe(400)
+  expect((await fetch(base+'/api/assets/import-article',{method:'POST',headers:{origin:'https://outside.example','content-type':'application/json'},body:'{"urls":[]}'})).status).toBe(403)
+  expect(safeFetch).not.toHaveBeenCalled();expect(chatJson).not.toHaveBeenCalled()
+ })
+})
+it('recognizes a real managed replay glyph without indexing or re-encoding it',async()=>{
+ const sharp=(await import('sharp')).default
+ const bytes=await sharp({create:{width:2,height:2,channels:4,background:'#fff'}}).png().toBuffer()
+ const data='data:image/png;base64,'+bytes.toString('base64')
+ const glyph=await post('/api/replay/glyphs',{images:[data]});expect(glyph.status).toBe(200);const map=await glyph.json()
+ const before=await(await fetch(base+'/api/assets')).json()
+ const r=await post('/api/assets/import-article',{urls:[map[data]]});expect(await r.json()).toEqual([{url:map[data],status:'existing',kind:'glyph'}])
+ expect(await(await fetch(base+'/api/assets')).json()).toEqual(before);expect(safeFetch).not.toHaveBeenCalled();expect(chatJson).not.toHaveBeenCalled()
+})

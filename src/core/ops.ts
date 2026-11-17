@@ -1,6 +1,6 @@
 import { BLOCK_TYPES, coerceProps, createBlock, newId } from './blocks'
 import { richToPlain } from './richtext'
-import { extractSlots, fillSlots } from './slots'
+import { validateHtmlUpdate } from './htmlUpdateValidation'
 import { findBlock, flatBlocks, removeBlockById, updateBlock } from './tree'
 import type { Block, Doc, DocOp, InsertAnchor, SelectionPolicy } from './types'
 
@@ -48,20 +48,7 @@ export function validateOp(doc: Doc, op: any): { op?: DocOp; error?: string } {
       // 大型文本框里的模块也可以按 id 修改
       const b = findBlock(doc.blocks, op.id)?.block
       if (!b) return { error: `找不到模块 ${op.id}` }
-      // 原文片段：只接受文字槽位，HTML 由槽位在当前内容上重新计算（不信任传入的 props.html）
-      if (b.type === 'html') {
-        const raw = op.slots ?? op.props?.slots
-        if (!raw || typeof raw !== 'object') return { error: '原文片段只能修改文字槽位（slots）' }
-        const known = new Map(extractSlots(b.props.html).flatMap((s) => (s.kind === 'text' ? [[s.id, s] as const] : [])))
-        const slots: Record<string, string> = {}
-        for (const [k, v] of Object.entries(raw)) {
-          const s = known.get(k)
-          if (!s || (typeof v !== 'string' && typeof v !== 'number')) continue
-          slots[k] = s.tight ? [...String(v).replace(/\s*\n+\s*/g, ' ')].slice(0, s.max).join('') : String(v)
-        }
-        if (!Object.keys(slots).length) return { error: `修改 ${op.id} 没有有效的文字槽位` }
-        return { op: { op: 'update', id: op.id, props: { html: fillSlots(b.props.html, slots, { split: false }) }, slots, reason: op.reason } }
-      }
+      if (b.type === 'html') return validateHtmlUpdate(b, op)
       if (b.type === 'replay') return { error: '编辑回放模块不支持 AI 修改' }
       // Never normalize untrusted replacement children: updates cannot replace identities or content trees.
       const fields = op.props && typeof op.props === 'object' ? { ...op.props } : {}
@@ -169,10 +156,23 @@ export function selectionScope(doc: ScopeDocument, selectedId: string | null | u
   return { ids, top }
 }
 
-/** Strict stays atomic and update-only within the selected subtree. Filtering preserves valid operations. */
-export function limitToSelection(doc: ScopeDocument, selectedId: string | null | undefined, rawOps: any[], policy: SelectionPolicy = 'filter'): { ops: any[]; dropped: any[] } {
+/** Each selected identity must resolve; never degrade an invalid list into document scope. */
+export function selectionScopes(doc: ScopeDocument, selection: string | string[]): { ids: Set<string>; tops: number[] } | null {
+  const requested = Array.isArray(selection) ? selection : [selection]
+  if (!requested.length || requested.some(id => typeof id !== 'string' || !id) || new Set(requested).size !== requested.length) return null
+  const ids = new Set<string>(), tops = new Set<number>()
+  for (const id of requested) {
+    const scope = selectionScope(doc, id)
+    if (!scope) return null
+    scope.ids.forEach(value => ids.add(value)); tops.add(scope.top)
+  }
+  return { ids, tops: [...tops].sort((a, b) => a - b) }
+}
+
+/** Strict stays atomic/update-only; filter preserves descendant edits and adjacent anchored inserts. */
+export function limitToSelection(doc: ScopeDocument, selectedId: string | string[] | null | undefined, rawOps: any[], policy: SelectionPolicy = 'filter'): { ops: any[]; dropped: any[] } {
   if (selectedId == null) return { ops: rawOps, dropped: [] }
-  const scope = selectionScope(doc, selectedId)
+  const scope = selectionScopes(doc, selectedId)
   if (!scope) return { ops: [], dropped: rawOps }
   if (policy !== 'filter') {
     const valid = rawOps.every(op => op?.op === 'update' && scope.ids.has(op.id))
@@ -183,9 +183,11 @@ export function limitToSelection(doc: ScopeDocument, selectedId: string | null |
     const index = typeof op?.index === 'number' || (typeof op?.index === 'string' && op.index.trim()) ? Number(op.index) : NaN
     if ((op?.op === 'update' || op?.op === 'remove') && scope.ids.has(op.id)) {
       ops.push(op)
-    } else if (op?.op === 'insert' && Number.isInteger(index) && (index === scope.top || index === scope.top + 1)) {
-      const anchor: InsertAnchor = { id: doc.blocks[scope.top].id, side: index === scope.top ? 'before' : 'after' }
-      if (!anchor.id || doc.blocks.filter(b => b?.id === anchor.id).length !== 1 || 'anchor' in op && (!op.anchor || op.anchor.id !== anchor.id || op.anchor.side !== anchor.side)) dropped.push(op)
+    } else if (op?.op === 'insert' && Number.isInteger(index)) {
+      // Shared gaps default to the first top-level root in document order, not click order.
+      const candidates: InsertAnchor[] = scope.tops.filter(top => index === top || index === top + 1).map(top => ({ id: doc.blocks[top].id, side: index === top ? 'before' : 'after' }))
+      const anchor = 'anchor' in op ? candidates.find(candidate => candidate.id === op.anchor?.id && candidate.side === op.anchor?.side) : candidates[0]
+      if (!anchor?.id || doc.blocks.filter(b => b?.id === anchor.id).length !== 1) dropped.push(op)
       else ops.push({ ...op, index, anchor })
     } else dropped.push(op)
   }

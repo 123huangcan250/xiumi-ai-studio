@@ -1,3 +1,4 @@
+import type { ArticleImageResult } from '../../server/articleImages'
 import type { ComponentDraft, LibraryComponent } from '../core/components'
 import type { RoleId } from '../core/roles'
 import type { Block, Doc, ImageRef, SelectionPolicy, Theme } from '../core/types'
@@ -184,10 +185,11 @@ export const api = {
   aiCopywrite: (body: { brief: string; style: string; length: string; levels: number; extra: string; previous?: string; revise?: string; profileId?: string }) => req<{ markdown?: string }>('POST', '/api/ai/copywrite', body),
   aiEnrichCopy: (body: { text: string; photos: unknown[]; keep: string[]; profileId?: string }) => req<{ markdown?: string; changes?: string[] }>('POST', '/api/ai/enrich-copy', body),
   aiPlacePhotos: (body: unknown) => req<{ placements?: unknown[] }>('POST', '/api/ai/place-photos', body),
-  aiSuggestInstruction: (context: unknown, profileId?: string, selectedId?: string, signal?: AbortSignal) => req<{ suggestion: string }>('POST', '/api/ai/suggest-instruction', { context, profileId, selectedId }, signal),
-  aiEdit: (context: unknown, instruction: string, profileId?: string, selectedId?: string) => req<{ summary: string; ops: any[]; selectionPolicy?: SelectionPolicy; ignoredOps?: number }>('POST', '/api/ai/edit', { context, instruction, profileId, selectedId }),
+  aiSuggestInstruction: (context: unknown, profileId?: string, selectedId?: string, signal?: AbortSignal, selectedIds?: string[]) => req<{ suggestion: string }>('POST', '/api/ai/suggest-instruction', { context, profileId, selectedId, selectedIds }, signal),
+  aiEdit: (context: unknown, instruction: string, profileId?: string, selectedId?: string, selectedIds?: string[]) => req<{ summary: string; ops: any[]; selectionPolicy?: SelectionPolicy; ignoredOps?: number }>('POST', '/api/ai/edit', { context, instruction, profileId, selectedId, selectedIds }),
   fetchReference: (url: string) => req<{ html: string }>('POST', '/api/reference/fetch', { url }),
   fetchArticle: (url: string) => req<{ html: string }>('POST', '/api/article/fetch', { url }),
+  importArticleImages: (urls: string[]) => req<ArticleImageResult[]>('POST', '/api/assets/import-article', { urls }),
   fetchAssets: (urls: string[]) => req<Record<string, Asset>>('POST', '/api/assets/fetch', { urls }),
 
   appInfo: () => req<AppInfo>('GET', '/api/app/info'),
