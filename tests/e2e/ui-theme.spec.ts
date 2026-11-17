@@ -178,3 +178,21 @@ for (const mode of ['upstream', 'mono-light', 'mono-dark']) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   })
 }
+
+test('compact workspace keeps keyboard focus visible after a desktop resize', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  const switcher = page.getByRole('navigation', { name: '工作区切换' })
+  await switcher.getByRole('button', { name: '资源' }).click()
+  await expect(page.getByTestId('tab-blocks')).toBeVisible()
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await expect(switcher).toBeHidden()
+  const zoom = page.getByTestId('zoom-in')
+  await zoom.focus()
+  await expect(zoom).toBeFocused()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(switcher.getByRole('button', { name: '画布' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(zoom).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('zoom-reset')).toHaveText('110%')
+})
