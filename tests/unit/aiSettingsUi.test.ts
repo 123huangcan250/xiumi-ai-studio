@@ -24,15 +24,19 @@ beforeEach(async () => {
 })
 afterEach(() => { act(() => root.unmount()); host.remove() })
 const fetchButton = () => host.querySelector<HTMLButtonElement>('[data-testid=ai-load-models]')!
-const list = () => host.querySelector<HTMLSelectElement>('select[aria-label="可用模型"]')
+const list = () => host.querySelector<HTMLElement>('[role="listbox"][aria-label="可用模型"]')
+const picker = () => host.querySelector<HTMLButtonElement>('[data-testid="ai-model-picker"]')
+const openPicker = () => { expect(picker()).not.toBeNull(); if (picker()!.getAttribute('aria-expanded') !== 'true') act(() => picker()!.click()) }
+const options = () => { openPicker(); return [...list()!.querySelectorAll<HTMLElement>('[role="option"]')] }
+const choose = (id: string) => { const option = options().find(o => o.title === id); expect(option).toBeTruthy(); act(() => option!.click()) }
 
 it('shows fetched IDs in a visible selectable list without editing the existing model name', async () => {
   vi.mocked(api.aiModels).mockResolvedValue([{ id: 'new-model', contextWindow: 128000 }, { id: 'other-model' }])
   await act(async () => fetchButton().click())
-  expect(list()).not.toBeNull()
-  expect(list()!.size).toBeGreaterThan(1)
-  expect([...list()!.options].map((o) => o.value)).toContain('new-model')
-  act(() => { list()!.value = 'new-model'; list()!.dispatchEvent(new Event('change', { bubbles: true })) })
+  expect(picker()!.getAttribute('aria-expanded')).toBe('false')
+  expect(list()).toBeNull()
+  expect(options().map(o => o.title)).toContain('new-model')
+  choose('new-model')
   expect(host.querySelector<HTMLInputElement>('input[placeholder^="例如 deepseek-chat"]')!.value).toBe('new-model')
   expect(host.querySelector<HTMLInputElement>('input[type="number"]')!.value).toBe('128000')
 })
@@ -51,7 +55,7 @@ it('renders request failures visibly and permits a retry', async () => {
   expect(fetchButton().disabled).toBe(false)
   vi.mocked(api.aiModels).mockResolvedValue([{ id: 'retry-model' }])
   await act(async () => fetchButton().click())
-  expect(list()!.options[1].value).toBe('retry-model')
+  expect(options()[0].title).toBe('retry-model')
 })
 
 it('ignores late results after switching profiles', async () => {
@@ -74,7 +78,7 @@ const changeInput = (el: HTMLInputElement, value: string) => act(() => {
 it('imports selected model limits and preserves manual tuning when typing a model name', async () => {
   vi.mocked(api.aiModels).mockResolvedValue([{ id: 'new-model', contextWindow: 128000, maxOutput: 8192, efforts: ['low', 'high'] }])
   await act(async () => fetchButton().click())
-  act(() => { list()!.value = 'new-model'; list()!.dispatchEvent(new Event('change', { bubbles: true })) })
+  choose('new-model')
   expect(input('ai-max-output')?.value).toBe('8192')
   changeInput(input('ai-effort'), 'high')
   changeInput(input('ai-model'), 'custom-other-model')
@@ -117,7 +121,7 @@ it('clicking the current profile does not leave discovery stuck in a busy state'
   expect(fetchButton().disabled).toBe(false)
   vi.mocked(api.aiModels).mockResolvedValueOnce([{ id: 'retry' }])
   await act(async () => fetchButton().click())
-  expect(list()!.options[1].value).toBe('retry')
+  expect(options()[0].title).toBe('retry')
 })
 it('keeps a newer discovery request busy when the superseded request completes', async () => {
   let first!: (r: any) => void
@@ -129,7 +133,7 @@ it('keeps a newer discovery request busy when the superseded request completes',
   await act(async () => first([{ id: 'old' }]))
   expect(fetchButton().disabled).toBe(true)
   await act(async () => second([{ id: 'new' }]))
-  expect(list()!.options[1].value).toBe('new')
+  expect(options()[0].title).toBe('new')
   expect(fetchButton().disabled).toBe(false)
 })
 it('ignores discovery completion after closing the modal', async () => {
@@ -169,7 +173,7 @@ it('discovers models after key editing finishes, never during mount, profile sel
   await blur(keyInput())
   expect(api.aiModels).toHaveBeenCalledTimes(1)
   expect(api.aiModels).toHaveBeenLastCalledWith(expect.objectContaining({ apiKey: 'test-complete-key', baseUrl: 'https://example.invalid/v1' }))
-  expect(list()!.options[1].value).toBe('automatic-model')
+  expect(options()[0].title).toBe('automatic-model')
   await blur(keyInput())
   expect(api.aiModels).toHaveBeenCalledTimes(1)
   await act(async () => fetchButton().click())
@@ -189,7 +193,7 @@ it('waits for both a valid address and credentials before automatic discovery', 
   expect(api.aiModels).not.toHaveBeenCalled()
   await blur(baseInput())
   expect(api.aiModels).toHaveBeenCalledTimes(1)
-  expect(list()!.options[1].value).toBe('completed-model')
+  expect(options()[0].title).toBe('completed-model')
 })
 
 it('does not auto-discover a remote endpoint without a key but allows keyless loopback models', async () => {
@@ -200,7 +204,7 @@ it('does not auto-discover a remote endpoint without a key but allows keyless lo
   changeInput(baseInput(), 'http://127.0.0.1:11434/v1')
   await blur(baseInput())
   expect(api.aiModels).toHaveBeenCalledTimes(1)
-  expect(list()!.options[1].value).toBe('local-model')
+  expect(options()[0].title).toBe('local-model')
 })
 
 it('keeps a typed key for same-origin paths but requires a new key after changing origin', async () => {
@@ -247,7 +251,7 @@ it('ignores late automatic discovery when credentials are edited again', async (
   expect(host.textContent).not.toContain('stale-auto-model')
   vi.mocked(api.aiModels).mockResolvedValueOnce([{ id: 'latest-auto-model' }])
   await blur(keyInput())
-  expect(list()!.options[1].value).toBe('latest-auto-model')
+  expect(options()[0].title).toBe('latest-auto-model')
 })
 
 it('does not auto-discover when key blur leads to another credential field or an explicit action', async () => {
@@ -294,7 +298,7 @@ it('uses a saved key only for same-origin discovery and never just on opening th
   changeInput(baseInput(), 'https://example.invalid/custom/v1')
   await blur(baseInput())
   expect(api.aiModels).toHaveBeenCalledTimes(1)
-  expect(list()!.options[1].value).toBe('saved-key-model')
+  expect(options()[0].title).toBe('saved-key-model')
   changeInput(baseInput(), 'https://new.invalid/v1')
   await blur(baseInput())
   expect(api.aiModels).toHaveBeenCalledTimes(1)
@@ -319,7 +323,7 @@ it('allows an explicitly cleared key to discover a local provider after changing
   changeInput(keyInput(), '')
   await act(async () => fetchButton().click())
   expect(api.aiModels).toHaveBeenCalledWith(expect.objectContaining({ apiKey: '', hasKey: false, baseUrl: 'http://localhost:11434/v1' }))
-  expect(list()!.options[1].value).toBe('local-model')
+  expect(options()[0].title).toBe('local-model')
 })
 
 it('names ignored extra parameters visibly instead of silently dropping them', () => {
@@ -375,4 +379,26 @@ it('does not send requests to invalid or credential-bearing draft URLs',async()=
   await blur(baseInput())
  }
  expect(api.aiModels).not.toHaveBeenCalled();expect(api.testAi).not.toHaveBeenCalled()
+})
+
+const key = (value: string) => act(() => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true })))
+it('keeps 40 models folded and supports keyboard selection without changing manual tuning', async () => {
+  vi.mocked(api.aiModels).mockResolvedValue(Array.from({length:40}, (_,i) => ({id:`model-${i}`,contextWindow:128000+i,maxOutput:4096+i,efforts:['high']})))
+  await act(async () => fetchButton().click())
+  expect(list()).toBeNull()
+  picker()!.focus(); key('ArrowDown'); key('End')
+  expect(list()!.querySelectorAll('[role="option"]')).toHaveLength(40)
+  expect(list()!.getAttribute('aria-activedescendant')).toBe(list()!.querySelector('[data-active="true"]')!.id)
+  expect(input('ai-model').value).toBe('old-model')
+  key('Enter')
+  expect(input('ai-model').value).toBe('model-39'); expect(input('ai-context').value).toBe('128039')
+  expect(input('ai-max-output').value).toBe('4135'); expect(document.activeElement).toBe(picker())
+  changeInput(input('ai-effort'),'high'); changeInput(input('ai-model'),'handwritten')
+  expect(input('ai-context').value).toBe('128039'); expect(input('ai-max-output').value).toBe('4135'); expect(input('ai-effort').value).toBe('high')
+})
+it('Escape dismisses only the open picker before the settings modal', async () => {
+  const close=vi.fn(); await act(async () => root.render(createElement(AiSettingsModal,{onClose:close})))
+  vi.mocked(api.aiModels).mockResolvedValue([{id:'a'}]); await act(async () => fetchButton().click())
+  openPicker(); key('Escape'); expect(list()).toBeNull(); expect(close).not.toHaveBeenCalled(); expect(document.activeElement).toBe(picker())
+  key('Escape'); expect(close).toHaveBeenCalledTimes(1)
 })

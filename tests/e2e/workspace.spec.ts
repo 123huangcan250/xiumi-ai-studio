@@ -218,9 +218,10 @@ test('AI 模型设置：从上游取模型列表和参数，检测思考强度�
   await page.getByPlaceholder('粘贴密钥').fill('test-key-123456')
   await page.getByTestId('ai-load-models').click()
   await expect(page.getByTestId('ai-model-note')).toContainText('2 个模型')
+  await page.getByTestId('ai-model-picker').click()
   await expect(page.getByRole('listbox', { name: '可用模型' })).toBeVisible()
 
-  await page.getByRole('listbox', { name: '可用模型' }).selectOption('big-model')
+  await page.getByRole('listbox', { name: '可用模型' }).getByRole('option', { name: /^big-model/ }).click()
   await expect(page.getByTestId('ai-context')).toHaveValue('262144')
   await expect(page.getByTestId('ai-max-output')).toHaveValue('32768')
   // 还没检测时给常见值；检测后只剩模型接受的
