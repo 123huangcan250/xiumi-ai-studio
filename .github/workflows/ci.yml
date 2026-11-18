@@ -45,6 +45,8 @@ jobs:
         shell: pwsh
         run: ./scripts/collect-network-diagnostics.ps1 -Phase before-e2e
       - id: e2e
+        env:
+          E2E_TARGET: built
         run: pnpm e2e --update-snapshots=none
       - name: Snapshot resources after E2E failure
         if: failure() && steps.e2e.outcome == 'failure'

@@ -1,3 +1,4 @@
+import { UiThemeControl } from './UiThemeControl'
 // 数据与备份：数据保存位置、备份下载、从备份恢复、从旧版本迁移、公众号接口配置文件。
 // 恢复和迁移都先预览，确认后才写入；同名内容保留本机版本，不覆盖，来源文件不改动。
 import { useEffect, useState } from 'react'
@@ -69,6 +70,7 @@ export function DataModal({ info, onClose }: { info: AppInfo | null; onClose: ()
   return (
     <Modal title="数据与备份" onClose={onClose} width={620}>
       <div className="data-modal">
+      <UiThemeControl />
       <h4>数据保存位置</h4>
       <p className="hint">
         项目、历史版本、模板、组件、主题、素材和 AI 设置都保存在这里。删除或更新程序不会删除这些数据。

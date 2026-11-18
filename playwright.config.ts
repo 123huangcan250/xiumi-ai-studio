@@ -4,6 +4,7 @@ import { defineConfig, devices, type PlaywrightTestConfig } from '@playwright/te
 // E2E 使用独立端口与数据目录，不影响日常使用的 data/
 // E2E_TARGET=packaged（pnpm e2e:package）时改为测试打包好的 XIUMI AI Studio.exe
 const packaged = process.env.E2E_TARGET === 'packaged'
+const built = process.env.E2E_TARGET === 'built'
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version
 const exe = `release/XIUMI-AI-Studio-${version}-win-x64/XIUMI AI Studio.exe`
 
@@ -20,6 +21,16 @@ const devServers: PlaywrightTestConfig['webServer'] = [
     command: 'npx vite --host 127.0.0.1 --port 5273 --strictPort',
     env: { API_PORT: '5274', VITE_CACHE_DIR: 'node_modules/.vite-e2e' },
     url: 'http://127.0.0.1:5273',
+    reuseExistingServer: false,
+  },
+]
+// CI tests the real build and API on one origin, without Vite's per-module
+// requests and separate API proxy creating extra loopback traffic.
+const builtServer: PlaywrightTestConfig['webServer'] = [
+  {
+    command: `node -e "const fs=require('node:fs'); if(!fs.existsSync('dist/index.html')) throw new Error('Build the application with pnpm build before running E2E_TARGET=built'); fs.rmSync('data-e2e-built',{recursive:true,force:true})" && node --import tsx server/index.ts`,
+    env: { API_PORT: '5273', XIUMI_DATA_DIR: 'data-e2e-built', XIUMI_SKIP_ENV_FILES: '1', NODE_ENV: 'production' },
+    url: 'http://127.0.0.1:5273/api/app/info',
     reuseExistingServer: false,
   },
 ]
@@ -49,5 +60,5 @@ export default defineConfig({
     deviceScaleFactor: 1,
     permissions: ['clipboard-read', 'clipboard-write'],
   },
-  webServer: packaged ? packagedServer : devServers,
+  webServer: packaged ? packagedServer : built ? builtServer : devServers,
 })

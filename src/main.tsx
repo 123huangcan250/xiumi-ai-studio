@@ -4,7 +4,11 @@ import App from './App'
 import { canvasEnv, setReplayEnv } from './core/replay'
 import { ErrorBoundary } from './editor/ErrorBoundary'
 import { saveBeforeLeave, useStore } from './editor/store'
+import { UiThemeProvider } from './editor/UiThemeControl'
 import './styles.css'
+import './theme/fonts/fonts.css'
+import './ui-theme.css'
+import './workspace-responsive.css'
 
 /** 最外层兜底：任何未捕获的渲染错误都显示可恢复的提示，而不是白屏 */
 function Crashed({ error, reset }: { error: Error; reset: () => void }) {
@@ -35,7 +39,7 @@ setReplayEnv(canvasEnv(document))
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary fallback={(error, reset) => <Crashed error={error} reset={reset} />}>
-      <App />
+      <UiThemeProvider><App /></UiThemeProvider>
     </ErrorBoundary>
   </StrictMode>,
 )
