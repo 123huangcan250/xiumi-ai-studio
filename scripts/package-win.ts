@@ -8,13 +8,13 @@
 //   app/server.cjs        服务端（esbuild 打包，含全部 JS 依赖）
 //   app/dist/             前端
 //   app/samples/          验收样例
-//   app/node_modules/     sharp 及其 Windows 原生库（唯一不能打进 server.cjs 的依赖）
+//   app/node_modules/     Sharp 原生库与 DOMPurify/jsdom 的常规运行时依赖闭包
 //   app/licenses/         Node.js 与全部生产依赖的许可文本
 //
 // 需要：Windows x64、已执行 pnpm install。首次运行会下载 Node.js 运行时到 .cache/（之后离线可用）。
 import { execFileSync, execSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, relative, sep } from 'node:path'
 import { build } from 'esbuild'
@@ -22,6 +22,7 @@ import { unzipSync, Zip, ZipDeflate } from 'fflate'
 import { rcedit } from 'rcedit'
 import sharp from 'sharp'
 import { copyDir } from './fsutil'
+import { copyRuntimeDependencies } from './runtimeDependencies'
 
 const require = createRequire(import.meta.url)
 const ROOT = join(import.meta.dirname, '..')
@@ -69,8 +70,8 @@ const result = await build({
   platform: 'node',
   format: 'cjs',
   target: 'node22',
-  // sharp 含原生库，按普通 node_modules 随包携带
-  external: ['sharp'],
+  // Native sharp and jsdom resources require their ordinary runtime package layout.
+  external: ['sharp', 'isomorphic-dompurify'],
   define: { 'import.meta.dirname': '__dirname', __XIUMI_VERSION__: JSON.stringify(VERSION) },
   legalComments: 'none',
   logLevel: 'warning',
@@ -85,40 +86,9 @@ copyDir(join(ROOT, 'samples'), join(APP, 'samples'))
 writeFileSync(join(OUT, '使用说明.txt'), `${String.fromCharCode(0xfeff)}${readFileSync(join(ROOT, 'packaging', '使用说明.txt'), 'utf8').replaceAll('{{VERSION}}', VERSION).replace(/\r?\n/g, '\r\n')}`)
 copyFileSync(join(ROOT, 'THIRD_PARTY_NOTICES.md'), join(OUT, 'THIRD_PARTY_NOTICES.md'))
 
-// ---------- 4. sharp 运行时 ----------
-step('复制 sharp 及其 Windows 原生库')
-/** 包所在目录（解析 pnpm 的符号链接） */
-function packageDir(name: string, from: string): string {
-  let dir = from
-  for (;;) {
-    const p = join(dir, 'node_modules', ...name.split('/'))
-    if (existsSync(join(p, 'package.json'))) return realpathSync(p)
-    // pnpm：依赖与包本身并列在 .pnpm/<包>/node_modules/ 下
-    const sibling = join(dir, ...name.split('/'))
-    if (dir.endsWith(`${sep}node_modules`) && existsSync(join(sibling, 'package.json'))) return realpathSync(sibling)
-    const up = dirname(dir)
-    if (up === dir) throw new Error(`找不到依赖 ${name}`)
-    dir = up
-  }
-}
-const copied = new Map<string, string>()
-function copyRuntimeDep(name: string, from: string) {
-  if (copied.has(name)) return
-  const dir = packageDir(name, from)
-  copied.set(name, dir)
-  copyDir(dir, join(APP, 'node_modules', ...name.split('/')))
-  const p = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
-  const root = dir.split(sep).slice(0, -name.split('/').length).join(sep)
-  for (const dep of Object.keys(p.dependencies ?? {})) copyRuntimeDep(dep, root)
-  for (const dep of Object.keys(p.optionalDependencies ?? {})) {
-    try {
-      copyRuntimeDep(dep, root)
-    } catch {
-      /* 其他平台的可选依赖没有安装 */
-    }
-  }
-}
-copyRuntimeDep('sharp', ROOT)
+// ---------- 4. sharp / DOM runtime 运行时 ----------
+step('Copy sharp and DOM runtime dependencies')
+const copied = copyRuntimeDependencies(['sharp', 'isomorphic-dompurify'], ROOT, join(APP, 'node_modules'))
 console.log(`  ${[...copied.keys()].join('、')}`)
 if (!copied.has('@img/sharp-win32-x64')) throw new Error('缺少 @img/sharp-win32-x64：请在 Windows x64 上执行 pnpm install')
 

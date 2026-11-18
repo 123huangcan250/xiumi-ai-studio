@@ -48,3 +48,19 @@ A post-gate review found the general dark button rule overriding the 44px settin
 Remote 118f9aea passed 769 mixed tests in all four Node22/24 fork/upstream jobs, but each browser run passed48/49: light390 list bottom840.3125 exceeded body bottom840. All five other picker scenarios and original43 browser tests passed. The artifact contains error context but no trace or actual scroll-range values, so Windows maximum-scroll saturation was not measured. The settings DOM has normal-flow controls after the picker.
 
 Two real-component regressions model rounded/clamped scrollTop with available local range and dynamic fractional rectangles. Both fail before correction (7 other picker tests passed). Rounding each necessary reveal delta toward visibility fixes both, without changing page scrolling or subsequent option-cursor/body behavior. Final narrow42 focused tests, types/lint and6-case discovery pass. The strict browser geometry assertion is unchanged and now includes actual scrollTop/max diagnostics if it fails. This is a candidate fix pending fresh exact Windows validation, not a claim that the old run passed. No retry/timeouts or geometry tolerance was loosened.
+
+## Refresh on the narrow editorial shell
+
+The checkpoints above describe historical branches, not the current merge.
+The prior #17 head is preserved as the first parent; the second parent is the
+green #8 head `95897cc`, which already contains upstream main `693589d`.
+This refresh retains the current upstream right panel, article review and
+multi-selection code alongside the #8 CI change. It does not restore the
+superseded broad dark stylesheet. The model picker's dimensions, scrolling,
+focus and forced-color affordances are scoped to settings, use the inherited
+current palette, and do not change the document or export surface.
+
+The nine picker browser scenarios now exercise the actual upstream,
+monochrome light and monochrome dark modes at 1440, 1024 and 390 pixels.
+Screenshots use the per-test output directory. These scenarios use synthetic
+discovery, not real provider credentials.

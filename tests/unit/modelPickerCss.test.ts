@@ -2,9 +2,9 @@
 import { readFileSync } from 'node:fs'
 import { afterEach, expect, it } from 'vitest'
 
-afterEach(() => { document.head.innerHTML = ''; document.body.innerHTML = ''; delete document.documentElement.dataset.colorMode })
-it.each(['light', 'dark'])('keeps picker touch targets at least 44px in %s actual styles', mode => {
-  document.documentElement.dataset.colorMode = mode
+afterEach(() => { document.head.innerHTML = ''; document.body.innerHTML = ''; delete document.documentElement.dataset.uiTheme })
+it.each(['upstream', 'mono-light', 'mono-dark'])('keeps picker touch targets at least 44px in %s actual styles', mode => {
+  if (mode !== 'upstream') document.documentElement.dataset.uiTheme = mode
   const imports = [...readFileSync('src/main.tsx', 'utf8').matchAll(/import ['"]\.\/(.*?\.css)['"]/g)]
   expect(imports.length).toBeGreaterThan(0)
   for (const [, file] of imports) {

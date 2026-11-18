@@ -49,15 +49,6 @@ const save = (w: Widths) => {
 export function Workspace({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLElement>(null)
   const [view, setView] = useState<'left' | 'canvas' | 'right'>('canvas')
-  useEffect(() => {
-    const reveal = () => {
-      const active = document.activeElement
-      if (active?.closest('.workspace > .panel.left')) setView('left')
-      else if (active?.closest('.workspace > .panel.right')) setView('right')
-    }
-    window.addEventListener('resize', reveal)
-    return () => window.removeEventListener('resize', reveal)
-  }, [])
   const [widths, setWidths] = useState<Widths>(load)
   const [dragging, setDragging] = useState<Side | null>(null)
   // 拖动开始时的指针位置和侧栏宽度：按指针移动的距离改宽度，开始拖动时不会跳一下
@@ -138,6 +129,12 @@ export function Workspace({ children }: { children: ReactNode }) {
       className="workspace"
       data-workspace-view={view}
       ref={ref}
+      onFocusCapture={({ target }) => {
+        // Remember the focused region before the compact breakpoint can hide it.
+        if (target.closest('.workspace > .panel.left')) setView('left')
+        else if (target.closest('.workspace > .panel.right')) setView('right')
+        else if (target.closest('.workspace > .canvas-wrap')) setView('canvas')
+      }}
       style={{ ...(shown.left !== undefined && { ['--left-w' as string]: `${shown.left}px` }), ...(shown.right !== undefined && { ['--right-w' as string]: `${shown.right}px` }) }}
     >
       <nav className="workspace-switcher" aria-label="工作区切换">

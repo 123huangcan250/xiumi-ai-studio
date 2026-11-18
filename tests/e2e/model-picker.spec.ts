@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test'
 
 // Synthetic discovery only. These screenshots do not claim live model access.
-for (const mode of ['light','dark']) for (const [width,height] of [[1440,900],[1024,768],[390,844]]) {
- test(`settings picker ${mode} ${width}x${height}`,async({page})=>{
+for (const mode of ['upstream','mono-light','mono-dark']) for (const [width,height] of [[1440,900],[1024,768],[390,844]]) {
+ test(`settings picker ${mode} ${width}x${height}`,async({page}, testInfo)=>{
   await page.setViewportSize({width,height})
-  await page.addInitScript(value=>localStorage.setItem('xiumi-color-mode',value),mode)
+  await page.addInitScript(value=>localStorage.setItem('xiumi-ui-theme',value),mode)
   await page.route('**/api/settings/ai',route=>route.fulfill({json:{activeId:'picker',profiles:[{id:'picker',name:'Picker fixture',provider:'openai',baseUrl:'https://example.invalid/v1',apiKey:'',model:'manual-model',jsonMode:true}]}}))
   const models=Array.from({length:40},(_,i)=>({id:'model-'+String(i).padStart(2,'0')+(i===0?'-long-model-name'.repeat(16):''),contextWindow:128000+i,maxOutput:4096+i,efforts:['low','high']}))
   let release!:()=>void
@@ -13,19 +13,20 @@ for (const mode of ['light','dark']) for (const [width,height] of [[1440,900],[1
   await page.route('**/api/settings/ai/models',async route=>{await gate;await route.fulfill(fail?{status:502,json:{error:'合成服务失败'}}:{json:models})})
   await page.goto('/')
   await expect(page.getByTestId('canvas')).toBeVisible()
-  if(!await page.getByTestId('open-ai-settings').isVisible()) await page.getByTestId('toolbar-more').click()
+  if (mode !== 'upstream') await expect(page.locator('html')).toHaveAttribute('data-ui-theme', mode)
+  else await expect(page.locator('html')).not.toHaveAttribute('data-ui-theme', /.+/)
   await page.getByTestId('open-ai-settings').click()
   const dialog=page.getByRole('dialog',{name:'AI 模型设置'})
   await dialog.getByText('Picker fixture',{exact:true}).click()
   await page.getByTestId('ai-load-models').click()
   await expect(page.getByTestId('ai-load-models')).toBeDisabled()
   await expect(page.getByTestId('ai-model-note')).toContainText('正在获取')
-  await page.screenshot({path:`visual-evidence/model-picker/${mode}-${width}-loading.png`})
+  await page.screenshot({path:testInfo.outputPath('loading.png')})
   release()
   await expect(page.getByTestId('ai-model-note')).toContainText('40 个模型')
   const trigger=page.getByTestId('ai-model-picker'),list=page.getByRole('listbox',{name:'可用模型'}),body=dialog.locator('.modal-body')
   await expect(trigger).toHaveAttribute('aria-expanded','false');await expect(list).toHaveCount(0)
-  await page.screenshot({path:`visual-evidence/model-picker/${mode}-${width}-collapsed.png`})
+  await page.screenshot({path:testInfo.outputPath('collapsed.png')})
   await trigger.focus()
   const pageScroll=await page.evaluate(()=>({x:scrollX,y:scrollY}))
   await page.keyboard.press('ArrowDown')
@@ -40,14 +41,14 @@ for (const mode of ['light','dark']) for (const [width,height] of [[1440,900],[1
   expect(await body.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true)
   expect(await trigger.evaluate(el=>el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44)
   for (const height of await list.getByRole('option').evaluateAll(elements=>elements.map(el=>el.getBoundingClientRect().height))) expect(height).toBeGreaterThanOrEqual(44)
-  await page.screenshot({path:`visual-evidence/model-picker/${mode}-${width}-open.png`})
+  await page.screenshot({path:testInfo.outputPath('open.png')})
   await list.hover();const scroll=await body.evaluate(el=>el.scrollTop)
   await page.mouse.wheel(0,400)
   await expect.poll(()=>list.evaluate(el=>el.scrollTop)).toBeGreaterThan(0)
   expect(await body.evaluate(el=>el.scrollTop)).toBe(scroll)
   await page.keyboard.press('End');await expect(list).toHaveAttribute('aria-activedescendant',/-option-39$/)
   expect(await body.evaluate(el=>el.scrollTop)).toBe(scroll)
-  await page.screenshot({path:`visual-evidence/model-picker/${mode}-${width}-scrolled.png`})
+  await page.screenshot({path:testInfo.outputPath('scrolled.png')})
   await page.keyboard.press('Enter');await expect(list).toHaveCount(0);await expect(trigger).toBeFocused()
   await expect(page.getByTestId('ai-model')).toHaveValue('model-39')
   await expect(page.getByTestId('ai-context')).toHaveValue('128039');await expect(page.getByTestId('ai-max-output')).toHaveValue('4135')
@@ -56,7 +57,7 @@ for (const mode of ['light','dark']) for (const [width,height] of [[1440,900],[1
   await trigger.click();await page.keyboard.press('Escape');await expect(dialog).toBeVisible();await expect(trigger).toBeFocused();await expect(list).toHaveCount(0)
   await trigger.click();await page.keyboard.press('Tab');await expect(list).toHaveCount(0);await expect(trigger).not.toBeFocused()
   fail=true;await page.getByTestId('ai-load-models').click();await expect(page.getByTestId('ai-model-note')).toContainText('合成服务失败');await expect(trigger).toHaveCount(0)
-  await page.screenshot({path:`visual-evidence/model-picker/${mode}-${width}-failure.png`})
+  await page.screenshot({path:testInfo.outputPath('failure.png')})
   fail=false;await page.getByTestId('ai-load-models').click();await expect(trigger).toHaveAttribute('aria-expanded','false')
   await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0)
  })

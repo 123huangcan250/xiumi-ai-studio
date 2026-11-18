@@ -1,0 +1,58 @@
+/* Shared compact layout. Desktop structure and toolbar action order remain upstream. */
+.app > .workspace > .workspace-switcher { display: none; }
+
+@media (max-width: 1180px) {
+  .app > .toolbar { height: auto; min-height: 52px; flex-wrap: wrap; padding-block: 6px; }
+  .app > .toolbar > .title-input { min-width: 0; flex: 1 1 10rem; }
+}
+
+@media (max-width: 1100px) {
+  .app > .workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-width: 0;
+  }
+  .app > .workspace > .workspace-switcher {
+    display: flex;
+    grid-area: 1 / 1;
+    padding: 2px 8px;
+    gap: 4px;
+    background: var(--ui-panel, var(--panel));
+    color: var(--ui-text, var(--text));
+    border-bottom: 1px solid var(--ui-line, var(--line));
+  }
+  .app > .workspace > .workspace-switcher > button {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    color: inherit;
+    background: transparent;
+    border-color: transparent;
+  }
+  .app > .workspace > .workspace-switcher > button[aria-pressed='true'] {
+    background: var(--ui-hover, var(--brand-soft));
+    border-color: var(--ui-focus, var(--brand));
+  }
+  .app > .workspace > :is(.panel.left, .panel.right, .canvas-wrap) {
+    grid-area: 2 / 1;
+    min-width: 0;
+    min-height: 0;
+    border-inline: 0;
+  }
+  .app > .workspace > .panel-resizer,
+  .app > .workspace:not([data-workspace-view='left']) > .panel.left,
+  .app > .workspace:not([data-workspace-view='right']) > .panel.right,
+  .app > .workspace:not([data-workspace-view='canvas']) > .canvas-wrap {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .app > .toolbar { padding-inline: 8px; gap: 4px; }
+  .app > .toolbar > button { min-height: 44px; padding-inline: 6px; }
+  .app > .toolbar > .spacer { display: none; }
+  .canvas-wrap > .canvas-scroll > .phone { max-width: 100%; }
+  .modal-mask > .modal { max-width: calc(100vw - 16px); }
+  .modal-body > .ai-settings { grid-template-columns: minmax(0, 1fr); }
+  .modal-body > .ai-settings > .ai-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 200px; overflow: auto; }
+}
