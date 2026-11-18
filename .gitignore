@@ -6,6 +6,7 @@ test-results
 playwright-report
 *.log
 data-e2e/
+data-e2e-built/
 tsconfig.tsbuildinfo
 release/
 .cache/

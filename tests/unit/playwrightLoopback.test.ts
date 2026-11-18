@@ -32,7 +32,25 @@ it('preserves the separate packaged mode and its launch environment', async () =
   expect(servers[0].env).toEqual({ XIUMI_DATA_DIR: 'data-e2e-pkg', XIUMI_PORT: '5284', XIUMI_NO_BROWSER: '1', XIUMI_NO_PAUSE: '1' })
   expect(servers[0].reuseExistingServer).toBe(false)
 })
-it.each(['', 'packaged'])('retains failure traces without adding retries in %s mode', async target => {
+it('serves the built app from one loopback server with separate disposable data', async () => {
+  const settings = await config('built')
+  const servers = settings.webServer as any[]
+  expect(settings.use?.baseURL).toBe('http://127.0.0.1:5273')
+  expect(servers).toHaveLength(1)
+  expect(servers[0].url).toBe('http://127.0.0.1:5273/api/app/info')
+  expect(servers[0].command).toContain('dist/index.html')
+  expect(servers[0].command).toContain('node --import tsx server/index.ts')
+  expect(servers[0].env).toEqual({
+    API_PORT: '5273',
+    XIUMI_DATA_DIR: 'data-e2e-built',
+    XIUMI_SKIP_ENV_FILES: '1',
+    NODE_ENV: 'production',
+  })
+  expect(servers[0].reuseExistingServer).toBe(false)
+  expect(settings.testDir).toBe('tests/e2e')
+  expect(settings.workers).toBe(1)
+})
+it.each(['', 'built', 'packaged'])('retains failure traces without adding retries in %s mode', async target => {
   const settings = await config(target)
   expect(settings.use?.trace).toBe('retain-on-failure')
   expect(settings.retries).toBeUndefined()
