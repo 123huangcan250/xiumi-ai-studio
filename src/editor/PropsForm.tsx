@@ -356,7 +356,7 @@ function BoxChildren({ block }: { block: Block<'box'> }) {
     : position
   const currentBox = () => {
     const store = useStore.getState()
-    if (store.doc.id !== docId || store.selectedId !== boxId) return null
+    if (store.doc.id !== docId || !store.selectedIds.includes(boxId)) return null
     const box = findBlock(store.doc.blocks, boxId)?.block
     return box?.type === 'box' ? { store, box } : null
   }

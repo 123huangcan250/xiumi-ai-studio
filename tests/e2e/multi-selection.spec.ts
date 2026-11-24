@@ -35,6 +35,28 @@ test('Ctrl/Cmd toggle, ordinary click and multi-delete retain history and persis
   await page.reload();await expect(cards).toHaveCount(1);await expect(cards).toContainText('Multi C')
 })
 
+test('selected modules have independent collapsible properties in canvas order', async ({ page }) => {
+  const cards = await setup(page)
+  await cards.nth(2).locator('.block-html').click()
+  await cards.nth(0).locator('.block-html').click({ modifiers: ['Control'] })
+  const forms = page.getByTestId('selected-module-properties')
+  await expect(forms).toHaveCount(2)
+  const title = (index: number) => forms.nth(index).getByRole('textbox', { name: '标题', exact: true })
+  await expect(title(0)).toHaveValue('Multi A')
+  await expect(title(1)).toHaveValue('Multi C')
+
+  await forms.nth(0).locator('summary').focus()
+  await page.keyboard.press('Enter')
+  await expect(title(0)).toBeHidden()
+  await expect(title(1)).toBeVisible()
+  await title(1).fill('Edited C')
+  await expect(forms.nth(0)).not.toHaveAttribute('open', '')
+  await expect(page.locator('.article .block.selected')).toHaveCount(2)
+  await expect(cards.nth(0)).toContainText('Multi A')
+  await expect(cards.nth(1)).toContainText('Multi B')
+  await expect(cards.nth(2)).toContainText('Edited C')
+})
+
 test('multi AI response uses union scope and inline review accepts individual selected modules',async({page})=>{
   const cards=await setup(page)
   await cards.nth(0).locator('.block-html').click();await cards.nth(1).locator('.block-html').click({modifiers:['Control']})
