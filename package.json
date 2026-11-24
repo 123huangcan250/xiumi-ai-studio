@@ -16,6 +16,7 @@
     "e2e": "node --import isomorphic-dompurify node_modules/@playwright/test/cli.js test",
     "check": "pnpm lint && pnpm typecheck && pnpm test",
     "sample": "tsx scripts/make-sample.ts",
+    "mcp": "tsx mcp/server.ts",
     "probe": "tsx scripts/make-xiumi-probe.ts",
     "package:win": "tsx scripts/package-win.ts",
     "verify:package": "tsx scripts/verify-package.ts",
