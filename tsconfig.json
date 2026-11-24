@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "server", "scripts", "tests"]
+  "include": ["src", "server", "scripts", "tests", "mcp"]
 }
