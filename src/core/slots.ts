@@ -344,6 +344,32 @@ export function extractFrames(html: string, opts: { parse?: Parse; ratios?: Reco
   })
 }
 
+/**
+ * 带图注的单图框：在图片框外再向外一层层扩，直到再往外就会包进别的照片、图形文字或一整段正文。
+ * 只剩一张照片和一两行短图注的最外层容器，就是一个可整体复用的“单图”模块。
+ */
+function captionedFrameOf(img: Element, root: Element): Element {
+  let el = frameOf(img, root)
+  for (let p = el.parentElement; p && p !== root; p = p.parentElement) {
+    const photos = Array.from(p.querySelectorAll('img')).filter((x) => !isDecorImg(x))
+    if (photos.length > 1 || p.querySelector('text, foreignObject')) break
+    if ((p.textContent ?? '').replace(INVISIBLE, '').replace(/\s+/g, '').length > 40) break
+    el = p
+  }
+  return el
+}
+
+/** 模板里的“单图”框（含图注）：每个照片位一份，有相框装饰的才算；光秃的照片不算 */
+export function extractSingleFrames(html: string, opts: { parse?: Parse; ratios?: Record<string, number> } = {}): string[] {
+  const root = rootOf(html, opts.parse ?? defaultParse)
+  return scan(root).flatMap(({ slot, node }) => {
+    if (slot.kind !== 'image' || !isPhotoSlot(slot, opts.ratios)) return []
+    const f = captionedFrameOf(node as Element, root)
+    const decorated = f !== node || /border|radius|shadow|padding/i.test(f.getAttribute('style') ?? '')
+    return decorated ? [f.outerHTML] : []
+  })
+}
+
 const SAFE_SRC = /^(\/media\/[\w.-]+(\?[\w=&:%-]*)?|https:\/\/[^\s"'<>]+)$/
 
 /** 按槽位替换文字和图片，返回新的 HTML（结构与样式不变） */
@@ -687,5 +713,209 @@ export function setSlotColor(html: string, id: string, color: string | null, par
   host.querySelectorAll('*').forEach(clear)
   clear(host)
   if (value) setDecl(host, svg ? 'fill' : 'color', value)
+  return root.innerHTML
+}
+
+// ---------- 文字样式与组件定位 ----------
+
+/** 一处文字当前的样式；null 表示没有明确设置（跟随外层，界面上显示默认值） */
+export interface SlotTypo {
+  /** 字号（px） */
+  size: number | null
+  italic: boolean
+  underline: boolean
+  strike: boolean
+  /** 行间距（倍） */
+  lineHeight: number | null
+  /** 字间距（px） */
+  letterSpacing: number | null
+  /** 段落间距：文字块下方的外边距（px） */
+  paraSpacing: number | null
+  /** 左右边距：文字块左右外边距（px，两侧相同时才有值） */
+  sideMargin: number | null
+}
+export type TypoPatch = Partial<SlotTypo>
+
+/** 界面上显示的默认值：正文 14 号、行距 2.00 倍、字间距 1px，段距和左右边距为 0 */
+export const TYPO_DEFAULTS = { size: 14, lineHeight: 2, letterSpacing: 1, paraSpacing: 0, sideMargin: 0 } as const
+export const TYPO_LIMITS = {
+  size: [8, 96],
+  lineHeight: [0.5, 5],
+  letterSpacing: [-2, 20],
+  paraSpacing: [0, 100],
+  sideMargin: [0, 100],
+} as const
+
+const pxOf = (v: string): number | null => (/^-?\d+(\.\d+)?(px)?$/.test(v) && (v.endsWith('px') || parseFloat(v) === 0) ? parseFloat(v) : null)
+const r2 = (n: number) => Math.round(n * 100) / 100
+const elOf = (node: Node) => (node.nodeType === 1 ? (node as Element) : node.parentElement)
+
+/** 从文字所在的元素向外，第一个明确设置了该属性的值 */
+function inherited<T>(start: Element | null, root: Element, pick: (el: Element) => T | undefined): T | undefined {
+  for (let el = start; el && el !== root; el = el.parentElement) {
+    const v = pick(el)
+    if (v !== undefined) return v
+  }
+  return undefined
+}
+
+type Sides = { top: number | null; right: number | null; bottom: number | null; left: number | null }
+
+/** 外边距简写（1~4 个值）和单边写法合并后的四边值 */
+function marginOf(el: Element): Sides {
+  const out: Sides = { top: null, right: null, bottom: null, left: null }
+  const short = declOf(el, 'margin').split(/\s+/).filter(Boolean).map(pxOf)
+  if (short.length && short.length <= 4 && short.every((v) => v !== null)) {
+    const [a, b = a, c = a, d = b] = short as number[]
+    Object.assign(out, { top: a, right: b, bottom: c, left: d })
+  }
+  for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    const v = declOf(el, `margin-${side}`)
+    if (v) out[side] = pxOf(v)
+  }
+  return out
+}
+
+function readTypo(node: Node, root: Element): SlotTypo {
+  const start = elOf(node)
+  const size = inherited(start, root, (el) => pxOf(declOf(el, 'font-size')) ?? undefined) ?? null
+  const decorated = (re: RegExp, tags: string[]) => {
+    for (let el = start; el && el !== root; el = el.parentElement) {
+      if (tags.includes(tagOf(el)) || re.test(`${declOf(el, 'text-decoration')} ${declOf(el, 'text-decoration-line')}`)) return true
+    }
+    return false
+  }
+  const lh = inherited(start, root, (el) => {
+    const v = declOf(el, 'line-height')
+    if (!v || v === 'normal') return undefined
+    if (/^\d+(\.\d+)?$/.test(v)) return parseFloat(v)
+    const p = pxOf(v)
+    return p === null ? undefined : p / (size ?? 16)
+  })
+  const ls = inherited(start, root, (el) => {
+    const v = declOf(el, 'letter-spacing')
+    if (v === 'normal') return 0
+    return v ? pxOf(v) ?? undefined : undefined
+  })
+  const host = node.nodeType === 1 ? alignHost(node) : null
+  const m = host ? marginOf(host) : null
+  return {
+    size,
+    italic: inherited(start, root, (el) => (['em', 'i'].includes(tagOf(el)) ? true : declOf(el, 'font-style') ? /italic|oblique/.test(declOf(el, 'font-style')) : undefined)) ?? false,
+    underline: decorated(/underline/, ['u']),
+    strike: decorated(/line-through/, ['s', 'del', 'strike']),
+    lineHeight: lh === undefined ? null : r2(lh),
+    letterSpacing: ls ?? null,
+    paraSpacing: m ? m.bottom : null,
+    sideMargin: m && m.left !== null && m.left === m.right ? m.left : null,
+  }
+}
+
+/** 每个文字槽位的样式；图形里的文字（tight）位置和大小由图形决定，不提供 */
+export function slotTypos(html: string, parse: Parse = defaultParse): Record<string, SlotTypo | null> {
+  const root = rootOf(html, parse)
+  const out: Record<string, SlotTypo | null> = {}
+  for (const { slot, node } of scan(root)) if (slot.kind === 'text') out[slot.id] = slot.tight ? null : readTypo(node, root)
+  return out
+}
+
+const clamp = (v: number, [lo, hi]: readonly [number, number]) => Math.min(hi, Math.max(lo, v))
+const numOrNull = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+
+/** 槽位所在的块（段落、容器）；裸文字和行内槽位另包一层，不会改到旁边的内容 */
+function blockHost(hit: Hit, root: Element): Element {
+  let host = alignHost(hit.node)
+  if (!host) {
+    const inParagraph = hit.node.parentElement?.closest('p')
+    host = root.ownerDocument.createElement(inParagraph ? 'span' : 'section')
+    if (inParagraph) setDecl(host, 'display', 'block')
+    hit.node.parentNode!.insertBefore(host, hit.node)
+    host.append(hit.node)
+  }
+  return host
+}
+
+/** 槽位所在的行内元素；裸文字先包一层 span */
+function inlineHost(hit: Hit, root: Element): Element {
+  if (hit.node.nodeType === 1) return hit.node as Element
+  const host = root.ownerDocument.createElement('span')
+  hit.node.parentNode!.insertBefore(host, hit.node)
+  host.append(hit.node)
+  return host
+}
+
+/** 在宿主及其内部各处去掉同名属性，否则内层自己的写法会盖住新值 */
+function clearWithin(host: Element, ...props: string[]) {
+  for (const el of [host, ...Array.from(host.querySelectorAll('*'))]) for (const p of props) removeDecl(el, p)
+}
+
+/**
+ * 修改文字的样式。字号、斜体、下划线、删除线、字间距写在文字本身；
+ * 行间距、段落间距、左右边距写在文字所在的块上。patch 里值为 null 的项恢复为默认（去掉这处的设置）。
+ */
+export function setSlotTypo(html: string, id: string, patch: TypoPatch, parse: Parse = defaultParse): string {
+  const root = rootOf(html, parse)
+  const hit = scan(root).find((h) => h.slot.id === id && h.slot.kind === 'text' && !(h.slot as TextSlot).tight)
+  if (!hit) return html
+  const before = readTypo(hit.node, root)
+  const has = (k: keyof SlotTypo) => k in patch
+
+  // 行内：字号、字间距、斜体、下划线、删除线
+  if (has('size') || has('letterSpacing') || has('italic') || has('underline') || has('strike')) {
+    const host = inlineHost(hit, root)
+    if (has('size')) {
+      const v = numOrNull(patch.size)
+      clearWithin(host, 'font-size')
+      if (v !== null) setDecl(host, 'font-size', `${r2(clamp(v, TYPO_LIMITS.size))}px`)
+    }
+    if (has('letterSpacing')) {
+      const v = numOrNull(patch.letterSpacing)
+      clearWithin(host, 'letter-spacing')
+      if (v !== null) setDecl(host, 'letter-spacing', `${r2(clamp(v, TYPO_LIMITS.letterSpacing))}px`)
+    }
+    if (has('italic')) {
+      clearWithin(host, 'font-style')
+      if (patch.italic) setDecl(host, 'font-style', 'italic')
+      else if (readTypo(host, root).italic) setDecl(host, 'font-style', 'normal')
+    }
+    if (has('underline') || has('strike')) {
+      const underline = has('underline') ? !!patch.underline : before.underline
+      const strike = has('strike') ? !!patch.strike : before.strike
+      clearWithin(host, 'text-decoration', 'text-decoration-line')
+      const lines = [underline && 'underline', strike && 'line-through'].filter(Boolean).join(' ')
+      if (lines) setDecl(host, 'text-decoration', lines)
+    }
+  }
+
+  // 块级：行间距、段落间距、左右边距
+  if (has('lineHeight') || has('paraSpacing') || has('sideMargin')) {
+    const host = blockHost(hit, root)
+    if (has('lineHeight')) {
+      const v = numOrNull(patch.lineHeight)
+      clearWithin(host, 'line-height')
+      if (v !== null) setDecl(host, 'line-height', String(r2(clamp(v, TYPO_LIMITS.lineHeight))))
+    }
+    if (has('paraSpacing') || has('sideMargin')) {
+      // 外边距简写会盖住单边写法，先拆成四边再改
+      const m = marginOf(host)
+      removeDecl(host, 'margin')
+      for (const [side, v] of Object.entries(m)) if (v !== null) setDecl(host, `margin-${side}`, `${v}px`)
+      if (has('paraSpacing')) {
+        const v = numOrNull(patch.paraSpacing)
+        removeDecl(host, 'margin-bottom')
+        if (v !== null) setDecl(host, 'margin-bottom', `${r2(clamp(v, TYPO_LIMITS.paraSpacing))}px`)
+      }
+      if (has('sideMargin')) {
+        const v = numOrNull(patch.sideMargin)
+        removeDecl(host, 'margin-left')
+        removeDecl(host, 'margin-right')
+        if (v !== null) {
+          const px = `${r2(clamp(v, TYPO_LIMITS.sideMargin))}px`
+          setDecl(host, 'margin-left', px)
+          setDecl(host, 'margin-right', px)
+        }
+      }
+    }
+  }
   return root.innerHTML
 }
