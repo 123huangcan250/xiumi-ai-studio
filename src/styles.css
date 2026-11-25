@@ -299,6 +299,17 @@ div.grow { padding: 5px 10px; }
 .align-btns button.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
 .align-btns button:disabled { opacity: .4; cursor: not-allowed; }
 .slot-head .align-btns { margin-left: auto; }
+.typo { margin: 4px 0; }
+.typo-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.typo-size { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--sub); }
+.typo-size input { width: 52px; padding: 1px 4px; font-size: 12px; }
+.typo-more { padding: 1px 8px; font-size: 11px; margin-left: auto; }
+.typo-more.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.spacing-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin-top: 6px; padding: 8px; background: var(--brand-soft); border-radius: 8px; font-size: 11px; color: var(--sub); }
+.spacing-panel label { display: flex; align-items: center; gap: 4px; }
+.spacing-panel input { width: 54px; padding: 1px 4px; font-size: 12px; margin-left: auto; }
+.spacing-panel em { font-style: normal; opacity: .7; min-width: 24px; }
+.spacing-panel > button { grid-column: 1 / -1; justify-self: end; padding: 1px 8px; font-size: 11px; }
 .color-picker { position: relative; display: inline-flex; }
 .color-btn { display: inline-flex; align-items: center; gap: 2px; padding: 1px 6px; font-size: 12px; line-height: 1.4; }
 .color-btn .color-a { font-weight: 700; border-bottom: 3px solid; line-height: 1.1; padding: 0 1px; }

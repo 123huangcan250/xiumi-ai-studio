@@ -1,10 +1,11 @@
 // 本次使用的模块：从选中的模板和收藏组件里，每个标准名称只取一个模块。
 // 同名模块有多个时由用户选定（默认优先用单独挑选的组件），保证整篇推文风格统一。
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { blockMeta, normalizeBlocks } from '../core/blocks'
+import { blockMeta, createBlock, normalizeBlocks } from '../core/blocks'
 import { searchComponents, type LibraryComponent } from '../core/components'
 import { kitLevels, type Kit } from '../core/assemble'
 import { roleDef, ROLES, type RoleGroup, type RoleId } from '../core/roles'
+import { extractSingleFrames, type Parse } from '../core/slots'
 import type { Block, Doc } from '../core/types'
 import { api, type Template } from './api'
 import { LazyPreview } from './ComponentLibrary'
@@ -26,7 +27,7 @@ export type KitChoice = Partial<Record<RoleId, string>>
 
 const PLAIN_THEME = { themeId: 'minimal-magazine' }
 
-export function kitCandidates(templates: Template[], picked: string[], comps: LibraryComponent[], pickedComps: string[]): Candidate[] {
+export function kitCandidates(templates: Template[], picked: string[], comps: LibraryComponent[], pickedComps: string[], parse?: Parse): Candidate[] {
   const out: Candidate[] = []
   for (const id of picked) {
     const t = templates.find((x) => x.id === id)
@@ -40,6 +41,23 @@ export function kitCandidates(templates: Template[], picked: string[], comps: Li
   for (const id of pickedComps) {
     const c = comps.find((x) => x.id === id)
     if (c) out.push({ key: `c:${c.id}`, role: componentRole(c), block: c.block, from: '组件库', label: c.name, theme: PLAIN_THEME })
+  }
+  // 模板里没有单独的“单图”模块时，图片框常常藏在轮播、文本框里面：把模板自己的相框提出来当作单图，
+  // 否则单张照片只能退回内置图片，和模板的版式对不上。
+  if (!out.some((c) => c.role === 'img1')) {
+    for (const id of picked) {
+      const t = templates.find((x) => x.id === id)
+      if (!t) continue
+      const frames: string[] = []
+      for (const b of normalizeBlocks(t.blocks)) if (b.type === 'html') frames.push(...extractSingleFrames(b.props.html, { parse }))
+      // 优先带图注的相框；同一种相框只留一份
+      const withCaption = frames.find((f) => /[一-鿿A-Za-z]/.test(f.replace(/<[^>]+>/g, '')))
+      const html = withCaption ?? frames[0]
+      if (html) {
+        out.push({ key: `t:${t.id}:frame`, role: 'img1', block: createBlock('html', { html, label: '单图' }), from: t.name, label: '单图（从模板的图片框提取）', theme: themeOf(t) })
+        break
+      }
+    }
   }
   return out
 }
