@@ -1,11 +1,11 @@
 import { CoverTitleAlignment } from './CoverTitleAlignment'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { blockLabel, blockMeta, createBlock } from '../core/blocks'
 import { displayUrl } from '../core/images'
 import { sanitizeHtml } from '../core/sanitize'
 import { setPhoto } from '../core/photos'
 import { collectColors, docMainColors, fixedDecorCount, harmonize, recolorHtml } from '../core/recolor'
-import { backgroundPhotos, editableText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, setBackgroundPhoto, setSlotAlign, setSlotColor, slotAligns, slotColors, slotRawTexts, type Align, type SlotRole, type TextSlot } from '../core/slots'
+import { backgroundPhotos, editableText, extractSlots, fillSlots, removeBackgroundPhotos, removeImage, setBackgroundPhoto, setSlotAlign, setSlotColor, setSlotTypo, slotAligns, slotColors, slotRawTexts, slotTypos, TYPO_DEFAULTS, TYPO_LIMITS, type Align, type SlotRole, type SlotTypo, type TextSlot, type TypoPatch } from '../core/slots'
 import { resolveTheme } from '../core/themes'
 import { summarize } from '../core/ops'
 import { findBlock } from '../core/tree'
@@ -132,6 +132,71 @@ function ColorFields({ blockId, html, upd }: { blockId: string; html: string; up
   )
 }
 
+/** 数字输入：回车或离开输入框时才生效，输入不合法时恢复原值 */
+function NumField({ value, step, min, max, digits, onCommit, testId, label }: { value: number; step: number; min: number; max: number; digits?: number; onCommit: (v: number) => void; testId: string; label: string }) {
+  // 指定位数时固定显示（行距 2.00）；否则按实际值显示，最多两位小数（字间距 0.8 不能显示成 1）
+  const fmt = (n: number) => (digits === undefined ? String(Math.round(n * 100) / 100) : n.toFixed(digits))
+  const [text, setText] = useState(fmt(value))
+  useEffect(() => setText(fmt(value)), [value]) // eslint-disable-line react-hooks/exhaustive-deps
+  const commit = () => {
+    const n = Number(text)
+    if (!text.trim() || !Number.isFinite(n)) return setText(fmt(value))
+    const v = Math.min(max, Math.max(min, n))
+    setText(fmt(v))
+    if (v !== value) onCommit(v)
+  }
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      aria-label={label}
+      value={text}
+      step={step}
+      min={min}
+      max={max}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }}
+      data-testid={testId}
+    />
+  )
+}
+
+/** 文字样式：字号、斜体、下划线、删除线，以及「间距」里的组件定位（行距、字距、段距、左右边距） */
+function TypoControls({ id, value, open, onToggle, onChange }: { id: string; value: SlotTypo; open: boolean; onToggle: () => void; onChange: (patch: TypoPatch) => void }) {
+  const L = TYPO_LIMITS
+  const style = (key: 'italic' | 'underline' | 'strike', label: string, title: string, css: CSSProperties) => (
+    <button key={key} type="button" className={value[key] ? 'on' : ''} aria-pressed={value[key]} title={title} style={css} onClick={() => onChange({ [key]: !value[key] })} data-testid={`typo-${id}-${key}`}>
+      {label}
+    </button>
+  )
+  return (
+    <div className="typo" data-testid={`typo-${id}`}>
+      <div className="typo-row">
+        <label className="typo-size" title={`字号（默认 ${TYPO_DEFAULTS.size}）`}>
+          字号
+          <NumField value={value.size ?? TYPO_DEFAULTS.size} step={1} min={L.size[0]} max={L.size[1]} onCommit={(v) => onChange({ size: v })} testId={`typo-${id}-size`} label="字号" />
+        </label>
+        <span className="align-btns" role="group" aria-label="文字样式">
+          {style('italic', 'I', '斜体', { fontStyle: 'italic' })}
+          {style('underline', 'U', '下划线', { textDecoration: 'underline' })}
+          {style('strike', 'S', '删除线', { textDecoration: 'line-through' })}
+        </span>
+        <button type="button" className={`typo-more ${open ? 'on' : ''}`} aria-expanded={open} onClick={onToggle} data-testid={`typo-${id}-spacing`}>间距</button>
+      </div>
+      {open && (
+        <div className="spacing-panel" data-testid={`spacing-${id}`}>
+          <label>行间距<NumField value={value.lineHeight ?? TYPO_DEFAULTS.lineHeight} step={0.05} min={L.lineHeight[0]} max={L.lineHeight[1]} digits={2} onCommit={(v) => onChange({ lineHeight: v })} testId={`spacing-${id}-lineHeight`} label="行间距" /><em>倍</em></label>
+          <label>字间距<NumField value={value.letterSpacing ?? TYPO_DEFAULTS.letterSpacing} step={0.5} min={L.letterSpacing[0]} max={L.letterSpacing[1]} onCommit={(v) => onChange({ letterSpacing: v })} testId={`spacing-${id}-letterSpacing`} label="字间距" /><em>像素</em></label>
+          <label>段落间距<NumField value={value.paraSpacing ?? TYPO_DEFAULTS.paraSpacing} step={1} min={L.paraSpacing[0]} max={L.paraSpacing[1]} onCommit={(v) => onChange({ paraSpacing: v })} testId={`spacing-${id}-paraSpacing`} label="段落间距" /><em>像素</em></label>
+          <label>左右边距<NumField value={value.sideMargin ?? TYPO_DEFAULTS.sideMargin} step={1} min={L.sideMargin[0]} max={L.sideMargin[1]} onCommit={(v) => onChange({ sideMargin: v })} testId={`spacing-${id}-sideMargin`} label="左右边距" /><em>像素</em></label>
+          <button type="button" onClick={() => onChange({ lineHeight: null, letterSpacing: null, paraSpacing: null, sideMargin: null })} data-testid={`spacing-${id}-reset`}>恢复默认</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** 原文片段：按槽位改字、替换图片、编辑源码 */
 function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd: Upd }) {
   const [picking, setPicking] = useState(-1)
@@ -149,6 +214,9 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
   const raws = useMemo(() => slotRawTexts(html, parseDoc), [html])
   const aligns = useMemo(() => slotAligns(html, parseDoc), [html])
   const colors = useMemo(() => slotColors(html, parseDoc), [html])
+  const typos = useMemo(() => slotTypos(html, parseDoc), [html])
+  const [spacingFor, setSpacingFor] = useState('')
+  const typo = (id: string, patch: TypoPatch) => upd({ html: setSlotTypo(html, id, patch, parseDoc) }, `typo-${id}`)
   // 取色板：片段原有的配色在前（改色后与原版式协调），其次是文章主题色
   const themeId = useStore((s) => s.doc.themeId)
   const themeOverrides = useStore((s) => s.doc.themeOverrides)
@@ -203,6 +271,9 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
                   testId={`color-${s.id}`}
                 />
               </div>
+              {typos[s.id] && (
+                <TypoControls id={s.id} value={typos[s.id]!} open={spacingFor === s.id} onToggle={() => setSpacingFor(spacingFor === s.id ? '' : s.id)} onChange={(patch) => typo(s.id, patch)} />
+              )}
               <BufferedArea
                 rows={s.role === 'body' ? 3 : 1}
                 value={raws[s.id] ?? s.text}
