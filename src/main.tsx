@@ -9,6 +9,7 @@ import './styles.css'
 import './theme/fonts/fonts.css'
 import './ui-theme.css'
 import './workspace-responsive.css'
+import './help.css'
 
 /** 最外层兜底：任何未捕获的渲染错误都显示可恢复的提示，而不是白屏 */
 function Crashed({ error, reset }: { error: Error; reset: () => void }) {

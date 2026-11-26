@@ -7,6 +7,7 @@ import { AiSettingsModal } from './AiSettingsModal'
 import { api, type AppInfo, type VersionSummary } from './api'
 import { DataModal } from './DataModal'
 import { Modal } from './Modal'
+import { Help } from './Help'
 import { flushSave, normalizeDoc, saveConflictCopy, saveNow, useStore } from './store'
 import { assertReplayOk, compileForWechat, copyRichText, download, standaloneHtml, xiumiPackage, prepareXiumiUpload, type ImageMode } from './wechatOutput'
 
@@ -20,7 +21,7 @@ export function PhonePreview({ html, title, onClose }: { html: string; title: st
       <div className="phone-preview">
         <iframe title="手机预览" srcDoc={standaloneHtml(doc, displayHtml(html))} data-testid="preview-frame" />
       </div>
-      <p className="hint">375px 宽度模拟公众号文章页。</p>
+      <Help title="文章预览">375px 宽度模拟公众号文章页。</Help>
     </Modal>
   )
 }
@@ -84,7 +85,8 @@ function VersionsModal({ onClose }: { onClose: () => void }) {
       >
         保存当前为新版本
       </button>
-      <p className="hint">恢复版本后可用 Ctrl+Z 撤回恢复操作；每个项目保留最近 50 个版本。</p>
+      <p className="hint">每个项目保留最近 50 个版本。</p>
+      <Help title="历史版本">恢复版本后可用 Ctrl+Z 撤回恢复操作。</Help>
       {list.map((v) => (
         <div key={v.id} className="list-row">
           <div className="grow">
