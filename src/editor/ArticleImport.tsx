@@ -195,7 +195,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
           </nav>
           {tab === 'url' ? (
             <div className="row gap">
-              <input className="grow" value={url} placeholder="https://mp.weixin.qq.com/s/……" onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && url && fetchUrl()} data-testid="article-url" />
+              <input className="grow" value={url} placeholder="https://mp.weixin.qq.com/s/……" onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && url && fetchUrl()} aria-label="文章链接" data-testid="article-url" />
               <button className="primary" disabled={!url.trim() || !!busy} onClick={fetchUrl}>{busy || '抓取'}</button>
             </div>
           ) : (
@@ -205,6 +205,7 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
               contentEditable
               suppressContentEditableWarning
               onPaste={onPaste}
+              tabIndex={0} role="textbox" aria-multiline="true" aria-label="粘贴文章富文本"
               data-testid="article-paste"
             >
               在浏览器中打开文章，全选正文（Ctrl+A）并复制；或在秀米里点对勾后复制。然后点击这里按 Ctrl+V 粘贴。
@@ -225,13 +226,13 @@ export function ArticleImportModal({ onClose }: { onClose: () => void }) {
               {article.account && <>来源公众号：{article.account} · </>}识别到 {blocks.length} 个版块、{imageCount} 张图片
               <button className="link" onClick={() => setArticle(null)}>重新选择</button>
             </p>
-            <label className="field">
+            <div className="field" role="group" aria-label="导入方式">
               <span>导入方式</span>
               <div className="seg">
-                <button className={mode === 'keep' ? 'on' : ''} onClick={() => setMode('keep')} data-testid="mode-keep">保留原样式</button>
-                <button className={mode === 'relayout' ? 'on' : ''} onClick={() => setMode('relayout')} data-testid="mode-relayout">提取内容重新排版</button>
+                <button className={mode === 'keep' ? 'on' : ''} onClick={() => setMode('keep')} aria-pressed={mode === 'keep'} data-testid="mode-keep">保留原样式</button>
+                <button className={mode === 'relayout' ? 'on' : ''} onClick={() => setMode('relayout')} aria-pressed={mode === 'relayout'} data-testid="mode-relayout">提取内容重新排版</button>
               </div>
-            </label>
+            </div>
             {mode === 'keep' ? (
               <>
                 <p className="hint">每个版块成为一个「原文片段」模块：可拖动排序、双击改字、在右侧替换图片，也可单独收藏为模板。原文片段不受主题切换影响。</p>
