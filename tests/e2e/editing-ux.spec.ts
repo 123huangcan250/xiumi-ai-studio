@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('plain-text edits retain boundary spaces and empty paragraphs after reselecting', async ({ page }) => {
-  const field = page.getByLabel('正文', { exact: false }).first()
+  const field = page.locator('.panel.right').getByRole('textbox', { name: /^正文\s*（双击画布可富文本编辑）$/ })
   await field.fill('  第一段  \n\n 第二段 ')
   await page.getByLabel('文章标题', { exact: true }).click()
   await page.locator('[data-block-type="paragraph"]').last().click()
