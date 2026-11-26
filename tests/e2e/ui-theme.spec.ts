@@ -76,7 +76,7 @@ test('interface themes keep upstream layout, article rendering, and preview byte
   await expect(page.locator('.toolbar')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
 })
 
-test('monochrome dark keeps blue multiselect and upstream semantic review colors', async ({ page }, testInfo) => {
+test('monochrome dark keeps blue multiselect and dark semantic review colors', async ({ page }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem('xiumi-ui-theme', 'mono-dark'))
   await page.route('**/api/ai/status', route => route.fulfill({ json: { enabled: true, name: 'Synthetic', model: 'synthetic', provider: 'openai', profileId: 'synthetic' } }))
   await page.route('**/api/ai/suggest-instruction', route => route.fulfill({ json: { suggestion: '' } }))
@@ -122,8 +122,8 @@ test('monochrome dark keeps blue multiselect and upstream semantic review colors
   await expect(summary).toHaveCSS('background-color', 'rgb(37, 37, 35)')
   await expect(summary.getByText('Selected pair')).toHaveCSS('color', 'rgb(236, 236, 230)')
   await expect(summary.getByTestId('review-progress')).toHaveCSS('color', 'rgb(165, 165, 158)')
-  await expect(page.locator('.review-original-label').first()).toHaveCSS('color', 'rgb(140, 24, 40)')
-  await expect(page.locator('.review-suggestion').first()).toHaveCSS('color', 'rgb(18, 62, 36)')
+  await expect(page.locator('.review-original-label').first()).toHaveCSS('color', 'rgb(255, 208, 204)')
+  await expect(page.locator('.review-suggestion').first()).toHaveCSS('color', 'rgb(216, 240, 223)')
   await expect(page.locator('.review-accept').first()).toHaveCSS('background-color', 'rgb(23, 102, 56)')
   await expect(page.locator('.review-reject').first()).toHaveCSS('background-color', 'rgb(161, 29, 48)')
   await page.screenshot({ path: testInfo.outputPath('mono-dark-review-and-multiselect.png') })

@@ -166,3 +166,53 @@ test('desktop long suggestion follows actual loaded image and font height withou
  await page.locator('.review-reject').scrollIntoViewIfNeeded();await page.locator('.review-reject').click()
  await expect(page.locator('[data-block-id="long"]')).toHaveCount(1)
 })
+
+test('dark review chrome adapts without changing article or suggestion preview', async ({ page }) => {
+  const id = await open(page, [{ op: 'update', id: 'a', props: { content: suggestedText } }])
+  const original = page.locator('[data-block-id="a"]')
+  const before = await original.locator('.block-html').innerHTML()
+  await generate(page)
+  const card = page.locator('.review-suggestion')
+  const preview = await card.locator('iframe').getAttribute('srcdoc')
+  await page.getByTestId('open-data').click()
+  await page.getByRole('combobox', { name: /界面主题/ }).selectOption('mono-dark')
+  await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(page.locator('html')).toHaveAttribute('data-ui-theme', 'mono-dark')
+  await expect(card).toHaveCSS('background-color', 'rgb(26, 52, 36)')
+  await expect(page.locator('.review-original-label')).toHaveCSS('background-color', 'rgb(61, 32, 32)')
+  const bubble = card.locator('.review-bubble')
+  await expect(bubble).toHaveCSS('border-top-style', 'solid')
+  expect(await bubble.evaluate(el => getComputedStyle(el, '::after').content)).not.toBe('none')
+  expect(await original.locator('.block-html').innerHTML()).toBe(before)
+  expect(await card.locator('iframe').getAttribute('srcdoc')).toBe(preview)
+  await page.emulateMedia({ forcedColors: 'active' })
+  await expect(card).toHaveCSS('backdrop-filter', 'none')
+  expect(await page.locator('.review-original-red').evaluate(el => getComputedStyle(el).outlineStyle)).toBe('solid')
+  await card.getByRole('button', { name: '拒绝', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await expect(card).toHaveCount(0)
+  expect((await (await page.request.get('/api/projects/' + id)).json()).blocks).toEqual(inlineReviewBlocks())
+})
+
+test('review action bubble wraps within its card at a phone-sized viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await open(page, [{ op: 'update', id: 'a', props: { content: suggestedText } }])
+  await generate(page)
+  const card = page.locator('.review-suggestion')
+  await expect(card).toBeVisible()
+  const bubble = card.locator('.review-bubble')
+  const cardBox = (await card.boundingBox())!
+  const bubbleBox = (await bubble.boundingBox())!
+  expect(bubbleBox.x).toBeGreaterThanOrEqual(cardBox.x)
+  expect(bubbleBox.x + bubbleBox.width).toBeLessThanOrEqual(cardBox.x + cardBox.width)
+  for (const button of await bubble.locator('button').all()) {
+    const bounds = (await button.boundingBox())!
+    expect(bounds.height).toBeGreaterThanOrEqual(44)
+    expect(bounds.x).toBeGreaterThanOrEqual(bubbleBox.x)
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(bubbleBox.x + bubbleBox.width)
+  }
+  const captionBox = (await card.locator('.review-caption').boundingBox())!
+  expect(captionBox.y).toBeGreaterThanOrEqual(bubbleBox.y + bubbleBox.height)
+  await bubble.getByRole('button', { name: '拒绝', exact: true }).click()
+  await expect(card).toHaveCount(0)
+})
