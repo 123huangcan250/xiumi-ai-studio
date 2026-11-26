@@ -259,12 +259,12 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
           {profiles.map((p, i) => (
             <div key={p.id || i} className={`ai-item ${i === editing ? 'on' : ''}`} onClick={() => { invalidate(); setEditing(i); setTesting('') }}>
               <label onClick={(e) => e.stopPropagation()} title="设为当前使用">
-                <input type="radio" name="active" checked={activeId === p.id} onChange={() => setActiveId(p.id)} />
+                <input aria-label={`设为当前模型：${p.name || '未命名'}`} type="radio" name="active" checked={activeId === p.id} onChange={() => setActiveId(p.id)} />
               </label>
-              <div className="grow">
+              <button type="button" className="grow ai-profile-edit" aria-label={`编辑模型：${p.name || '未命名'}`} aria-pressed={i === editing} onClick={e => { e.stopPropagation(); invalidate(); setEditing(i); setTesting('') }}>
                 <b>{p.name || '未命名'}</b>
                 <small>{p.model || '未填写模型'}{p.readonly ? ' · 只读' : ''}</small>
-              </div>
+              </button>
             </div>
           ))}
           <select value="" disabled={!loaded} onChange={(e) => e.target.value && addFromPreset(e.target.value)} data-testid="ai-add-preset">
@@ -279,13 +279,13 @@ export function AiSettingsModal({ onClose }: { onClose: () => void }) {
             <>
               {cur.readonly && <p className="warn">此项来自 .env 文件，只能在 .env 中修改。</p>}
               <label className="field"><span>名称</span><input value={cur.name} disabled={cur.readonly} onChange={(e) => patch({ name: e.target.value })} /></label>
-              <label className="field">
+              <div className="field" role="group" aria-label="接口类型">
                 <span>接口类型</span>
                 <div className="seg">
-                  <button className={cur.provider === 'openai' ? 'on' : ''} disabled={cur.readonly} onClick={() => patch({ provider: 'openai' })}>OpenAI 兼容</button>
-                  <button className={cur.provider === 'anthropic' ? 'on' : ''} disabled={cur.readonly} onClick={() => patch({ provider: 'anthropic' })}>Anthropic Claude</button>
+                  <button aria-pressed={cur.provider === 'openai'} className={cur.provider === 'openai' ? 'on' : ''} disabled={cur.readonly} onClick={() => patch({ provider: 'openai' })}>OpenAI 兼容</button>
+                  <button aria-pressed={cur.provider === 'anthropic'} className={cur.provider === 'anthropic' ? 'on' : ''} disabled={cur.readonly} onClick={() => patch({ provider: 'anthropic' })}>Anthropic Claude</button>
                 </div>
-              </label>
+              </div>
               <label className="field"><span>接口地址 Base URL</span><input data-testid="ai-base-url" value={cur.baseUrl} disabled={cur.readonly} placeholder="https://…/v1" onChange={(e) => patch({ baseUrl: e.target.value })} onBlur={(e) => discoverAfterEdit(cur, e.relatedTarget)} /></label>
               <label className="field">
                 <span>API Key{preset?.keyUrl && <a href={preset.keyUrl} target="_blank" rel="noreferrer">获取密钥 ↗</a>}</span>

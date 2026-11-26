@@ -276,6 +276,8 @@ div.grow { padding: 5px 10px; }
 .ai-item:hover { background: #f7f8fa; }
 .ai-item.on { border-color: var(--brand); background: var(--brand-soft); }
 .ai-item .grow { display: flex; flex-direction: column; min-width: 0; padding: 0; }
+.ai-item .ai-profile-edit { flex: 1; border: 0; background: transparent; text-align: left; align-items: stretch; }
+.ai-item .ai-profile-edit:focus-visible, .ai-item input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .ai-item small { color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-list select { margin-top: 8px; }
 .ai-form .field > span a { color: var(--brand); text-decoration: none; }
