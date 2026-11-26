@@ -13,7 +13,7 @@ import { aiPlaceRequest, checkPlan, fixedPlacements, normalizeAiPlacements, rule
 import { extractSlots } from '../core/slots'
 import { templateTheme } from '../core/templateFill'
 import type { Block, Doc } from '../core/types'
-import { api, assetRef, type AiStatus, type Asset, type Template } from './api'
+import { api, ApiError, assetRef, type AiStatus, type Asset, type Template } from './api'
 import { kitCandidates, KitPicker, layoutOptions, resolveKit, useComponents, type KitChoice } from './KitPicker'
 import { Modal } from './Modal'
 import { PhotoPlanner, type PhotoGroup } from './PhotoPlanner'
@@ -285,7 +285,21 @@ export function ImportWizard({ onClose, initialText, initialImages, initialTempl
   const persistVariant = async (doc: Doc): Promise<Doc> => {
     const signature = JSON.stringify({ ...doc, revision: undefined })
     const previous = persisted.current.get(doc.id)
-    if (previous?.signature === signature) return previous.doc
+    if (previous?.signature === signature) {
+      let current: Doc
+      try {
+        current = await api.project(doc.id)
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          throw new Error('已保存的方案已不存在，请关闭此窗口并在项目中核对，或重新生成方案。', { cause: error })
+        }
+        throw error
+      }
+      if (!current.revision || current.revision !== previous.doc.revision) {
+        throw new Error('已保存的方案已发生变化，请关闭此窗口并在项目中核对，或重新生成方案。')
+      }
+      return current
+    }
     const response = await api.saveProject({ ...doc, revision: previous?.doc.revision ?? doc.revision })
     const saved = { ...doc, revision: response.revision }
     persisted.current.set(doc.id, { signature, doc: saved })
