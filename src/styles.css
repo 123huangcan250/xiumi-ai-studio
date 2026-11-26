@@ -352,6 +352,9 @@ div.grow { padding: 5px 10px; }
 .g-item.picking { border-color: var(--brand); }
 .picker { margin-top: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 8px; max-height: 260px; overflow: auto; }
 .picker .asset { cursor: pointer; }
+.g-item .image-choice { display: block; width: 100%; padding: 0; border: 0; background: transparent; }
+button.g-item, .picker button.asset { padding: 0; min-width: 0; }
+.g-item .image-choice:focus-visible, button.g-item:focus-visible, .picker button.asset:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px; white-space: pre; }
 
 /* 渲染错误兜底 */

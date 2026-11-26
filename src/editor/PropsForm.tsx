@@ -294,8 +294,10 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
           <span>片段中的图片（{imgs.length}）· 点击替换</span>
           <div className="gallery-edit">
             {imgs.map((src, i) => (
-              <div key={i} className={`g-item ${picking === i ? 'picking' : ''}`} onClick={() => setPicking(picking === i ? -1 : i)}>
-                <img src={src.startsWith('/media/') ? `${src.split('?')[0]}?fit=1:1&w=160` : src} alt="" />
+              <div key={i} className={`g-item ${picking === i ? 'picking' : ''}`}>
+                <button type="button" className="image-choice" aria-label={`替换第 ${i + 1} 张图片`} aria-pressed={picking === i} onClick={() => setPicking(picking === i ? -1 : i)}>
+                  <img src={src.startsWith('/media/') ? `${src.split('?')[0]}?fit=1:1&w=160` : src} alt="" />
+                </button>
                 <div>
                   <button
                     title="删除这张图（照片连同相框）"
@@ -317,9 +319,9 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
               <p className="hint">选择素材替换第 {picking + 1} 张图（保留原图的尺寸与样式）</p>
               <div className="asset-grid">
                 {assets.map((a) => (
-                  <div key={a.id} className="asset" onClick={() => replace(picking, `/media/${a.file}`)}>
-                    <img src={`/media/${a.file}?fit=1:1&w=160`} alt={a.name} />
-                  </div>
+                  <button type="button" key={a.id} className="asset" aria-label={`使用素材：${a.name}`} onClick={() => replace(picking, `/media/${a.file}`)}>
+                    <img src={`/media/${a.file}?fit=1:1&w=160`} alt="" />
+                  </button>
                 ))}
               </div>
               {!assets.length && <p className="empty">素材库为空，请先在左侧「素材」上传</p>}
@@ -332,10 +334,10 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
           <span>背景图照片（{bgPhotos.length}）· 点击替换，轮播里重复用到的位置一起换</span>
           <div className="gallery-edit">
             {bgPhotos.map((b, i) => (
-              <div key={b.src} className={`g-item ${bgPicking === b.src ? 'picking' : ''}`} onClick={() => setBgPicking(bgPicking === b.src ? '' : b.src)} data-testid={`bg-photo-${i}`}>
+              <button type="button" key={b.src} className={`g-item ${bgPicking === b.src ? 'picking' : ''}`} aria-label={`替换第 ${i + 1} 张背景图`} aria-pressed={bgPicking === b.src} onClick={() => setBgPicking(bgPicking === b.src ? '' : b.src)} data-testid={`bg-photo-${i}`}>
                 <img src={b.src.startsWith('/media/') ? `${b.src.split('?')[0]}?fit=1:1&w=160` : displayUrl(b.src)} alt="" />
                 {b.count > 1 && <small className="g-count">×{b.count}</small>}
-              </div>
+              </button>
             ))}
           </div>
           {bgPicking && (
@@ -343,17 +345,19 @@ function HtmlFields({ blockId, html, upd }: { blockId: string; html: string; upd
               <p className="hint">选择素材替换这张背景图（按原位置比例裁切）</p>
               <div className="asset-grid">
                 {assets.map((a) => (
-                  <div
+                  <button
+                    type="button"
                     key={a.id}
                     className="asset"
+                    aria-label={`使用背景素材：${a.name}`}
                     onClick={() => {
                       upd({ html: setBackgroundPhoto(html, bgPicking, { src: `/media/${a.file}` }, { parse: parseDoc }) }, 'html')
                       setBgPicking('')
                     }}
                     data-testid="bg-asset"
                   >
-                    <img src={`/media/${a.file}?fit=1:1&w=160`} alt={a.name} />
-                  </div>
+                    <img src={`/media/${a.file}?fit=1:1&w=160`} alt="" />
+                  </button>
                 ))}
               </div>
               {!assets.length && <p className="empty">素材库为空，请先在左侧「素材」上传</p>}
