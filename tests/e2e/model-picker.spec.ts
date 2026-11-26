@@ -15,6 +15,7 @@ for (const mode of ['upstream','mono-light','mono-dark']) for (const [width,heig
   await expect(page.getByTestId('canvas')).toBeVisible()
   if (mode !== 'upstream') await expect(page.locator('html')).toHaveAttribute('data-ui-theme', mode)
   else await expect(page.locator('html')).not.toHaveAttribute('data-ui-theme', /.+/)
+  if (width <= 600) await page.getByRole('button', { name: '更多', exact: true }).click()
   await page.getByTestId('open-ai-settings').click()
   const dialog=page.getByRole('dialog',{name:'AI 模型设置'})
   await dialog.getByText('Picker fixture',{exact:true}).click()

@@ -1,5 +1,6 @@
 /* Shared compact layout. Desktop structure and toolbar action order remain upstream. */
 .app > .workspace > .workspace-switcher { display: none; }
+.app > .toolbar > .toolbar-more { display: none; }
 
 @media (max-width: 1180px) {
   .app > .toolbar { height: auto; min-height: 52px; flex-wrap: wrap; padding-block: 6px; }
@@ -51,6 +52,8 @@
   .app > .toolbar { padding-inline: 8px; gap: 4px; }
   .app > .toolbar > button { min-height: 44px; padding-inline: 6px; }
   .app > .toolbar > .spacer { display: none; }
+  .app > .toolbar > .toolbar-more { display: inline-block; }
+  .app > .toolbar:not([data-more-open='true']) > .toolbar-secondary { display: none; }
   .canvas-wrap > .canvas-scroll > .phone { max-width: 100%; }
   .modal-mask > .modal { max-width: calc(100vw - 16px); }
   .modal-body > .ai-settings { grid-template-columns: minmax(0, 1fr); }
