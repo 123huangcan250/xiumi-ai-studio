@@ -1,0 +1,23 @@
+import { expect, test } from '@playwright/test'
+
+test('article import paste field participates in the dialog keyboard cycle', async ({ page }) => {
+  await page.goto('/')
+  const trigger = page.getByTestId('open-article-import')
+  await trigger.click()
+  const dialog = page.getByRole('dialog', { name: '导入公众号推文' })
+  const close = dialog.getByRole('button', { name: '关闭' })
+  const pasteTab = dialog.getByRole('button', { name: '粘贴富文本（公众号 / 秀米）' })
+  const paste = dialog.getByTestId('article-paste')
+  await pasteTab.click()
+  await close.focus()
+  await page.keyboard.press('Shift+Tab')
+  await expect(paste).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(close).toBeFocused()
+  await pasteTab.focus()
+  await page.keyboard.press('Tab')
+  await expect(paste).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+  await expect(trigger).toBeFocused()
+})
