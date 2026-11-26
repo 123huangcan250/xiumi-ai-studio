@@ -125,6 +125,7 @@ div.grow { padding: 5px 10px; }
 .article { position: relative; }
 .block { position: relative; outline: 1px dashed transparent; outline-offset: 4px; border-radius: 2px; cursor: pointer; }
 .block:hover:not(.selected) { outline-color: #c6c2f2; }
+.article .block[data-block-id]:focus-visible:not(.selected):not(:where(.block-html *, .html-editor *, .rich-content *)) { outline: 2px dashed #2563eb; }
 /* The blue selection perimeter belongs to editor chrome, never article HTML. */
 .article .block[data-block-id].selected:not(:where(.block-html *, .html-editor *, .rich-content *)) { outline-width: 2px; outline-style: solid; outline-color: #2563eb; }
 .block.editing:not(.selected) { outline: 2px solid var(--accent); }
@@ -139,7 +140,7 @@ div.grow { padding: 5px 10px; }
 .block-label { padding: 0 6px; color: var(--brand); font-weight: 600; }
 .drag, .drag-ghost { cursor: grab; touch-action: none; }
 .drag-ghost { position: absolute; left: -34px; top: 0; border: 0; background: none; color: #b4b8c0; opacity: 0; font-size: 16px; padding: 2px 6px; }
-.block:hover .drag-ghost { opacity: 1; }
+.block:hover .drag-ghost, .drag-ghost:focus-visible { opacity: 1; }
 .drop-end { margin-top: 24px; border: 1px dashed #d5d8de; border-radius: 8px; padding: 18px; text-align: center; color: var(--faint); font-size: 12px; letter-spacing: 0; line-height: 1.5; }
 .drop-end.over { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
 .drag-overlay { background: var(--brand); color: #fff; padding: 6px 12px; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.2); width: max-content; }

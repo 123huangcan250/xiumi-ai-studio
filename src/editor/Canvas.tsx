@@ -289,17 +289,29 @@ const MultiSelectMode = createContext(false)
 const interactiveSelectionTarget = (target: EventTarget) => target instanceof Element && !!target.closest('button,input,textarea,select,a,[contenteditable]:not([contenteditable="false"]),[role="button"],[role="slider"]')
 
 function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme; gap: number; parentId?: string }) {
+  const blockNode = useRef<HTMLDivElement | null>(null)
   const selected = useStore((s) => s.selectedIds.includes(block.id))
   const primary = useStore(s => s.selectedId === block.id)
   const multiple = useStore(s => s.selectedIds.length > 1)
   const selectionMode = useContext(MultiSelectMode)
   const editing = useStore((s) => s.editingId === block.id)
   const picking = useStore((s) => s.pickingId === block.id)
+  const returnFocus = useRef(false)
+  useEffect(() => {
+    if (returnFocus.current && !editing && !picking) {
+      returnFocus.current = false
+      if (!document.querySelector('[role="dialog"]')) blockNode.current?.focus({ preventScroll: true })
+    }
+  }, [editing, picking])
   const { select, setEditing, setPicking, updateProps, removeBlock, replaceBlock, duplicateBlock, moveBlock, moveBlockTo, notify } = useStore.getState()
   // 在所在层（顶层或文本框内）的位置
   const index = useStore((s) => findBlock(s.doc.blocks, block.id)?.index ?? -1)
   const inBox = !!parentId
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isOver } = useSortable({ id: block.id, data: { parentId: parentId ?? null } })
+  const assignBlockNode = useCallback((node: HTMLDivElement | null) => {
+    blockNode.current = node
+    setNodeRef(node)
+  }, [setNodeRef])
   const style: React.CSSProperties = {
     transform: CSS.Translate.toString(transform),
     transition,
@@ -310,6 +322,8 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
   const canText = blockTextFields(block).length > 0
   const canEdit = canRich || block.type === 'html' || canText
   const startEdit = () => canEdit && setEditing(block.id)
+  const finishEdit = () => { returnFocus.current = true; setEditing(null) }
+  const finishPicking = () => { returnFocus.current = true; setPicking(null) }
   // 以前导入的版块常把整节内容（标题、正文、轮播）放在一个模块里，拆开后才能单独选中和收藏
   const splitBlock = () => {
     if (block.type !== 'html') return
@@ -320,10 +334,10 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
   }
 
   let body = block.type === 'box' ? <BoxBody block={block} theme={theme} /> : block.type === 'replay' ? <ReplayCanvasBody block={block} /> : <BlockHtml block={block} theme={theme} inBox={inBox} />
-  if (picking && block.type === 'html') body = <FragmentPicker block={block} theme={theme} onDone={() => setPicking(null)} />
-  else if (editing && block.type === 'html') body = <HtmlEditor block={block} onDone={() => setEditing(null)} />
+  if (picking && block.type === 'html') body = <FragmentPicker block={block} theme={theme} onDone={finishPicking} />
+  else if (editing && block.type === 'html') body = <HtmlEditor block={block} onDone={finishEdit} />
   else if (editing && canText) {
-    body = <>{body}<BlockTextEditor block={block} onChange={(props, field) => updateProps(block.id, props, `${block.id}:${field}`)} onDone={() => setEditing(null)} /></>
+    body = <>{body}<BlockTextEditor block={block} onChange={(props, field) => updateProps(block.id, props, `${block.id}:${field}`)} onDone={finishEdit} /></>
   }
   else if (editing && canRich) {
     const p: any = block.props
@@ -334,7 +348,7 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
         theme={inBox ? boxTheme(theme) : theme}
         fontSize={block.type === 'imageText' ? theme.fontSize - 1 : undefined}
         onChange={(content) => updateProps(block.id, { content }, `${block.id}:content`)}
-        onDone={() => setEditing(null)}
+        onDone={finishEdit}
       />
       </Suspense>
     )
@@ -352,7 +366,7 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
 
   return (
     <div
-      ref={setNodeRef}
+      ref={assignBlockNode}
       style={style}
       className={`block ${selected ? 'selected' : ''} ${editing ? 'editing' : ''} ${isOver ? 'over' : ''}`}
       data-block-id={block.id}
@@ -365,7 +379,15 @@ function BlockView({ block, theme, gap, parentId }: { block: Block; theme: Theme
       onDoubleClick={(e) => { e.stopPropagation(); if (!selectionMode && !e.ctrlKey && !e.metaKey && !interactiveSelectionTarget(e.target)) startEdit() }}
       {...attributes}
       role="group"
-      tabIndex={-1}
+      aria-label={`模块：${blockLabel(block)}（${block.id}）${selected ? '，已选中' : ''}`}
+      aria-keyshortcuts="Enter Space Control+Enter Control+Space Meta+Enter Meta+Space"
+      tabIndex={0}
+      onKeyDown={e => {
+        if (e.target !== e.currentTarget || e.altKey || (e.key !== 'Enter' && e.key !== ' ')) return
+        e.preventDefault()
+        e.stopPropagation()
+        if (!e.repeat) select(block.id, { toggle: selectionMode || e.ctrlKey || e.metaKey })
+      }}
     >
       {selectionMode && <button className="block-select-toggle" data-testid="toggle-block-selection" aria-label={`选择模块：${blockLabel(block)} ${block.id}`} aria-pressed={selected} onClick={e => { e.stopPropagation(); select(block.id, { toggle: true }) }}>{selected ? '已选择' : '选择'}</button>}
       {primary && !multiple && !selectionMode && !editing && !picking && (

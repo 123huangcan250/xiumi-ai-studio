@@ -1,0 +1,67 @@
+import { expect, test, type Page } from '@playwright/test'
+
+async function setup(page: Page) {
+  const id = `keyboard-${Date.now()}-${Math.random().toString(36).slice(2)}`, now = Date.now()
+  const doc = { id, title: 'Keyboard canvas fixture', author: '', digest: '', themeId: 'minimal-magazine', createdAt: now, updatedAt: now, blocks: [
+    { id: 'key-heading', type: 'heading', props: { index: '01', title: 'Keyboard heading', subtitle: '', variant: 'auto' } },
+    { id: 'key-html', type: 'html', props: { html: '<section><p>First fragment</p><p>Second fragment</p></section>', label: 'Keyboard article' } },
+  ] }
+  expect((await page.request.put(`/api/projects/${id}`, { data: doc })).ok()).toBe(true)
+  await page.route('**/api/projects', route => route.fulfill({ json: [{ id, title: doc.title }] }))
+  await page.goto('/')
+  await expect(page.locator('.title-input')).toHaveValue(doc.title)
+}
+const block = (page: Page, id: string) => page.locator(`.block[data-block-id="${id}"]`)
+
+test('module selection is keyboard-operable and ending the inline editor restores focus', async ({ page }) => {
+  await setup(page)
+  const first = block(page, 'key-heading'), second = block(page, 'key-html')
+  await first.focus()
+  await page.keyboard.press('Enter')
+  await expect(first).toHaveClass(/\bselected\b/)
+  await expect(first).toHaveAttribute('tabindex', '0')
+  await expect(first).toHaveAccessibleName(/已选中/)
+  await second.focus()
+  await page.keyboard.press('Control+Space')
+  await expect(page.locator('.block.selected')).toHaveCount(2)
+  await first.focus()
+  await page.keyboard.press('Meta+Enter')
+  await expect(first).not.toHaveClass(/\bselected\b/)
+  await page.keyboard.press('Space')
+  await expect(page.locator('.block.selected')).toHaveCount(1)
+  await expect(first).toHaveClass(/\bselected\b/)
+  await first.getByTitle('编辑文字（双击）').focus()
+  await page.keyboard.press('Enter')
+  const field = first.locator('[data-testid="inline-block-text"] textarea').first()
+  await expect(field).toBeFocused()
+  await field.fill('Keyboard changed')
+  await page.keyboard.press('Space')
+  await expect(field).toHaveValue('Keyboard changed ')
+  await page.keyboard.press('Escape')
+  await expect(first).toBeFocused()
+  await expect(first).toHaveClass(/\bselected\b/)
+  await second.focus()
+  await page.keyboard.press('Enter')
+  await second.getByTestId('pick-fragment').focus()
+  await page.keyboard.press('Enter')
+  await expect(second.getByTestId('fragment-picker')).toBeVisible()
+  await second.getByTestId('pick-cancel').focus()
+  await page.keyboard.press('Enter')
+  await expect(second).toBeFocused()
+})
+
+test('touch-style multiselect controls stay reachable and keyboard mode respects toggle semantics', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await setup(page)
+  const first = block(page, 'key-heading'), second = block(page, 'key-html')
+  await page.getByTestId('multi-select-mode').click()
+  await first.getByTestId('toggle-block-selection').click()
+  await expect(first).toHaveClass(/\bselected\b/)
+  await second.focus()
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.block.selected')).toHaveCount(2)
+  await second.getByTestId('toggle-block-selection').click()
+  await expect(page.locator('.block.selected')).toHaveCount(1)
+  await page.getByTestId('multi-select-mode').click()
+  await expect(first.getByTestId('toggle-block-selection')).toHaveCount(0)
+})
