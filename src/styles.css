@@ -576,3 +576,12 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
   .ai-settings .model-picker-option[aria-selected="true"] { background: Highlight; color: HighlightText; border-inline-start: 3px solid HighlightText; }
   .ai-settings :is(.model-picker-option[data-active="true"], .model-picker-list:focus-visible) { outline-color: Highlight; }
 }
+
+/* 界面配色色块 */
+.ui-look { margin-bottom: 6px; }
+.accent-swatches { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 3px; }
+.accent-swatch { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 1px solid rgba(0,0,0,.18); position: relative; }
+.accent-swatch.selected { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--swatch); }
+.accent-swatch.selected::after { content: "\2713"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; line-height: 1; }
+.accent-swatch:focus-visible { outline: 2px solid var(--swatch); outline-offset: 3px; }
+.ui-font-sample { font-size: 14px; }

@@ -16,7 +16,14 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     })
     await page.goto('/')
     await expect(page.getByTestId('canvas')).toBeVisible()
-    await page.getByTestId('open-ai-settings').click()
+    const openSettings = async () => {
+      const trigger = page.getByTestId('open-ai-settings')
+      if (!await trigger.isVisible()) {
+        await page.getByRole('button', { name: '更多', exact: true }).click()
+      }
+      await trigger.click()
+    }
+    await openSettings()
     const modal = page.getByRole('dialog', { name: 'AI 模型设置' })
     const alpha = modal.getByRole('radio', { name: '设为当前模型：Alpha' })
     const beta = modal.getByRole('radio', { name: '设为当前模型：Beta' })
@@ -33,7 +40,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await expect(modal).toHaveCount(0)
     expect(settings.activeId).toBe('one')
     expect(settings.profiles.map(p => p.name)).toEqual(['Alpha', 'Beta revised'])
-    await page.getByTestId('open-ai-settings').click()
+    await openSettings()
     await expect(modal.getByRole('radio', { name: '设为当前模型：Alpha' })).toBeChecked()
     const revised = modal.getByRole('radio', { name: '设为当前模型：Beta revised' })
     await revised.focus()
