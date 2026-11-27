@@ -128,3 +128,9 @@
   border-color: #ac8e58;
   color: var(--ui-text);
 }
+
+/* Readable HTML source controls in dark mode, outside authored content. */
+:root[data-ui-theme='mono-dark'] .workspace > .panel.right textarea.code:not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-suggestion *)) {
+  font-size: 14px;
+  line-height: 22px;
+}
