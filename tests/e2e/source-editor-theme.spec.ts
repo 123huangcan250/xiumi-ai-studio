@@ -1,0 +1,43 @@
+import { expect, test } from '@playwright/test'
+import { createBlock } from '../../src/core/blocks'
+
+test('dark HTML source remains legible without changing article or preview', async ({ page }) => {
+  const id = 'source-editor-theme-' + Date.now()
+  const title = 'HTML source typography'
+  const html = '<p style="font-size:18px;color:#345678">原文章节</p>'
+  const blocks = [{ ...createBlock('html', { html, label: '原文' }), id: 'source' }]
+  expect((await page.request.put('/api/projects/' + id, { data: { id, title, themeId: 'minimal-magazine', blocks, createdAt: 1, updatedAt: 1 } })).ok()).toBe(true)
+  await page.route('**/api/projects', route => route.fulfill({ json: [{ id, title }] }))
+  await page.addInitScript(() => localStorage.setItem('xiumi-ui-theme', 'mono-dark'))
+  await page.goto('/')
+  await expect(page.locator('.title-input')).toHaveValue(title)
+  const article = page.locator('[data-block-id="source"] .block-html')
+  await expect(article).toContainText('原文章节')
+  const original = await article.innerHTML()
+  await page.getByTestId('open-preview').click()
+  const preview = await page.getByTestId('preview-frame').getAttribute('srcdoc')
+  expect(preview).toContain('原文章节')
+  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await article.click()
+  await page.getByTestId('tab-style').click()
+  await page.getByRole('button', { name: '编辑 HTML 源码' }).click()
+  const source = page.locator('.panel.right textarea.code')
+  await expect(source).toHaveValue(html)
+  await expect(source).toHaveCSS('font-size', '14px')
+  await expect(source).toHaveCSS('line-height', '22px')
+  expect(await article.innerHTML()).toBe(original)
+  await page.getByTestId('open-data').click()
+  await page.getByRole('combobox', { name: /界面主题/ }).selectOption('upstream')
+  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(source).toHaveCSS('font-size', '12px')
+  expect(await article.innerHTML()).toBe(original)
+  await page.getByTestId('open-preview').click()
+  expect(await page.getByTestId('preview-frame').getAttribute('srcdoc')).toEqual(preview)
+  await page.getByRole('button', { name: '关闭', exact: true }).click()
+  await source.fill('<p>修改后的文章</p>')
+  await page.getByRole('button', { name: '应用（自动清洗不安全内容）' }).click()
+  await expect(article).toContainText('修改后的文章')
+  await expect(page.getByTestId('save-status')).toHaveText('已保存')
+  await page.reload()
+  await expect(article).toContainText('修改后的文章')
+})

@@ -1,0 +1,57 @@
+/* Interface-only accent colour and font. Variables --ui-acc*, --ui-font are written on <html> by UiThemeProvider.
+   Same scope as ui-theme.css: editor chrome only; the article, imported HTML, previews and the
+   red/green review palette are never touched. */
+
+/* ---- 配色 ---- */
+:root[data-ui-accent] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal, .canvas-wrap > .selection-bar, .canvas-wrap > .zoom-bar, .block > .block-toolbar, .rich-editor > .rich-toolbar):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  --brand: var(--ui-acc);
+  --brand-soft: var(--ui-acc-soft);
+}
+
+:root[data-ui-accent] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal)
+  :is(button.primary, button.accent):not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  color: var(--ui-acc-on);
+  border-color: var(--ui-acc);
+  background: var(--ui-acc);
+}
+
+:root[data-ui-accent] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal)
+  :is(button.primary, button.accent):hover:not(:disabled):not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  border-color: var(--ui-acc-hover);
+  background: var(--ui-acc-hover);
+}
+
+:root[data-ui-accent] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal)
+  button.accent:not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  background: linear-gradient(90deg, var(--ui-acc), var(--ui-acc-hover));
+}
+
+/* 选中状态：淡底 + 主色字 */
+:root[data-ui-accent] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal, .canvas-wrap > .selection-bar, .block > .block-toolbar)
+  button.on:not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  color: var(--ui-acc);
+  border-color: var(--ui-acc);
+  background: var(--ui-acc-soft);
+}
+
+:root[data-ui-accent] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal)
+  :is(input, textarea, select):focus-visible:not(:where(.article *, .block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *, .review-block *, .review-suggestion *)) {
+  outline-color: var(--ui-acc);
+}
+
+/* 浅色的默认界面：页面底色淡淡染上主色（黑白主题保持中性） */
+:root[data-ui-accent]:not([data-ui-theme]) { --bg: var(--ui-acc-bg); }
+
+/* ---- 字体 ---- */
+:root[data-ui-font] :is(.app > .toolbar, .workspace > .panel, .modal-mask > .modal, .canvas-wrap > .selection-bar, .canvas-wrap > .zoom-bar, .block > .block-toolbar, .rich-editor > .rich-toolbar, .toast):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)),
+:root[data-ui-font] :is(.app > .toolbar > .brand, .modal-mask > .modal > header > h3):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  font-family: var(--ui-font);
+}
+
+/* ---- 面板里的缩略图、粘贴框是文章的缩影，不跟随界面配色和字体 ---- */
+:root:is([data-ui-accent], [data-ui-font]) :is(.workspace > .panel, .modal-mask > .modal)
+  :is(.mini-preview, .comp-preview, .paste-box):not(:where(.block-html *, .html-editor *, .rich-content *, .mini-preview *, .comp-preview *, .paste-box *)) {
+  --brand: #5b4bdb;
+  --brand-soft: #efedff;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
