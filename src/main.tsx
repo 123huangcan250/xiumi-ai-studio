@@ -8,6 +8,7 @@ import { UiThemeProvider } from './editor/UiThemeControl'
 import './styles.css'
 import './theme/fonts/fonts.css'
 import './ui-theme.css'
+import './ui-personalize.css'
 import './workspace-responsive.css'
 
 /** 最外层兜底：任何未捕获的渲染错误都显示可恢复的提示，而不是白屏 */
