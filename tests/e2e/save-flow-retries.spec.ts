@@ -89,3 +89,46 @@ test('choosing a variant keeps the old draft until persistence succeeds and leav
   await expect(page.getByTestId('save-status')).toHaveText('已保存')
   expect(await manuscript()).not.toEqual(original)
 })
+
+test('partial layout save rechecks saved projects before completing a retry', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByTestId('save-status')).toHaveText('已保存')
+  const originalTitle = await page.getByLabel('文章标题', { exact: true }).inputValue()
+  await page.getByTestId('open-import').click()
+  await page.getByTestId('load-sample').click()
+  await page.getByTestId('generate').click()
+  await expect(page.locator('.variant')).toHaveCount(3)
+  let firstSaved = '', created = 0, reads = 0, failedWrite = false, failRead = true
+  await page.route('**/api/projects/*', async route => {
+    const request = route.request()
+    if (request.method() === 'GET' && firstSaved && request.url().endsWith('/' + firstSaved)) {
+      reads++
+      if (failRead) return route.fulfill({ status: 503, json: { error: 'temporary project read failure' } })
+    }
+    if (request.method() === 'PUT' && !request.postDataJSON().revision) {
+      created++
+      if (created === 1) firstSaved = request.postDataJSON().id
+      if (created === 2) {
+        failedWrite = true
+        return route.fulfill({ status: 507, json: { error: 'temporary save failure' } })
+      }
+    }
+    return route.continue()
+  })
+  const all = page.getByRole('button', { name: '全部保存为项目，并打开第一套' })
+  await all.click()
+  await expect.poll(() => failedWrite).toBe(true)
+  await expect(all).toBeEnabled()
+  await all.click()
+  await expect(page.locator('.toast')).toContainText('temporary project read failure', { timeout: 4000 })
+  await expect(page.getByRole('dialog')).toHaveCount(1)
+  await expect(page.getByLabel('文章标题', { exact: true })).toHaveValue(originalTitle)
+  expect(reads).toBe(1)
+  expect(created).toBe(2)
+  failRead = false
+  await all.click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByTestId('save-status')).toHaveText('已保存')
+  expect(reads).toBe(2)
+  expect(created).toBe(4)
+})
