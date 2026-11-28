@@ -147,6 +147,8 @@ function HtmlEditor({ block, onDone }: { block: Block<'html'>; onDone: () => voi
 
 /** 在原文片段里点选一个版块收藏为组件：点击选中，可向外扩大；图片和动效不响应编辑 */
 function FragmentPicker({ block, theme, onDone }: { block: Block<'html'>; theme: Theme; onDone: () => void }) {
+  const navigation = useRef<HTMLButtonElement>(null)
+  useEffect(() => { navigation.current?.focus() }, [])
   const ref = useRef<HTMLDivElement>(null)
   const [picked, setPicked] = useState<Element | null>(null)
   const inner = useRef<Element[]>([])
@@ -173,6 +175,24 @@ function FragmentPicker({ block, theme, onDone }: { block: Block<'html'>; theme:
     const el = inner.current.pop()
     if (el) mark(el)
   }
+  const navigate = (direction: -1 | 1 | 'first' | 'last') => {
+    const root = ref.current
+    if (!root) return
+    const all = [...new Set([...root.querySelectorAll('*')].map(el => pickElement(el, root)).filter((el): el is Element => !!el))]
+    const parents = new Set<Element>()
+    for (const el of all) {
+      for (let parent = el.parentElement; parent && parent !== root; parent = parent.parentElement) parents.add(parent)
+    }
+    const candidates = all.filter(el => !parents.has(el))
+    if (!candidates.length) return
+    const index = picked ? candidates.indexOf(picked) : -1
+    const last = candidates.length - 1
+    const next = direction === 'first' ? 0 : direction === 'last' ? last
+      : index < 0 ? (direction > 0 ? 0 : last) : Math.max(0, Math.min(last, index + direction))
+    inner.current = []
+    mark(candidates[next])
+    candidates[next].scrollIntoView({ block: 'nearest' })
+  }
   const collect = () => {
     if (!picked || !ref.current || !picked.isConnected || !ref.current.contains(picked)) return
     picked.classList.remove('fragment-picked', 'fragment-hover')
@@ -182,7 +202,16 @@ function FragmentPicker({ block, theme, onDone }: { block: Block<'html'>; theme:
   }
   return (
     <div onClick={(e) => e.stopPropagation()}>
-      <div className="rich-toolbar pick-toolbar">
+      <div className="rich-toolbar pick-toolbar" role="group" aria-label="原文片段选择" onKeyDown={e => {
+        if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+        e.preventDefault()
+        e.stopPropagation()
+        navigate(e.key === 'Home' ? 'first' : e.key === 'End' ? 'last' : e.key === 'ArrowDown' ? 1 : -1)
+      }}>
+        <button type="button" data-testid="pick-prev" onClick={() => navigate(-1)}>上一片段</button>
+        <button ref={navigation} type="button" data-testid="pick-next" onClick={() => navigate(1)}>下一片段</button>
+        <span className="hint" role="status">{picked ? (picked.textContent?.trim().slice(0, 48) || '图片或装饰片段') : '可用上下键选择片段'}</span>
         <span className="hint" style={{ margin: '0 6px' }}>{picked ? '已选中，可向外扩大范围' : '点击要收藏的版块'}</span>
         <span className="sep" />
         <button type="button" disabled={!picked} onClick={expand} data-testid="pick-expand">向外一层</button>
