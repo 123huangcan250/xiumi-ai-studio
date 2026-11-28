@@ -13,3 +13,30 @@
 @media(prefers-reduced-transparency:reduce){.review-suggestion{backdrop-filter:none;background:#e7f8ec}}
 @media(max-width:600px){.review-suggestion{padding:8px;margin-bottom:12px}.review-bubble{gap:6px}}
 .review-global-original{padding:12px;font:14px/1.65 var(--font-ui,sans-serif);color:#6e1824;background:#fff1f2}
+
+/* A compact speech bubble stays in normal flow so actions never cover the preview. */
+.review-suggestion > .review-bubble {
+  position:relative;width:max-content;max-width:100%;box-sizing:border-box;margin:0 0 12px auto;
+  padding:6px;border:1px solid #93bba1;border-radius:12px 12px 3px 12px;background:#f8fffa;
+}
+.review-suggestion > .review-bubble::after {
+  content:"";position:absolute;right:10px;bottom:-5px;width:8px;height:8px;
+  transform:rotate(45deg);background:inherit;border-right:1px solid #93bba1;border-bottom:1px solid #93bba1;pointer-events:none;
+}
+:root[data-ui-theme="mono-dark"] .review-original-label,
+:root[data-ui-theme="mono-dark"] .review-global-original {background:#3d2020;color:#ffd0cc}
+:root[data-ui-theme="mono-dark"] .review-suggestion {background:#1a3424;color:#d8f0df;border-color:#63bd82}
+:root[data-ui-theme="mono-dark"] .review-stale {background:#30332f;color:#ecece6;border-color:#a2aaa2}
+:root[data-ui-theme="mono-dark"] .review-suggestion > .review-bubble {background:#1d2721;border-color:#8ba893}
+:root[data-ui-theme="mono-dark"] .review-suggestion > .review-bubble::after {border-color:#8ba893}
+:root[data-ui-theme="mono-dark"] .review-bubble button:focus-visible,
+:root[data-ui-theme="mono-dark"] .review-readable summary:focus-visible {outline-color:#fff}
+@media(forced-colors:active) {
+  .review-suggestion,.review-original-label,.review-global-original,.review-suggestion > .review-bubble {
+    background:Canvas!important;color:CanvasText!important;border-color:CanvasText!important;backdrop-filter:none;
+  }
+  .review-original-red {outline:2px solid CanvasText;outline-offset:-2px}
+  .review-original-red::after {display:none}
+  .review-suggestion > .review-bubble::after {border-color:CanvasText!important}
+  .review-bubble button:focus-visible,.review-readable summary:focus-visible {outline-color:Highlight!important}
+}
