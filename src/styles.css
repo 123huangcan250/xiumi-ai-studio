@@ -381,6 +381,8 @@ textarea.code { font-family: Consolas, 'Courier New', monospace; font-size: 12px
 .comp-match { margin: 6px 0; font-size: 12px; }
 .comp-card { border: 1px solid var(--line); border-radius: var(--radius); margin: 10px 0; overflow: hidden; background: var(--panel); }
 .comp-card > div:first-child { cursor: grab; }
+.comp-card > .component-insert-action { width: calc(100% - 16px); margin: 6px 8px 0; min-height: 32px; }
+.comp-card > .component-insert-action:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
 .comp-preview { height: 150px; overflow: hidden; background: #fff; border-bottom: 1px solid var(--line); position: relative; }
 .comp-inner { width: 375px; zoom: .58; pointer-events: none; }
 .comp-info { padding: 6px 8px 2px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }

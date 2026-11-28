@@ -52,9 +52,10 @@ function ComponentCard({ c, doc, onChanged }: { c: LibraryComponent; doc: Doc; o
   const photos = c.stats.photos + c.stats.bgPhotos
   return (
     <div className="comp-card" data-testid="component-card">
-      <div ref={setNodeRef} {...listeners} {...attributes} onClick={() => insertComponent(c.block, { missing: c.missing })} title="点击插入到选中位置之后（正在编辑原文模块时插到光标处），或拖入画布" data-testid="component-insert">
+      <div ref={setNodeRef} {...listeners} {...attributes} role="group" tabIndex={undefined} aria-label={`组件预览：${c.name}`} onClick={() => insertComponent(c.block, { missing: c.missing })} title="点击插入到选中位置之后（正在编辑原文模块时插到光标处），或拖入画布" data-testid="component-insert">
         <LazyPreview block={c.block} doc={doc} />
       </div>
+      <button type="button" className="component-insert-action" aria-label={`插入组件：${c.name}`} onClick={() => insertComponent(c.block, { missing: c.missing })}>插入</button>
       {editing ? (
         <div className="comp-edit">
           <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} data-testid="component-name" />
@@ -119,9 +120,10 @@ function PartCard({ p, doc, collected }: { p: VirtualPart; doc: Doc; collected: 
   const source = p.block.type === 'html' ? p.block.props.source : undefined
   return (
     <div className="comp-card" data-testid="part-card">
-      <div ref={setNodeRef} {...listeners} {...attributes} onClick={() => insertComponent(p.block)} title="点击插入到选中位置之后（正在编辑原文模块时插到光标处），或拖入画布" data-testid="part-insert">
+      <div ref={setNodeRef} {...listeners} {...attributes} role="group" tabIndex={undefined} aria-label={`组件预览：${p.name}`} onClick={() => insertComponent(p.block)} title="点击插入到选中位置之后（正在编辑原文模块时插到光标处），或拖入画布" data-testid="part-insert">
         <LazyPreview block={p.block} doc={doc} />
       </div>
+      <button type="button" className="component-insert-action" aria-label={`插入组件：${p.name}`} onClick={() => insertComponent(p.block)}>插入</button>
       <div className="comp-info">
         <b title={p.name}>{p.name}</b>
         <small>{KIND_LABEL[p.kind]} · {p.texts.length} 处文字 · {p.photos} 张图 · {p.from}</small>
