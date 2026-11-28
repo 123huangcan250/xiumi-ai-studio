@@ -1,3 +1,4 @@
+import { HtmlTypographyControls } from './HtmlTypographyControls'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -110,6 +111,7 @@ function HtmlEditor({ block, onDone }: { block: Block<'html'>; onDone: () => voi
   return (
     <div onClick={(e) => e.stopPropagation()}>
       <div className="rich-toolbar">
+        <HtmlTypographyControls rootRef={ref} onCommit={commit} />
         <span className="hint" style={{ margin: '0 6px' }}>直接修改文字（保留原样式）；点击图片可选中，按 Delete 删除；点组件库里的组件会插到光标所在段落后面</span>
         {picked && (
           <button type="button" className="danger" onMouseDown={(e) => (e.preventDefault(), removePicked())} data-testid="delete-picked">

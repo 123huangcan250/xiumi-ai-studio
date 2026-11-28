@@ -7,3 +7,4 @@
   .rich-typography-controls select { min-height: 40px; max-width: 138px; }
   .rich-typography-hint { flex-basis: 100%; }
 }
+.imported-typography-controls input[type="color"] { width: 32px; min-height: 32px; padding: 2px; }
