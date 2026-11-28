@@ -1,0 +1,31 @@
+import { expect, test } from '@playwright/test'
+
+test('the replay timeline can seek to its exact duration with the keyboard', async ({ page }) => {
+  await page.goto('/')
+  await page.getByTestId('tab-projects').click()
+  await page.getByRole('button', { name: '新建空白项目' }).click()
+  await expect(page.getByTestId('save-status')).toHaveText('已保存')
+  await page.getByTestId('tab-blocks').click()
+  await page.getByTestId('lib-replay').click()
+  await page.getByTestId('replay-open').click()
+  const dialog = page.getByRole('dialog', { name: '预览编辑回放' })
+  const rail = dialog.getByTestId('replay-seek')
+  await expect(rail).toBeVisible()
+  // The default inserted replay has a duration not representable by a
+  // hundredth-second step; ensure the regression never becomes vacuous.
+  const duration = Number(await rail.getAttribute('max'))
+  expect(duration).toBeGreaterThan(0)
+  expect(Math.abs(duration * 100 - Math.round(duration * 100))).toBeGreaterThan(1e-6)
+  await rail.focus()
+  await rail.press('Home')
+  expect(Number(await rail.inputValue())).toBe(0)
+  await rail.press('ArrowRight')
+  expect(Number(await rail.inputValue())).toBeGreaterThan(0)
+  await rail.press('ArrowLeft')
+  expect(Number(await rail.inputValue())).toBe(0)
+  await rail.press('End')
+  expect(Number(await rail.inputValue())).toBe(duration)
+  await expect(dialog.getByTestId('replay-toggle')).toContainText('播放')
+  await dialog.getByTestId('replay-toggle').click()
+  await expect(dialog.getByTestId('replay-toggle')).toContainText('暂停')
+})

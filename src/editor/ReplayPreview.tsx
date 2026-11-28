@@ -137,7 +137,8 @@ export function ReplayPreviewModal({ block, onClose }: { block: ReplayBlock; onC
           >
             ↺ 重播
           </button>
-          <input type="range" min={0} max={max} step={0.01} value={t} onChange={(e) => (setPlaying(false), seek(Number(e.target.value)))} data-testid="replay-seek" />
+          {/* Allow the exact duration to be reached even when it falls between hundredths. */}
+          <input type="range" min={0} max={max} step="any" value={t} onChange={(e) => (setPlaying(false), seek(Number(e.target.value)))} data-testid="replay-seek" />
           <span className="replay-time" data-testid="replay-time">
             {fmt(t)} / {fmt(max)}
           </span>
