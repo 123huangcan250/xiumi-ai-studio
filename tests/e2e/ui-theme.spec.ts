@@ -245,6 +245,7 @@ for (const mode of ['upstream', 'mono-light', 'mono-dark']) {
     await expect(page.getByTestId('tab-style')).toBeVisible()
     await switcher.getByRole('button', { name: '画布' }).click()
     await expect(page.getByTestId('canvas')).toBeVisible()
+    await page.getByRole('button', { name: '更多', exact: true }).click()
     for (const id of ['open-preview', 'open-ai-settings', 'open-article-import', 'open-import', 'open-export', 'open-data']) {
       await expect(page.getByTestId(id)).toBeVisible()
     }

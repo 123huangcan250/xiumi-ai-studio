@@ -327,6 +327,35 @@ export function Toolbar() {
   const canRedo = useStore((s) => s.future.length > 0)
   const { undo, redo, setDocFields } = useStore.getState()
   const [modal, setModal] = useState<'' | 'preview' | 'versions' | 'export' | 'import' | 'ai' | 'article' | 'data'>('')
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreButton = useRef<HTMLButtonElement>(null)
+  const toolbar = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (!moreOpen) return
+    const outside = (event: PointerEvent) => {
+      const target = event.target as Element | null
+      if (!target?.closest('.toolbar-more, .toolbar-secondary') || !toolbar.current?.contains(target)) setMoreOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || modal) return
+      setMoreOpen(false)
+      moreButton.current?.focus()
+    }
+    const compact = window.matchMedia?.('(max-width: 600px)')
+    const resized = () => { if (!compact?.matches) setMoreOpen(false) }
+    window.addEventListener('pointerdown', outside)
+    window.addEventListener('keydown', escape)
+    compact?.addEventListener('change', resized)
+    return () => {
+      window.removeEventListener('pointerdown', outside)
+      window.removeEventListener('keydown', escape)
+      compact?.removeEventListener('change', resized)
+    }
+  }, [moreOpen, modal])
+  const closeSecondaryModal = () => {
+    setModal('')
+    if (moreButton.current?.getClientRects().length) moreButton.current.focus()
+  }
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [quit, setQuit] = useState<'' | 'quitting' | 'done' | 'unsaved'>('')
   useEffect(() => {
@@ -364,7 +393,7 @@ export function Toolbar() {
     }
   }, [])
   return (
-    <header className="toolbar">
+    <header className="toolbar" ref={toolbar} data-more-open={moreOpen}>
       <div className="brand">XIUMI <b>AI</b> Studio</div>
       <input className="title-input" value={doc.title} onChange={(e) => setDocFields({ title: e.target.value }, 'title')} aria-label="文章标题" />
       <span className={`save ${saveStatus}`} title={saveError} data-testid="save-status">
@@ -374,15 +403,17 @@ export function Toolbar() {
       <div className="spacer" />
       <button onClick={undo} disabled={!canUndo} title="撤销 Ctrl+Z">↶ 撤销</button>
       <button onClick={redo} disabled={!canRedo} title="重做 Ctrl+Y">↷ 重做</button>
-      <button onClick={() => (saveNow(), setModal('versions'))}>历史版本</button>
+      <button ref={moreButton} type="button" className="toolbar-more" aria-expanded={moreOpen}
+        aria-controls="toolbar-history toolbar-models toolbar-data" onClick={() => setMoreOpen(open => !open)}>更多</button>
+      <button className="toolbar-secondary" id="toolbar-history" onClick={() => (setMoreOpen(false), saveNow(), setModal('versions'))}>历史版本</button>
       <button onClick={() => setModal('preview')} data-testid="open-preview">📱 手机预览</button>
-      <button onClick={() => setModal('ai')} data-testid="open-ai-settings">⚙ AI 模型</button>
+      <button className="toolbar-secondary" id="toolbar-models" onClick={() => (setMoreOpen(false), setModal('ai'))} data-testid="open-ai-settings">⚙ AI 模型</button>
       <button onClick={() => setModal('article')} data-testid="open-article-import">⤓ 导入推文</button>
       <button className="accent" onClick={() => (setWizardTemplates(undefined), setModal('import'))} data-testid="open-import">✨ AI 一键排版</button>
       <button className="primary" onClick={() => setModal('export')} data-testid="open-export">导出 / 发布</button>
-      <button onClick={() => setModal('data')} data-testid="open-data" title="数据保存位置、备份与恢复、从旧版本迁移">💾 数据</button>
+      <button className="toolbar-secondary" id="toolbar-data" onClick={() => (setMoreOpen(false), setModal('data'))} data-testid="open-data" title="数据保存位置、备份与恢复、从旧版本迁移">💾 数据</button>
       {info?.canQuit && <button onClick={doQuit} data-testid="quit-app" title="关闭 XIUMI AI Studio">⏻ 退出</button>}
-      {modal === 'data' && <DataModal info={info} onClose={() => setModal('')} />}
+      {modal === 'data' && <DataModal info={info} onClose={closeSecondaryModal} />}
       {quit && (
         <div className="quit-screen" data-testid="quit-screen">
           <div>
@@ -393,9 +424,9 @@ export function Toolbar() {
         </div>
       )}
       {modal === 'preview' && <PhonePreview html={compileDoc(doc).html} title="手机预览" onClose={() => setModal('')} />}
-      {modal === 'versions' && <VersionsModal onClose={() => setModal('')} />}
+      {modal === 'versions' && <VersionsModal onClose={closeSecondaryModal} />}
       {modal === 'export' && <ExportModal onClose={() => setModal('')} />}
-      {modal === 'ai' && <AiSettingsModal onClose={() => setModal('')} />}
+      {modal === 'ai' && <AiSettingsModal onClose={closeSecondaryModal} />}
       {modal === 'article' && (
         <Suspense fallback={null}>
           <ArticleImportModal onClose={() => setModal('')} />
