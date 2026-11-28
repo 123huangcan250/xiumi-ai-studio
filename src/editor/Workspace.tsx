@@ -83,7 +83,8 @@ export function Workspace({ children }: { children: ReactNode }) {
       window.removeEventListener('resize', measure)
     }
   }, [])
-  const shown = effectiveWidths(widths, box)
+  const defaults = defaultWidths()
+  const shown = effectiveWidths(widths, box, defaults)
   useEffect(() => {
     document.body.classList.toggle('resizing', dragging !== null)
     return () => document.body.classList.remove('resizing')
@@ -95,8 +96,11 @@ export function Workspace({ children }: { children: ReactNode }) {
       className={`panel-resizer ${side} ${dragging === side ? 'on' : ''}`}
       role="separator"
       aria-orientation="vertical"
+      aria-valuenow={shown[side] ?? defaults[side]}
+      aria-valuemin={PANEL_LIMITS[side][0]}
+      aria-valuemax={box > 0 ? clampWidth(side, PANEL_LIMITS[side][1], box, shown[side === 'left' ? 'right' : 'left'] ?? defaults[side === 'left' ? 'right' : 'left']) : PANEL_LIMITS[side][1]}
       aria-label={side === 'left' ? '拖动调整左侧栏宽度' : '拖动调整右侧栏宽度'}
-      title="拖动调整宽度，双击恢复默认"
+      title="拖动或方向键调整宽度，双击或 Home 恢复默认"
       tabIndex={0}
       data-testid={`resizer-${side}`}
       onPointerDown={(e) => {
@@ -117,6 +121,7 @@ export function Workspace({ children }: { children: ReactNode }) {
       }}
       onDoubleClick={() => set(side, null)}
       onKeyDown={(e) => {
+        if (e.key === 'Home') { e.preventDefault(); set(side, null); return }
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
         e.preventDefault()
         const grow = (e.key === 'ArrowRight') === (side === 'left') ? 1 : -1
