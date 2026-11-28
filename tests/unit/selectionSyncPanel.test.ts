@@ -103,10 +103,38 @@ it('multi selection scope observes membership even when primary identity stays t
  act(()=>state().select('a',{toggle:true}));expect(state().selectedId).toBe('b');expect(scope().value).toBe('selection')
  act(()=>state().select('a',{toggle:true}));expect(scope().selectedOptions[0].textContent).toContain('2')
 })
-it('mixed module panel never exposes the primary single-block props as shared properties',async()=>{
+it('edits selected modules individually in canvas order without changing selection',async()=>{
+ act(()=>{state().select('b');state().select('a',{toggle:true})});await tab('style')
+ const forms = [...host.querySelectorAll<HTMLDetailsElement>('[data-testid="selected-module-properties"]')]
+ expect(forms.map(form=>form.dataset.moduleId)).toEqual(['a','b'])
+ expect(forms.map(form=>form.querySelector('input')?.value)).toEqual(['Title a','Title b'])
+ await act(async()=>forms[0].querySelector('summary')!.click())
+ expect(forms[0].open).toBe(false);expect(forms[1].open).toBe(true)
+ const input=forms[1].querySelector('input')!
+ act(()=>{
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!.call(input,'Changed b')
+  input.dispatchEvent(new Event('input',{bubbles:true}))
+ })
+ expect(state().doc.blocks.map(block=>(block.props as {title:string}).title)).toEqual(['Title a','Changed b'])
+ expect(state().selectedIds).toEqual(['b','a'])
+ expect(forms[0].open).toBe(false);expect(forms[1].open).toBe(true)
+})
+
+it('adds a child to the selected non-primary box without changing the primary selection',async()=>{
+ const box = {...createBlock('box',{children:[]}),id:'box'}
+ act(()=>{state().load({...emptyDoc(),blocks:[box,card('b')]});state().select('box');state().select('b',{toggle:true})})
+ await tab('style')
+ const add = host.querySelector<HTMLButtonElement>('[data-module-id="box"] [data-testid="add-box-heading"]')
+ expect(add).not.toBeNull()
+ act(()=>add!.click())
+ expect(state().doc.blocks[0]).toMatchObject({id:'box',props:{children:[{type:'heading'}]}})
+ expect(state().doc.blocks[1]).toMatchObject({id:'b',props:{title:'Title b'}})
+ expect(state().selectedId).toBe('b')
+ expect(state().selectedIds).toEqual(['box','b'])
+})
+
+it('still deletes the entire selection in a single undoable operation',async()=>{
  act(()=>state().select('b',{toggle:true}));await tab('style')
- expect(host.querySelector('[data-testid="multi-selection-properties"]')).not.toBeNull();expect(host.textContent).toContain('Title a');expect(host.textContent).toContain('Title b')
- expect(host.querySelector('.props-form input')).toBeNull()
  const before=state().past.length;act(()=>host.querySelector<HTMLButtonElement>('[data-testid="delete-selected-blocks"]')!.click());expect(state().doc.blocks).toHaveLength(0);expect(state().past).toHaveLength(before+1)
  act(()=>state().undo());expect(state().doc.blocks).toHaveLength(2)
 })

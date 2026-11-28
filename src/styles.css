@@ -267,6 +267,8 @@ div.grow { padding: 5px 10px; }
 .ai-nums .field { flex: 1; min-width: 0; margin: 0; }
 .ai-form .field > span .link { margin-left: 10px; font-size: 12px; }
 .ai-advanced { margin: 8px 0; }
+.selected-module-properties { border: 1px solid var(--line); border-radius: var(--radius); margin: 8px 0; padding: 8px; min-width: 0; }
+.selected-module-properties > summary { cursor: pointer; overflow-wrap: anywhere; }
 .ai-advanced summary { cursor: pointer; color: var(--sub); font-size: 12px; }
 .ai-advanced textarea { width: 100%; margin-top: 6px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .hint.bad { color: var(--danger); }
